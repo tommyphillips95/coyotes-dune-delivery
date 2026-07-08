@@ -304,6 +304,53 @@
             color: #C45A3E;
         }
 
+        /* Tracking section */
+        .tracking-section {
+            background: var(--warm-white);
+            padding: 28px 44px;
+            border-top: 1px solid var(--border);
+        }
+        .tracking-section h3 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            color: var(--navy);
+            margin-bottom: 16px;
+        }
+        .tracking-form { display: flex; gap: 12px; flex-wrap: wrap; }
+        .tracking-form input {
+            flex: 1; min-width: 200px; padding: 12px 16px;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-family: var(--font-body); font-size: 0.95rem;
+            color: var(--charcoal); background: var(--pure-white);
+        }
+        .tracking-form input:focus {
+            outline: none; border-color: var(--sand);
+            box-shadow: 0 0 0 3px rgba(201, 168, 124, 0.12);
+        }
+        .tracking-result {
+            margin-top: 20px; padding: 20px; background: var(--pure-white);
+            border-radius: var(--radius); border: 1px solid var(--border); display: none;
+        }
+        .tracking-result.active { display: block; animation: fadeInUp 0.35s ease; }
+        .tracking-result-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+        }
+        .tracking-result-header h4 { font-size: 1.05rem; color: var(--navy); font-weight: 600; }
+        .status-badge-track {
+            display: inline-block; padding: 5px 14px; border-radius: 100px;
+            font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .status-badge-track.pending { background: rgba(201, 168, 124, 0.15); color: #8B6F4E; }
+        .status-badge-track.assigned { background: rgba(42, 74, 110, 0.12); color: var(--navy-soft); }
+        .status-badge-track.in_progress { background: rgba(42, 74, 110, 0.18); color: var(--navy); }
+        .status-badge-track.completed { background: rgba(76, 140, 100, 0.12); color: #4C8C64; }
+        .status-badge-track.cancelled { background: rgba(196, 90, 62, 0.1); color: #C45A3E; }
+        .tracking-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .tracking-detail-item { padding: 10px 0; }
+        .tracking-detail-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+        .tracking-detail-value { font-size: 0.92rem; color: var(--charcoal); font-weight: 500; }
+
         @media (max-width: 768px) {
             .service-selector { grid-template-columns: 1fr; }
             .location-group { flex-direction: column; gap: 0; }
@@ -314,6 +361,8 @@
             .contact-grid { grid-template-columns: 1fr; }
             .estimate-box { padding: 22px 20px; }
             .order-success { padding: 40px 24px; }
+            .tracking-section { padding: 22px 24px; }
+            .tracking-detail { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -389,7 +438,7 @@
                                 <p>Get picked up and dropped off anywhere in our coverage area. Local drivers who know the coast.</p>
                             </label>
                             <label class="service-option" id="optDelivery">
-                                <input type="radio" name="serviceType" value="delivery">
+                                <input type="radio" name="serviceType" value="package_delivery">
                                 <div class="service-option-icon">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <rect x="1" y="3" width="15" height="13"/>
@@ -447,7 +496,13 @@
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="pickupCity">City <span class="required">*</span></label>
-                                        <input type="text" id="pickupCity" name="pickupCity" required placeholder="Port Aransas" autocomplete="address-level2">
+                                        <select id="pickupCity" name="pickupCity" required>
+                                            <option value="">Select city</option>
+                                            <option value="Port Aransas">Port Aransas</option>
+                                            <option value="Padre Island">Padre Island</option>
+                                            <option value="Corpus Christi">Corpus Christi</option>
+                                            <option value="Rockport">Rockport</option>
+                                        </select>
                                         <span class="error-message">Please enter a city.</span>
                                     </div>
                                     <div class="form-group">
@@ -488,7 +543,13 @@
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="dropoffCity">City <span class="required">*</span></label>
-                                        <input type="text" id="dropoffCity" name="dropoffCity" required placeholder="Corpus Christi" autocomplete="off">
+                                        <select id="dropoffCity" name="dropoffCity" required>
+                                            <option value="">Select city</option>
+                                            <option value="Port Aransas">Port Aransas</option>
+                                            <option value="Padre Island">Padre Island</option>
+                                            <option value="Corpus Christi">Corpus Christi</option>
+                                            <option value="Rockport">Rockport</option>
+                                        </select>
                                         <span class="error-message">Please enter a city.</span>
                                     </div>
                                     <div class="form-group">
@@ -536,14 +597,10 @@
                                         <span class="detail-card-label">3</span>
                                     </label>
                                     <label class="detail-card">
-                                        <input type="radio" name="passengers" value="4+">
-                                        <span class="detail-card-label">4+</span>
+                                        <input type="radio" name="passengers" value="4">
+                                        <span class="detail-card-label">4</span>
                                     </label>
                                 </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="rideNotes">Anything else we should know? <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
-                                <textarea id="rideNotes" name="rideNotes" rows="2" placeholder="Extra luggage, pet friendly, etc."></textarea>
                             </div>
                         </div>
 
@@ -567,19 +624,6 @@
                                     <label class="detail-card">
                                         <input type="radio" name="packageSize" value="oversized">
                                         <span class="detail-card-label">Oversized</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Is this a rush delivery?</label>
-                                <div class="detail-cards" style="grid-template-columns: 1fr 1fr;">
-                                    <label class="detail-card selected">
-                                        <input type="radio" name="rushDelivery" value="standard" checked>
-                                        <span class="detail-card-label">Standard</span>
-                                    </label>
-                                    <label class="detail-card">
-                                        <input type="radio" name="rushDelivery" value="rush">
-                                        <span class="detail-card-label">Rush (+$10)</span>
                                     </label>
                                 </div>
                             </div>
@@ -616,36 +660,14 @@
                         </div>
                         <div class="contact-grid">
                             <div class="form-group">
-                                <label for="customerEmail">Email Address <span class="required">*</span></label>
-                                <input type="email" id="customerEmail" name="customerEmail" required autocomplete="email" placeholder="you@example.com">
+                                <label for="customerEmail">Email Address</label>
+                                <input type="email" id="customerEmail" name="customerEmail" autocomplete="email" placeholder="you@example.com">
                                 <span class="error-message">Please enter a valid email address.</span>
                             </div>
                             <div class="form-group">
                                 <label for="customerPhone">Phone Number <span class="required">*</span></label>
                                 <input type="tel" id="customerPhone" name="customerPhone" required autocomplete="tel" placeholder="(361) 555-1234">
                                 <span class="error-message">Please enter a valid phone number.</span>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="customerAltPhone">Alternative Phone <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
-                            <input type="tel" id="customerAltPhone" name="customerAltPhone" autocomplete="off" placeholder="(361) 555-5678">
-                        </div>
-
-                        <div class="form-group">
-                            <label>Payment Method <span style="font-weight: 400; color: var(--muted);">(billed after service)</span></label>
-                            <div class="detail-cards" style="grid-template-columns: repeat(3, 1fr);">
-                                <label class="detail-card selected">
-                                    <input type="radio" name="paymentMethod" value="card" checked>
-                                    <span class="detail-card-label">Credit Card</span>
-                                </label>
-                                <label class="detail-card">
-                                    <input type="radio" name="paymentMethod" value="cash">
-                                    <span class="detail-card-label">Cash</span>
-                                </label>
-                                <label class="detail-card">
-                                    <input type="radio" name="paymentMethod" value="venmo">
-                                    <span class="detail-card-label">Venmo</span>
-                                </label>
                             </div>
                         </div>
 
@@ -669,7 +691,7 @@
                                 <span id="reviewService">On-Demand Ride</span>
                             </div>
                             <div class="estimate-row">
-                                <span class="label">Date & Time</span>
+                                <span class="label">Date &amp; Time</span>
                                 <span id="reviewDateTime">--</span>
                             </div>
                             <div class="estimate-row">
@@ -725,6 +747,48 @@
                     <p style="margin-top: 8px;"><a href="/" class="btn btn-secondary">Back to Home</a></p>
                     <p style="margin-top: 16px;"><a href="/order/">Book Another</a></p>
                 </div>
+
+                <!-- Tracking Section -->
+                <div class="tracking-section" id="trackingSection">
+                    <h3>Track an Existing Order</h3>
+                    <div class="tracking-form">
+                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)">
+                        <input type="tel" id="trackPhone" placeholder="Phone number">
+                        <button class="btn btn-secondary" id="trackBtn">Track Order</button>
+                    </div>
+                    <div class="tracking-result" id="trackingResult">
+                        <div class="tracking-result-header">
+                            <h4 id="trackingOrderNum">Order #CDD-XXX</h4>
+                            <span class="status-badge-track" id="trackingStatus">Pending</span>
+                        </div>
+                        <div class="tracking-detail">
+                            <div class="tracking-detail-item">
+                                <div class="tracking-detail-label">Service</div>
+                                <div class="tracking-detail-value" id="trackingService">Ride</div>
+                            </div>
+                            <div class="tracking-detail-item">
+                                <div class="tracking-detail-label">Scheduled</div>
+                                <div class="tracking-detail-value" id="trackingScheduled">ASAP</div>
+                            </div>
+                            <div class="tracking-detail-item">
+                                <div class="tracking-detail-label">Pickup</div>
+                                <div class="tracking-detail-value" id="trackingPickup">--</div>
+                            </div>
+                            <div class="tracking-detail-item">
+                                <div class="tracking-detail-label">Drop-off</div>
+                                <div class="tracking-detail-value" id="trackingDropoff">--</div>
+                            </div>
+                            <div class="tracking-detail-item">
+                                <div class="tracking-detail-label">Estimated Price</div>
+                                <div class="tracking-detail-value" id="trackingPrice">--</div>
+                            </div>
+                            <div class="tracking-detail-item">
+                                <div class="tracking-detail-label">Driver</div>
+                                <div class="tracking-detail-value" id="trackingDriver">Not yet assigned</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -774,7 +838,7 @@
         </div>
     </footer>
 
-    <script src="../js/order.js"></script>
     <script src="../js/main.js"></script>
+    <script src="../js/order.js"></script>
 </body>
 </html>
