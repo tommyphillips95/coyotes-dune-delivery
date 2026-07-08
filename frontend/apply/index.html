@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Become a Driver — Coyote's Dune Delivery</title>
+    <meta name="description" content="Apply to become a driver for Coyote's Dune Delivery. Flexible hours, competitive pay, coastal community.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="container nav-container">
+            <a href="/" class="logo">
+                <span class="logo-icon">🐾</span>
+                <span class="logo-text">Coyote's Dune Delivery</span>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+                <span class="hamburger"></span>
+            </button>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="/">Home</a></li>
+                <li><a href="/driver-portal/">Driver Portal</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="form-page">
+        <div class="container">
+            <div class="form-container" id="formContainer">
+                <!-- Header -->
+                <div class="form-header">
+                    <h1>Become a Driver</h1>
+                    <p>Join our coastal delivery network. Most applications reviewed within 24–48 hours.</p>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-step active" data-step="1">
+                        <span class="progress-label">Personal</span>
+                    </div>
+                    <div class="progress-step" data-step="2">
+                        <span class="progress-label">Vehicle</span>
+                    </div>
+                    <div class="progress-step" data-step="3">
+                        <span class="progress-label">Insurance</span>
+                    </div>
+                    <div class="progress-step" data-step="4">
+                        <span class="progress-label">Background</span>
+                    </div>
+                    <div class="progress-step" data-step="5">
+                        <span class="progress-label">Banking</span>
+                    </div>
+                    <div class="progress-step" data-step="6">
+                        <span class="progress-label">Review</span>
+                    </div>
+                </div>
+
+                <!-- Form Steps -->
+                <form class="form-steps" id="applyForm" novalidate>
+
+                    <!-- Step 1: Personal Info -->
+                    <div class="form-step active" data-step="1">
+                        <h2>Personal Information</h2>
+                        <p>Tell us about yourself.</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="firstName">First Name <span class="required">*</span></label>
+                                <input type="text" id="firstName" name="firstName" required autocomplete="given-name">
+                                <span class="error-message">Please enter your first name.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="lastName">Last Name <span class="required">*</span></label>
+                                <input type="text" id="lastName" name="lastName" required autocomplete="family-name">
+                                <span class="error-message">Please enter your last name.</span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="email">Email Address <span class="required">*</span></label>
+                                <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@example.com">
+                                <span class="error-message">Please enter a valid email address.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="phone">Phone Number <span class="required">*</span></label>
+                                <input type="tel" id="phone" name="phone" required autocomplete="tel" placeholder="(361) 555-1234">
+                                <span class="error-message">Please enter a valid phone number.</span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="dob">Date of Birth <span class="required">*</span></label>
+                                <input type="date" id="dob" name="dob" required>
+                                <span class="error-message">You must be at least 18 years old.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="ssn">Social Security Number <span class="required">*</span></label>
+                                <input type="password" id="ssn" name="ssn" required placeholder="XXX-XX-XXXX" maxlength="11">
+                                <span class="error-message">Please enter a valid SSN.</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="address">Street Address <span class="required">*</span></label>
+                            <input type="text" id="address" name="address" required autocomplete="street-address" placeholder="123 Beach Blvd">
+                            <span class="error-message">Please enter your street address.</span>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="city">City <span class="required">*</span></label>
+                                <input type="text" id="city" name="city" required autocomplete="address-level2">
+                                <span class="error-message">Please enter your city.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="state">State <span class="required">*</span></label>
+                                <select id="state" name="state" required>
+                                    <option value="" disabled selected>Select state</option>
+                                    <option value="TX">Texas</option>
+                                    <option value="other">Other</option>
+                                </select>
+                                <span class="error-message">Please select your state.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="zip">ZIP Code <span class="required">*</span></label>
+                                <input type="text" id="zip" name="zip" required autocomplete="postal-code" placeholder="78373" maxlength="10">
+                                <span class="error-message">Please enter a valid ZIP code.</span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="emergencyName">Emergency Contact Name <span class="required">*</span></label>
+                                <input type="text" id="emergencyName" name="emergencyName" required placeholder="Full name">
+                                <span class="error-message">Please enter an emergency contact name.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="emergencyPhone">Emergency Contact Phone <span class="required">*</span></label>
+                                <input type="tel" id="emergencyPhone" name="emergencyPhone" required placeholder="(361) 555-5678">
+                                <span class="error-message">Please enter an emergency contact phone.</span>
+                            </div>
+                        </div>
+                        <div class="form-nav">
+                            <span></span>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="2">Next →</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Vehicle & License -->
+                    <div class="form-step" data-step="2">
+                        <h2>Vehicle & Driver's License</h2>
+                        <p>We need to verify your license and vehicle details.</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="licenseNumber">Driver's License Number <span class="required">*</span></label>
+                                <input type="text" id="licenseNumber" name="licenseNumber" required placeholder="DL12345678">
+                                <span class="error-message">Please enter your license number.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="licenseState">License State <span class="required">*</span></label>
+                                <select id="licenseState" name="licenseState" required>
+                                    <option value="" disabled selected>Select state</option>
+                                    <option value="TX">Texas</option>
+                                    <option value="other">Other</option>
+                                </select>
+                                <span class="error-message">Please select a state.</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="licenseExpiry">License Expiration Date <span class="required">*</span></label>
+                            <input type="date" id="licenseExpiry" name="licenseExpiry" required>
+                            <span class="error-message">Your license must not be expired.</span>
+                        </div>
+                        <hr style="border: none; border-top: 1px solid var(--sand); margin: 28px 0;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="vehicleMake">Vehicle Make <span class="required">*</span></label>
+                                <input type="text" id="vehicleMake" name="vehicleMake" required placeholder="e.g., Toyota">
+                                <span class="error-message">Please enter the vehicle make.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="vehicleModel">Vehicle Model <span class="required">*</span></label>
+                                <input type="text" id="vehicleModel" name="vehicleModel" required placeholder="e.g., Camry">
+                                <span class="error-message">Please enter the vehicle model.</span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="vehicleYear">Vehicle Year <span class="required">*</span></label>
+                                <input type="number" id="vehicleYear" name="vehicleYear" required min="2000" max="2030" placeholder="2020">
+                                <span class="error-message">Please enter a valid year (2000–2030).</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="vehicleColor">Vehicle Color <span class="required">*</span></label>
+                                <input type="text" id="vehicleColor" name="vehicleColor" required placeholder="e.g., Silver">
+                                <span class="error-message">Please enter the vehicle color.</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="licensePlate">License Plate <span class="required">*</span></label>
+                            <input type="text" id="licensePlate" name="licensePlate" required placeholder="ABC-1234">
+                            <span class="error-message">Please enter the license plate.</span>
+                        </div>
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="1">← Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="3">Next →</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Insurance -->
+                    <div class="form-step" data-step="3">
+                        <h2>Insurance Information</h2>
+                        <p>Verify your auto insurance coverage.</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="insuranceProvider">Insurance Provider <span class="required">*</span></label>
+                                <input type="text" id="insuranceProvider" name="insuranceProvider" required placeholder="e.g., State Farm">
+                                <span class="error-message">Please enter your insurance provider.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="policyNumber">Policy Number <span class="required">*</span></label>
+                                <input type="text" id="policyNumber" name="policyNumber" required placeholder="POL-123456789">
+                                <span class="error-message">Please enter your policy number.</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="policyExpiry">Policy Expiration Date <span class="required">*</span></label>
+                            <input type="date" id="policyExpiry" name="policyExpiry" required>
+                            <span class="error-message">Please enter a valid future expiration date.</span>
+                        </div>
+                        <div class="form-group">
+                            <label>Upload Insurance Card (front) <span class="required">*</span></label>
+                            <div class="file-upload" id="insuranceUpload">
+                                <input type="file" id="insuranceCard" name="insuranceCard" accept="image/*,.pdf" required>
+                                <div class="file-upload-icon">📄</div>
+                                <div class="file-upload-text">Click or drag to upload</div>
+                                <div class="file-upload-hint">JPG, PNG, or PDF up to 10 MB</div>
+                            </div>
+                            <div class="file-preview" id="insurancePreview" style="display: none;">
+                                <span class="file-preview-name" id="insuranceFileName"></span>
+                                <button type="button" class="file-preview-remove" id="removeInsurance" title="Remove file">✕</button>
+                            </div>
+                            <span class="error-message" id="insuranceError">Please upload your insurance card.</span>
+                        </div>
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="2">← Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="4">Next →</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Background Check -->
+                    <div class="form-step" data-step="4">
+                        <h2>Background Check Consent</h2>
+                        <p>Required for all driver applicants.</p>
+                        <div class="consent-text">
+                            <h4>Background Check Disclosure</h4>
+                            <p>Coyote's Dune Delivery ("the Company") may obtain a consumer report and/or investigative consumer report about you for employment purposes. These reports may include information about your character, general reputation, personal characteristics, mode of living, and criminal history.</p>
+                            <p>The Company will use this information solely to evaluate your suitability for a driver position, including compliance with applicable laws and safety standards.</p>
+                            <p>You have the right to request a complete and accurate disclosure of the nature and scope of the investigation, and a written summary of your rights under the Fair Credit Reporting Act (FCRA).</p>
+                            <p>By checking the box below, you authorize the Company to obtain these reports and acknowledge that you have read and understood this disclosure.</p>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="bgConsent" name="bgConsent" required>
+                            <label for="bgConsent">I consent to a background check and acknowledge the disclosure above. <span class="required">*</span></label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="bgDisclosureRead" name="bgDisclosureRead" required>
+                            <label for="bgDisclosureRead">I have read and understand the Background Check Disclosure and my rights under the FCRA. <span class="required">*</span></label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="esignature" name="esignature" required>
+                            <label for="esignature">By checking this box, I am providing my electronic signature and agreeing that this constitutes a legally binding signature. <span class="required">*</span></label>
+                        </div>
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="3">← Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="5">Next →</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: Banking -->
+                    <div class="form-step" data-step="5">
+                        <h2>Banking Information</h2>
+                        <p>Where we send your weekly payouts.</p>
+                        <div class="secure-note">
+                            <span>🔒</span>
+                            <span>This information is encrypted and stored securely. We never share your banking details with third parties.</span>
+                        </div>
+                        <div class="form-group secure-field">
+                            <label for="routingNumber">Routing Number <span class="required">*</span></label>
+                            <input type="text" id="routingNumber" name="routingNumber" required placeholder="123456789" maxlength="9" inputmode="numeric">
+                            <span class="error-message">Please enter a valid 9-digit routing number.</span>
+                            <p class="hint">Found at the bottom of your check. 9 digits.</p>
+                        </div>
+                        <div class="form-group secure-field">
+                            <label for="accountNumber">Account Number <span class="required">*</span></label>
+                            <input type="text" id="accountNumber" name="accountNumber" required placeholder="9876543210">
+                            <span class="error-message">Please enter your account number.</span>
+                            <p class="hint">Found next to your routing number on your check.</p>
+                        </div>
+                        <div class="form-group secure-field">
+                            <label for="confirmAccountNumber">Confirm Account Number <span class="required">*</span></label>
+                            <input type="text" id="confirmAccountNumber" name="confirmAccountNumber" required placeholder="Re-enter account number">
+                            <span class="error-message">Account numbers must match.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="accountType">Account Type <span class="required">*</span></label>
+                            <select id="accountType" name="accountType" required>
+                                <option value="" disabled selected>Select type</option>
+                                <option value="checking">Checking</option>
+                                <option value="savings">Savings</option>
+                            </select>
+                            <span class="error-message">Please select an account type.</span>
+                        </div>
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="4">← Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="6">Next →</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 6: Review & Submit -->
+                    <div class="form-step" data-step="6">
+                        <h2>Review & Submit</h2>
+                        <p>Please review your information before submitting.</p>
+                        <div id="summaryContainer">
+                            <table class="summary-table" id="summaryTable">
+                                <tbody id="summaryBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="termsAgree" name="termsAgree" required>
+                            <label for="termsAgree">I confirm that all information provided is accurate and complete. I agree to the <a href="#" target="_blank">Terms of Service</a> and <a href="#" target="_blank">Driver Agreement</a>. <span class="required">*</span></label>
+                        </div>
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="5">← Back</button>
+                            <div class="form-nav-right">
+                                <button type="submit" class="btn btn-primary btn-large" id="submitBtn">Submit Application</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Success State -->
+                <div class="form-success" id="formSuccess">
+                    <div class="success-icon">🎉</div>
+                    <h2>Application Submitted!</h2>
+                    <p>Thank you for applying to become a driver with Coyote's Dune Delivery.</p>
+                    <p>Your application has been received and is being reviewed. You will receive an email update within 24–48 hours.</p>
+                    <div class="app-id" id="appIdDisplay"></div>
+                    <p><a href="/driver-portal/" class="btn btn-secondary">Check Application Status</a></p>
+                    <p style="margin-top: 16px;"><a href="/">← Back to Home</a></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="../js/apply.js"></script>
+    <script src="../js/main.js"></script>
+</body>
+</html>
