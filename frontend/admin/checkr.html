@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coyote's Dune Delivery — Background Checks (Checkr)</title>
+    <link rel="stylesheet" href="admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- LOGIN SCREEN (shared with admin) -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="logo">🐺</div>
+                <h1>Coyote's Dune Delivery</h1>
+                <p>Admin Portal — Background Checks</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="Enter username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Enter password">
+                </div>
+                <div id="login-error" class="error-message"></div>
+                <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="dashboard" class="dashboard" style="display:none;">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="logo">🐺</div>
+                <span class="brand-text">Coyote Admin</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="index.html" class="nav-item">
+                    <span class="icon">📋</span>
+                    <span>Applications</span>
+                </a>
+                <a href="checkr.html" class="nav-item active">
+                    <span class="icon">🔍</span>
+                    <span>Background Checks</span>
+                </a>
+                <a href="index.html#drivers" class="nav-item">
+                    <span class="icon">🚗</span>
+                    <span>Drivers</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="btn btn-outline btn-sm">
+                    <span class="icon">🚪</span> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="content-header">
+                <h2>Background Checks — Checkr</h2>
+                <div class="header-meta">
+                    <span id="admin-name">Admin</span>
+                </div>
+            </header>
+
+            <!-- Stats Cards -->
+            <section class="stats-grid">
+                <div class="stat-card stat-total">
+                    <div class="stat-icon">📋</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-total">0</span>
+                        <span class="stat-label">Total Applications</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-pending">
+                    <div class="stat-icon">📝</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-consented">0</span>
+                        <span class="stat-label">Consented</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-bg">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-in-progress">0</span>
+                        <span class="stat-label">In Progress</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-approved">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-clear">0</span>
+                        <span class="stat-label">Clear</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-rejected">
+                    <div class="stat-icon">⚠️</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-consider">0</span>
+                        <span class="stat-label">Consider</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-hold">
+                    <div class="stat-icon">🚫</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-suspended">0</span>
+                        <span class="stat-label">Suspended</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Toolbar -->
+            <section class="toolbar">
+                <div class="toolbar-left">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="search-input" placeholder="Search by name, email, or ID...">
+                    </div>
+                    <select id="status-filter" class="filter-select">
+                        <option value="">All BG Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="clear">Clear</option>
+                        <option value="consider">Consider</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                    <select id="app-status-filter" class="filter-select">
+                        <option value="">All App Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="background_check">Background Check</option>
+                        <option value="approved">Approved</option>
+                        <option value="on_hold">On Hold</option>
+                    </select>
+                </div>
+                <div class="toolbar-right">
+                    <button id="refresh-btn" class="btn btn-secondary">🔄 Refresh</button>
+                </div>
+            </section>
+
+            <!-- Candidates Table -->
+            <section class="table-section">
+                <div class="table-wrapper">
+                    <table class="data-table" id="candidates-table">
+                        <thead>
+                            <tr>
+                                <th class="col-id sortable" data-sort="id">ID <span class="sort-indicator">↕</span></th>
+                                <th class="col-name sortable" data-sort="name">Name <span class="sort-indicator">↕</span></th>
+                                <th class="col-email">Email</th>
+                                <th class="col-status">App Status</th>
+                                <th class="col-status">BG Status</th>
+                                <th class="col-status">Consent</th>
+                                <th class="col-date">Report ID</th>
+                                <th class="col-actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="candidates-table-body">
+                            <!-- populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination">
+                    <!-- populated by JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- DETAIL MODAL -->
+    <div id="detail-modal" class="modal-overlay" style="display:none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Background Check Details</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- populated by JS -->
+            </div>
+            <div class="modal-footer">
+                <div class="modal-actions-left">
+                    <button class="btn btn-secondary" id="modal-refresh">🔄 Refresh from Checkr</button>
+                </div>
+                <div class="modal-actions-right">
+                    <button class="btn btn-secondary" id="modal-cancel">Close</button>
+                    <button class="btn btn-primary" id="modal-initiate" style="display:none;">🔍 Initiate Check</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="checkr.js"></script>
+</body>
+</html>
