@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book a Ride or Delivery — Coyote's Dune Delivery</title>
+    <meta name="description" content="Book a ride or schedule a delivery with Coyote's Dune Delivery. Serving Port Aransas, Padre Island, and the Texas Gulf Coast.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        /* Order-specific styles */
+        .service-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .service-option {
+            position: relative;
+            padding: 28px 24px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            background: var(--pure-white);
+        }
+
+        .service-option:hover {
+            border-color: var(--sand-light);
+        }
+
+        .service-option.selected {
+            border-color: var(--sand);
+            background: rgba(201, 168, 124, 0.04);
+            box-shadow: 0 0 0 3px rgba(201, 168, 124, 0.12);
+        }
+
+        .service-option input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .service-option-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius);
+            background: var(--sand-muted);
+            color: var(--navy);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px;
+            transition: var(--transition);
+        }
+
+        .service-option.selected .service-option-icon {
+            background: var(--navy);
+            color: var(--pure-white);
+        }
+
+        .service-option h3 {
+            font-size: 1.05rem;
+            color: var(--navy);
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .service-option p {
+            font-size: 0.85rem;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .location-group {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .location-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 32px;
+        }
+
+        .location-icon.pickup {
+            background: var(--sand);
+            color: var(--navy);
+        }
+
+        .location-icon.dropoff {
+            background: var(--navy);
+            color: var(--pure-white);
+        }
+
+        .location-fields {
+            flex: 1;
+        }
+
+        .route-connector {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 0 4px 12px;
+        }
+
+        .route-line {
+            width: 2px;
+            height: 24px;
+            background: var(--border);
+            margin-left: 17px;
+        }
+
+        .route-swap {
+            background: none;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 0.82rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: var(--transition);
+            font-family: var(--font-body);
+        }
+
+        .route-swap:hover {
+            border-color: var(--sand);
+            color: var(--navy);
+            background: var(--warm-white);
+        }
+
+        .datetime-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .detail-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .detail-card {
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--pure-white);
+        }
+
+        .detail-card:hover {
+            border-color: var(--sand-light);
+        }
+
+        .detail-card.selected {
+            border-color: var(--sand);
+            background: rgba(201, 168, 124, 0.04);
+        }
+
+        .detail-card input {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .detail-card-label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--charcoal);
+            display: block;
+        }
+
+        .detail-card.selected .detail-card-label {
+            color: var(--navy);
+            font-weight: 600;
+        }
+
+        .estimate-box {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            color: var(--pure-white);
+            border-radius: var(--radius-lg);
+            padding: 28px 32px;
+            margin-bottom: 28px;
+        }
+
+        .estimate-box h3 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+            color: var(--sand);
+        }
+
+        .estimate-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.9rem;
+        }
+
+        .estimate-row:last-child {
+            border-bottom: none;
+            font-weight: 700;
+            font-size: 1.05rem;
+            padding-top: 12px;
+            margin-top: 4px;
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .estimate-row .label {
+            opacity: 0.8;
+        }
+
+        .order-success {
+            display: none;
+            text-align: center;
+            padding: 56px 44px;
+        }
+
+        .order-success.active {
+            display: block;
+            animation: fadeInUp 0.45s ease;
+        }
+
+        .order-success h2 {
+            font-family: var(--font-display);
+            font-size: 1.7rem;
+            color: var(--navy);
+            margin-bottom: 10px;
+        }
+
+        .order-success p {
+            color: var(--muted);
+            margin-bottom: 7px;
+            font-size: 0.95rem;
+        }
+
+        .order-id {
+            display: inline-block;
+            background: var(--navy);
+            color: var(--pure-white);
+            padding: 10px 24px;
+            border-radius: var(--radius);
+            font-family: 'SF Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 16px 0;
+            letter-spacing: 0.02em;
+        }
+
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .checkbox-group.order-terms {
+            margin-top: 8px;
+        }
+
+        .checkbox-group.order-terms a {
+            color: var(--sand);
+            text-decoration: underline;
+        }
+
+        .checkbox-group.order-terms a:hover {
+            color: var(--navy);
+        }
+
+        .zone-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            margin-top: 6px;
+        }
+
+        .zone-badge.active {
+            background: rgba(201, 168, 124, 0.12);
+            color: var(--navy);
+        }
+
+        .zone-badge.outside {
+            background: rgba(196, 90, 62, 0.08);
+            color: #C45A3E;
+        }
+
+        @media (max-width: 768px) {
+            .service-selector { grid-template-columns: 1fr; }
+            .location-group { flex-direction: column; gap: 0; }
+            .location-icon { display: none; }
+            .route-connector { display: none; }
+            .datetime-row { grid-template-columns: 1fr; }
+            .detail-cards { grid-template-columns: repeat(2, 1fr); }
+            .contact-grid { grid-template-columns: 1fr; }
+            .estimate-box { padding: 22px 20px; }
+            .order-success { padding: 40px 24px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="container nav-container">
+            <a href="/" class="logo">
+                <svg class="logo-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+                <span class="logo-text">Coyote's Dune Delivery</span>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+                <span class="hamburger"></span>
+            </button>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="/">Home</a></li>
+                <li><a href="/apply/">Become a Driver</a></li>
+                <li><a href="/driver/">Driver Portal</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="form-page">
+        <div class="container">
+            <div class="form-container" id="formContainer">
+                <!-- Header -->
+                <div class="form-header">
+                    <h1>Book a Ride or Delivery</h1>
+                    <p>Fast, reliable service across the Texas Gulf Coast.</p>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-step active" data-step="1">
+                        <span class="progress-label">Service</span>
+                    </div>
+                    <div class="progress-step" data-step="2">
+                        <span class="progress-label">Route</span>
+                    </div>
+                    <div class="progress-step" data-step="3">
+                        <span class="progress-label">Details</span>
+                    </div>
+                    <div class="progress-step" data-step="4">
+                        <span class="progress-label">Contact</span>
+                    </div>
+                    <div class="progress-step" data-step="5">
+                        <span class="progress-label">Review</span>
+                    </div>
+                </div>
+
+                <!-- Form Steps -->
+                <form class="form-steps" id="orderForm" novalidate>
+
+                    <!-- Step 1: Service Type -->
+                    <div class="form-step active" data-step="1">
+                        <h2>Choose Your Service</h2>
+                        <p>Select the type of service you need today.</p>
+
+                        <div class="service-selector">
+                            <label class="service-option selected" id="optRide">
+                                <input type="radio" name="serviceType" value="ride" checked>
+                                <div class="service-option-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                </div>
+                                <h3>On-Demand Ride</h3>
+                                <p>Get picked up and dropped off anywhere in our coverage area. Local drivers who know the coast.</p>
+                            </label>
+                            <label class="service-option" id="optDelivery">
+                                <input type="radio" name="serviceType" value="delivery">
+                                <div class="service-option-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="1" y="3" width="15" height="13"/>
+                                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                                        <circle cx="5.5" cy="18.5" r="2.5"/>
+                                        <circle cx="18.5" cy="18.5" r="2.5"/>
+                                    </svg>
+                                </div>
+                                <h3>Package Delivery</h3>
+                                <p>Send packages, groceries, or supplies across the islands. Tracked from pickup to dropoff.</p>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>When do you need this service?</label>
+                            <div class="datetime-row">
+                                <div>
+                                    <label for="serviceDate" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Date</label>
+                                    <input type="date" id="serviceDate" name="serviceDate" required>
+                                </div>
+                                <div>
+                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time</label>
+                                    <input type="time" id="serviceTime" name="serviceTime" required>
+                                </div>
+                            </div>
+                            <span class="error-message" id="dateTimeError">Please select a valid future date and time.</span>
+                        </div>
+
+                        <div class="form-nav">
+                            <span></span>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="2">Next</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Route (Pickup & Dropoff) -->
+                    <div class="form-step" data-step="2">
+                        <h2>Where Are We Going?</h2>
+                        <p>Enter your pickup and dropoff locations.</p>
+
+                        <div class="location-group">
+                            <div class="location-icon pickup">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </div>
+                            <div class="location-fields">
+                                <div class="form-group">
+                                    <label for="pickupAddress">Pickup Address <span class="required">*</span></label>
+                                    <input type="text" id="pickupAddress" name="pickupAddress" required placeholder="123 Beach Blvd, Port Aransas" autocomplete="street-address">
+                                    <span class="error-message">Please enter a pickup address.</span>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="pickupCity">City <span class="required">*</span></label>
+                                        <input type="text" id="pickupCity" name="pickupCity" required placeholder="Port Aransas" autocomplete="address-level2">
+                                        <span class="error-message">Please enter a city.</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="pickupZip">ZIP Code <span class="required">*</span></label>
+                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code">
+                                        <span class="error-message">Please enter a ZIP code.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="route-connector">
+                            <div class="route-line"></div>
+                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="17 1 21 5 17 9"/>
+                                    <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                    <polyline points="7 23 3 19 7 15"/>
+                                    <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                                </svg>
+                                Swap
+                            </button>
+                        </div>
+
+                        <div class="location-group">
+                            <div class="location-icon dropoff">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                    <circle cx="12" cy="10" r="3"/>
+                                </svg>
+                            </div>
+                            <div class="location-fields">
+                                <div class="form-group">
+                                    <label for="dropoffAddress">Dropoff Address <span class="required">*</span></label>
+                                    <input type="text" id="dropoffAddress" name="dropoffAddress" required placeholder="456 Ocean Drive, Padre Island" autocomplete="off">
+                                    <span class="error-message">Please enter a dropoff address.</span>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="dropoffCity">City <span class="required">*</span></label>
+                                        <input type="text" id="dropoffCity" name="dropoffCity" required placeholder="Corpus Christi" autocomplete="off">
+                                        <span class="error-message">Please enter a city.</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="dropoffZip">ZIP Code <span class="required">*</span></label>
+                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off">
+                                        <span class="error-message">Please enter a ZIP code.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="specialInstructions">Special Instructions <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
+                            <textarea id="specialInstructions" name="specialInstructions" rows="3" placeholder="Gate code, building number, delivery notes, etc."></textarea>
+                        </div>
+
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="1">Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="3">Next</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Details -->
+                    <div class="form-step" data-step="3">
+                        <h2>Service Details</h2>
+                        <p>Tell us more about what you need.</p>
+
+                        <!-- Ride details -->
+                        <div id="rideDetails">
+                            <div class="form-group">
+                                <label>Number of Passengers</label>
+                                <div class="detail-cards">
+                                    <label class="detail-card selected">
+                                        <input type="radio" name="passengers" value="1" checked>
+                                        <span class="detail-card-label">1</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="passengers" value="2">
+                                        <span class="detail-card-label">2</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="passengers" value="3">
+                                        <span class="detail-card-label">3</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="passengers" value="4+">
+                                        <span class="detail-card-label">4+</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="rideNotes">Anything else we should know? <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
+                                <textarea id="rideNotes" name="rideNotes" rows="2" placeholder="Extra luggage, pet friendly, etc."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Delivery details -->
+                        <div id="deliveryDetails" style="display: none;">
+                            <div class="form-group">
+                                <label>Package Size</label>
+                                <div class="detail-cards">
+                                    <label class="detail-card selected">
+                                        <input type="radio" name="packageSize" value="small" checked>
+                                        <span class="detail-card-label">Small</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="packageSize" value="medium">
+                                        <span class="detail-card-label">Medium</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="packageSize" value="large">
+                                        <span class="detail-card-label">Large</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="packageSize" value="oversized">
+                                        <span class="detail-card-label">Oversized</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Is this a rush delivery?</label>
+                                <div class="detail-cards" style="grid-template-columns: 1fr 1fr;">
+                                    <label class="detail-card selected">
+                                        <input type="radio" name="rushDelivery" value="standard" checked>
+                                        <span class="detail-card-label">Standard</span>
+                                    </label>
+                                    <label class="detail-card">
+                                        <input type="radio" name="rushDelivery" value="rush">
+                                        <span class="detail-card-label">Rush (+$10)</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="itemDescription">What are we delivering? <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
+                                <input type="text" id="itemDescription" name="itemDescription" placeholder="Groceries, documents, equipment, etc.">
+                            </div>
+                        </div>
+
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="2">Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="4">Next</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Contact Info -->
+                    <div class="form-step" data-step="4">
+                        <h2>Your Contact Information</h2>
+                        <p>We will use this to confirm your booking and keep you updated.</p>
+
+                        <div class="contact-grid">
+                            <div class="form-group">
+                                <label for="customerFirstName">First Name <span class="required">*</span></label>
+                                <input type="text" id="customerFirstName" name="customerFirstName" required autocomplete="given-name">
+                                <span class="error-message">Please enter your first name.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="customerLastName">Last Name <span class="required">*</span></label>
+                                <input type="text" id="customerLastName" name="customerLastName" required autocomplete="family-name">
+                                <span class="error-message">Please enter your last name.</span>
+                            </div>
+                        </div>
+                        <div class="contact-grid">
+                            <div class="form-group">
+                                <label for="customerEmail">Email Address <span class="required">*</span></label>
+                                <input type="email" id="customerEmail" name="customerEmail" required autocomplete="email" placeholder="you@example.com">
+                                <span class="error-message">Please enter a valid email address.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="customerPhone">Phone Number <span class="required">*</span></label>
+                                <input type="tel" id="customerPhone" name="customerPhone" required autocomplete="tel" placeholder="(361) 555-1234">
+                                <span class="error-message">Please enter a valid phone number.</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="customerAltPhone">Alternative Phone <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
+                            <input type="tel" id="customerAltPhone" name="customerAltPhone" autocomplete="off" placeholder="(361) 555-5678">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Payment Method <span style="font-weight: 400; color: var(--muted);">(billed after service)</span></label>
+                            <div class="detail-cards" style="grid-template-columns: repeat(3, 1fr);">
+                                <label class="detail-card selected">
+                                    <input type="radio" name="paymentMethod" value="card" checked>
+                                    <span class="detail-card-label">Credit Card</span>
+                                </label>
+                                <label class="detail-card">
+                                    <input type="radio" name="paymentMethod" value="cash">
+                                    <span class="detail-card-label">Cash</span>
+                                </label>
+                                <label class="detail-card">
+                                    <input type="radio" name="paymentMethod" value="venmo">
+                                    <span class="detail-card-label">Venmo</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="3">Back</button>
+                            <div class="form-nav-right">
+                                <button type="button" class="btn btn-secondary next-step" data-next="5">Next</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: Review & Submit -->
+                    <div class="form-step" data-step="5">
+                        <h2>Review Your Booking</h2>
+                        <p>Please confirm everything looks correct before placing your order.</p>
+
+                        <div class="estimate-box">
+                            <h3>Booking Summary</h3>
+                            <div class="estimate-row">
+                                <span class="label">Service</span>
+                                <span id="reviewService">On-Demand Ride</span>
+                            </div>
+                            <div class="estimate-row">
+                                <span class="label">Date & Time</span>
+                                <span id="reviewDateTime">--</span>
+                            </div>
+                            <div class="estimate-row">
+                                <span class="label">Pickup</span>
+                                <span id="reviewPickup">--</span>
+                            </div>
+                            <div class="estimate-row">
+                                <span class="label">Dropoff</span>
+                                <span id="reviewDropoff">--</span>
+                            </div>
+                            <div class="estimate-row">
+                                <span class="label">Details</span>
+                                <span id="reviewDetails">--</span>
+                            </div>
+                            <div class="estimate-row">
+                                <span class="label">Estimated Total</span>
+                                <span id="reviewTotal">$0.00</span>
+                            </div>
+                        </div>
+
+                        <div id="summaryContainer">
+                            <table class="summary-table" id="summaryTable">
+                                <tbody id="summaryBody"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="checkbox-group order-terms">
+                            <input type="checkbox" id="termsAgree" name="termsAgree" required>
+                            <label for="termsAgree">I confirm that all information provided is accurate. I agree to the <a href="#">Terms of Service</a> and understand that cancellation within 15 minutes of pickup may incur a fee. <span class="required">*</span></label>
+                        </div>
+
+                        <div class="form-nav">
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="4">Back</button>
+                            <div class="form-nav-right">
+                                <button type="submit" class="btn btn-primary btn-large" id="submitBtn">Place Order</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Success State -->
+                <div class="order-success" id="orderSuccess">
+                    <div class="success-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+                    <h2>Order Confirmed</h2>
+                    <p>Thank you for booking with Coyote's Dune Delivery.</p>
+                    <p>Your driver will be assigned shortly. You will receive a confirmation text and email with driver details.</p>
+                    <div class="order-id" id="orderIdDisplay"></div>
+                    <p style="margin-top: 8px;"><a href="/" class="btn btn-secondary">Back to Home</a></p>
+                    <p style="margin-top: 16px;"><a href="/order/">Book Another</a></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="/" class="logo">
+                        <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        <span class="logo-text">Coyote's Dune Delivery</span>
+                    </a>
+                    <p>Connecting the Texas Gulf Coast, one delivery at a time.</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="/apply/">Become a Driver</a></li>
+                        <li><a href="/driver/">Driver Portal</a></li>
+                        <li><a href="/">Home</a></li>
+                    </ul>
+                </div>
+                <div class="footer-links">
+                    <h4>Support</h4>
+                    <ul>
+                        <li><a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a></li>
+                        <li><a href="tel:+13615551234">(361) 555-1234</a></li>
+                    </ul>
+                </div>
+                <div class="footer-links">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>2025 Coyote's Dune Delivery. All rights reserved.</p>
+                <p class="footer-tagline">Born on the beach. Built for the coast.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/order.js"></script>
+    <script src="../js/main.js"></script>
+</body>
+</html>
