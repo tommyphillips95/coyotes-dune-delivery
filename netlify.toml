@@ -2,8 +2,10 @@
   publish = "frontend"
   functions = "netlify/functions"
 
-[build.environment]
-  NODE_VERSION = "20"
+[dev]
+  publish = "frontend"
+  functions = "netlify/functions"
+  targetPort = 3000
 
 [[redirects]]
   from = "/api/*"
@@ -12,32 +14,20 @@
 
 [[redirects]]
   from = "/admin/*"
-  to = "/admin/index.html"
-  status = 200
-
-[[redirects]]
-  from = "/apply/*"
-  to = "/apply/index.html"
-  status = 200
-
-[[redirects]]
-  from = "/status/*"
-  to = "/driver/index.html"
+  to = "/admin/:splat"
   status = 200
 
 [[redirects]]
   from = "/driver/*"
-  to = "/driver/index.html"
+  to = "/driver/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/apply/*"
+  to = "/apply/:splat"
   status = 200
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
