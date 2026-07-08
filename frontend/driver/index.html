@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coyote's Dune Delivery — Driver Portal</title>
+    <link rel="stylesheet" href="driver.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="logo">🐺</div>
+                <h1>Coyote's Dune Delivery</h1>
+                <p>Driver Portal</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="applicant-id">Application ID</label>
+                    <input type="text" id="applicant-id" name="applicantId" required placeholder="e.g., APP-12345">
+                </div>
+                <div class="form-group">
+                    <label for="login-email">Email Address</label>
+                    <input type="email" id="login-email" name="email" required placeholder="you@example.com">
+                </div>
+                <div id="login-error" class="error-message"></div>
+                <button type="submit" class="btn btn-primary btn-block">Check Status</button>
+                <p class="login-help">Enter your application ID and the email you used to apply.</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN PORTAL (hidden until authenticated) -->
+    <div id="portal" class="portal" style="display:none;">
+        <header class="portal-header">
+            <div class="header-brand">
+                <div class="logo">🐺</div>
+                <span>Coyote Driver Portal</span>
+            </div>
+            <button id="logout-btn" class="btn btn-outline btn-sm">Logout</button>
+        </header>
+
+        <main class="portal-main">
+            <!-- Status Banner -->
+            <section id="status-banner" class="status-banner">
+                <div class="status-content">
+                    <h2 id="status-title">Welcome!</h2>
+                    <p id="status-message">Checking your application status...</p>
+                </div>
+                <div id="status-badge" class="status-badge">pending</div>
+            </section>
+
+            <!-- Approved-only sections wrapper -->
+            <div id="approved-content" style="display:none;">
+                <!-- Profile Card -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>👤 Driver Profile</h3>
+                        <button id="edit-profile-btn" class="btn btn-secondary btn-sm">Edit</button>
+                    </div>
+                    <div class="card-body" id="profile-display">
+                        <div class="info-grid" id="profile-grid">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+                    <div class="card-body" id="profile-edit" style="display:none;">
+                        <form id="profile-form" class="edit-form">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Phone</label>
+                                    <input type="tel" id="edit-phone" name="phone">
+                                </div>
+                                <div class="form-group">
+                                    <label>Vehicle Make</label>
+                                    <input type="text" id="edit-vehicle-make" name="vehicle_make">
+                                </div>
+                                <div class="form-group">
+                                    <label>Vehicle Model</label>
+                                    <input type="text" id="edit-vehicle-model" name="vehicle_model">
+                                </div>
+                                <div class="form-group">
+                                    <label>Vehicle Year</label>
+                                    <input type="number" id="edit-vehicle-year" name="vehicle_year">
+                                </div>
+                                <div class="form-group">
+                                    <label>License Plate</label>
+                                    <input type="text" id="edit-vehicle-plate" name="vehicle_plate">
+                                </div>
+                                <div class="form-group">
+                                    <label>Insurance Provider</label>
+                                    <input type="text" id="edit-insurance-provider" name="insurance_provider">
+                                </div>
+                                <div class="form-group">
+                                    <label>Policy Number</label>
+                                    <input type="text" id="edit-insurance-policy" name="insurance_policy">
+                                </div>
+                                <div class="form-group">
+                                    <label>Bank Name</label>
+                                    <input type="text" id="edit-bank-name" name="bank_name">
+                                </div>
+                                <div class="form-group">
+                                    <label>Account Number</label>
+                                    <input type="text" id="edit-bank-account" name="bank_account">
+                                </div>
+                                <div class="form-group">
+                                    <label>Routing Number</label>
+                                    <input type="text" id="edit-bank-routing" name="bank_routing">
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" id="cancel-edit-btn" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                            <div id="profile-save-error" class="error-message"></div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Document Upload -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>📎 Documents & Renewals</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-desc">Upload updated insurance cards, license renewals, or other documents.</p>
+                        <div id="upload-dropzone" class="upload-dropzone">
+                            <div class="upload-icon">📤</div>
+                            <p>Drag & drop files here, or <span class="upload-link">click to browse</span></p>
+                            <input type="file" id="upload-input" multiple accept=".pdf,.jpg,.jpeg,.png">
+                        </div>
+                        <div id="upload-preview" class="upload-preview"></div>
+                        <button id="upload-submit" class="btn btn-primary" style="display:none;margin-top:12px;">Upload Files</button>
+                        <div id="upload-list" class="upload-list">
+                            <h4>Your Documents</h4>
+                            <div id="driver-docs-list">
+                                <!-- populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Earnings Placeholder -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>💰 Earnings</h3>
+                        <span class="badge badge-soon">Coming Soon</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="earnings-placeholder">
+                            <div class="placeholder-icon">📊</div>
+                            <p>Earnings tracking and payout history will appear here once the payment system is integrated.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Support -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>🎧 Support</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-desc">Need help? Contact our support team.</p>
+                        <div class="support-options">
+                            <a href="mailto:support@coyotedunedelivery.com" class="support-link">
+                                <span class="support-icon">✉️</span>
+                                <div>
+                                    <strong>Email Support</strong>
+                                    <span>support@coyotedunedelivery.com</span>
+                                </div>
+                            </a>
+                            <a href="tel:+15551234567" class="support-link">
+                                <span class="support-icon">📞</span>
+                                <div>
+                                    <strong>Phone Support</strong>
+                                    <span>(555) 123-4567</span>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Rejected / On Hold message -->
+            <div id="non-approved-message" class="non-approved-message" style="display:none;">
+                <div class="message-box">
+                    <p>If you have questions about your application, please contact support.</p>
+                    <a href="mailto:support@coyotedunedelivery.com" class="btn btn-primary">Contact Support</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="driver.js"></script>
+</body>
+</html>
