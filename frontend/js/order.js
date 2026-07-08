@@ -1,6 +1,7 @@
 /**
  * Coyote's Dune Delivery — Customer Order Form
  * Handles multi-step order flow: Service > Route > Details > Contact > Review
+ * Integrated with /api/create-order, /api/get-orders backend
  */
 
 (function () {
@@ -14,6 +15,27 @@
 
     let currentStep = 1;
     const totalSteps = 5;
+
+    // ── Pricing Constants ───────────────────────────────────
+    const PRICING = {
+        ride: { base: 12, per_mile: 2.5 },
+        package_delivery: { base: 15, per_mile: 2.0 },
+        grocery_run: { base: 18, per_mile: 1.5 },
+        group_transport: { base: 35, per_mile: 3.0 },
+    };
+
+    const ZONE_DISTANCES = {
+        'Port Aransas-Padre Island': 18,
+        'Padre Island-Port Aransas': 18,
+        'Port Aransas-Port Aransas': 4,
+        'Padre Island-Padre Island': 5,
+        'Corpus Christi-Port Aransas': 22,
+        'Port Aransas-Corpus Christi': 22,
+        'Corpus Christi-Padre Island': 12,
+        'Padre Island-Corpus Christi': 12,
+        'Rockport-Port Aransas': 25,
+        'Port Aransas-Rockport': 25,
+    };
 
     // Initialize default date/time to now + 30 minutes
     function initDateTime() {
@@ -119,8 +141,8 @@
         if (step === 4) {
             const firstName = document.getElementById('customerFirstName');
             const lastName = document.getElementById('customerLastName');
-            const email = document.getElementById('customerEmail');
             const phone = document.getElementById('customerPhone');
+            const email = document.getElementById('customerEmail');
 
             if (!firstName.value.trim()) { showError(firstName, true); valid = false; }
             else { showError(firstName, false); }
@@ -128,11 +150,14 @@
             if (!lastName.value.trim()) { showError(lastName, true); valid = false; }
             else { showError(lastName, false); }
 
-            if (!validateEmail(email.value.trim())) { showError(email, true); valid = false; }
-            else { showError(email, false); }
-
             if (!validatePhone(phone.value.trim())) { showError(phone, true); valid = false; }
             else { showError(phone, false); }
+
+            if (email.value.trim() && !validateEmail(email.value.trim())) {
+                showError(email, true); valid = false;
+            } else {
+                showError(email, false);
+            }
         }
 
         return valid;
@@ -183,9 +208,37 @@
         });
     }
 
+    // ── Pricing Engine ──────────────────────────────────────
+    function calculateEstimate() {
+        const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
+        const pricing = PRICING[serviceType] || PRICING.ride;
+        let price = pricing.base;
+
+        const pickupCity = document.getElementById('pickupCity').value;
+        const dropoffCity = document.getElementById('dropoffCity').value || pickupCity;
+        const zoneKey = `${pickupCity}-${dropoffCity}`;
+        const miles = ZONE_DISTANCES[zoneKey] || 10;
+        price += miles * pricing.per_mile;
+
+        const passengerCount = parseInt(document.querySelector('input[name="passengers"]:checked')?.value) || 1;
+        if (passengerCount > 1) price += (passengerCount - 1) * 3;
+
+        const packageSize = document.querySelector('input[name="packageSize"]:checked')?.value;
+        if (packageSize === 'large') price += 8;
+        if (packageSize === 'oversized') price += 15;
+
+        return Math.round(price * 100) / 100;
+    }
+
     // Build review summary
     function buildReviewSummary() {
         const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
+        const serviceLabels = {
+            ride: 'On-Demand Ride',
+            package_delivery: 'Package Delivery',
+            grocery_run: 'Grocery & Supply Run',
+            group_transport: 'Group Transport',
+        };
         const date = document.getElementById('serviceDate').value;
         const time = document.getElementById('serviceTime').value;
         const pickup = `${document.getElementById('pickupAddress').value}, ${document.getElementById('pickupCity').value} ${document.getElementById('pickupZip').value}`;
@@ -200,30 +253,22 @@
 
         // Build details string
         let details = '';
-        let basePrice = 0;
         if (serviceType === 'ride') {
             const passengers = document.querySelector('input[name="passengers"]:checked').value;
             details = `${passengers} passenger${passengers === '1' ? '' : 's'}`;
-            basePrice = 18;
-            if (passengers === '4+') basePrice += 5;
         } else {
             const size = document.querySelector('input[name="packageSize"]:checked').value;
-            const rush = document.querySelector('input[name="rushDelivery"]:checked').value;
             details = `${size.charAt(0).toUpperCase() + size.slice(1)} package`;
-            if (rush === 'rush') details += ', Rush delivery';
-            basePrice = size === 'small' ? 12 : size === 'medium' ? 18 : size === 'large' ? 28 : 45;
-            if (rush === 'rush') basePrice += 10;
         }
 
-        // Calculate estimated total (simple heuristic)
-        const estimatedTotal = basePrice.toFixed(2);
+        const estimatedTotal = calculateEstimate();
 
-        document.getElementById('reviewService').textContent = serviceType === 'ride' ? 'On-Demand Ride' : 'Package Delivery';
+        document.getElementById('reviewService').textContent = serviceLabels[serviceType] || serviceType;
         document.getElementById('reviewDateTime').textContent = dateTimeStr;
         document.getElementById('reviewPickup').textContent = pickup;
         document.getElementById('reviewDropoff').textContent = dropoff;
         document.getElementById('reviewDetails').textContent = details;
-        document.getElementById('reviewTotal').textContent = `$${estimatedTotal}`;
+        document.getElementById('reviewTotal').textContent = `$${estimatedTotal.toFixed(2)}`;
 
         // Summary table
         const tbody = document.getElementById('summaryBody');
@@ -231,14 +276,12 @@
         const lastName = document.getElementById('customerLastName').value;
         const email = document.getElementById('customerEmail').value;
         const phone = document.getElementById('customerPhone').value;
-        const payment = document.querySelector('input[name="paymentMethod"]:checked').value;
 
         const rows = [
             ['Name', `${firstName} ${lastName}`],
-            ['Email', email],
             ['Phone', phone],
-            ['Payment', payment.charAt(0).toUpperCase() + payment.slice(1)],
         ];
+        if (email) rows.push(['Email', email]);
 
         tbody.innerHTML = rows.map(([label, val]) =>
             `<tr><th>${label}</th><td>${escapeHtml(val)}</td></tr>`
@@ -251,17 +294,7 @@
         return div.innerHTML;
     }
 
-    // Generate order ID
-    function generateOrderId() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let id = 'CDD-';
-        for (let i = 0; i < 8; i++) {
-            id += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return id;
-    }
-
-    // Submit order
+    // ── Submit order ────────────────────────────────────────
     async function submitOrder(e) {
         e.preventDefault();
 
@@ -275,71 +308,169 @@
         const originalText = submitBtn.textContent;
         submitBtn.innerHTML = '<span class="spinner"></span> Placing Order...';
 
+        const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
+        const dateVal = document.getElementById('serviceDate').value;
+        const timeVal = document.getElementById('serviceTime').value;
+        const now = new Date();
+        const isAsap = new Date(`${dateVal}T${timeVal}`) <= new Date(now.getTime() + 60 * 60 * 1000);
+
         const orderData = {
-            orderId: generateOrderId(),
-            serviceType: document.querySelector('input[name="serviceType"]:checked').value,
-            serviceDate: document.getElementById('serviceDate').value,
-            serviceTime: document.getElementById('serviceTime').value,
-            pickupAddress: document.getElementById('pickupAddress').value,
-            pickupCity: document.getElementById('pickupCity').value,
-            pickupZip: document.getElementById('pickupZip').value,
-            dropoffAddress: document.getElementById('dropoffAddress').value,
-            dropoffCity: document.getElementById('dropoffCity').value,
-            dropoffZip: document.getElementById('dropoffZip').value,
-            specialInstructions: document.getElementById('specialInstructions').value,
-            passengers: document.querySelector('input[name="passengers"]')?.checked?.value || '1',
-            rideNotes: document.getElementById('rideNotes')?.value || '',
-            packageSize: document.querySelector('input[name="packageSize"]')?.checked?.value || 'small',
-            rushDelivery: document.querySelector('input[name="rushDelivery"]')?.checked?.value || 'standard',
-            itemDescription: document.getElementById('itemDescription')?.value || '',
-            customerFirstName: document.getElementById('customerFirstName').value,
-            customerLastName: document.getElementById('customerLastName').value,
-            customerEmail: document.getElementById('customerEmail').value,
-            customerPhone: document.getElementById('customerPhone').value,
-            customerAltPhone: document.getElementById('customerAltPhone').value || '',
-            paymentMethod: document.querySelector('input[name="paymentMethod"]:checked').value,
-            createdAt: new Date().toISOString(),
+            first_name: document.getElementById('customerFirstName').value.trim(),
+            last_name: document.getElementById('customerLastName').value.trim(),
+            phone: document.getElementById('customerPhone').value.trim(),
+            email: document.getElementById('customerEmail').value.trim() || null,
+            service_type: serviceType,
+            pickup_address: document.getElementById('pickupAddress').value.trim(),
+            pickup_city: document.getElementById('pickupCity').value,
+            pickup_zip: document.getElementById('pickupZip').value.trim() || null,
+            dropoff_address: document.getElementById('dropoffAddress').value.trim() || null,
+            dropoff_city: document.getElementById('dropoffCity').value || null,
+            dropoff_zip: document.getElementById('dropoffZip').value.trim() || null,
+            schedule: isAsap ? 'asap' : 'later',
+            scheduled_date: isAsap ? null : dateVal,
+            scheduled_time: isAsap ? null : timeVal,
+            passenger_count: serviceType === 'ride'
+                ? parseInt(document.querySelector('input[name="passengers"]:checked').value)
+                : null,
+            package_size: serviceType === 'package_delivery'
+                ? document.querySelector('input[name="packageSize"]:checked').value
+                : null,
+            package_description: document.getElementById('itemDescription')?.value.trim() || null,
+            special_instructions: document.getElementById('specialInstructions').value.trim() || null,
         };
 
         try {
-            const API_BASE = window.location.hostname === 'localhost'
-                ? 'http://localhost:3000/api'
-                : '/api';
+            const result = await CoyoteAPI.post('/api/create-order', orderData);
 
-            const response = await fetch(`${API_BASE}/submit-order`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(orderData),
-            });
+            if (result.ok) {
+                document.getElementById('orderIdDisplay').textContent = result.data.orderNumber;
+                form.style.display = 'none';
+                progressBar.style.display = 'none';
+                orderSuccess.classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
 
-            if (!response.ok) {
-                // If endpoint doesn't exist yet, still show success with local data
-                console.warn('Order API not available yet. Showing local confirmation.');
+                // Store order in localStorage
+                try {
+                    const orders = JSON.parse(localStorage.getItem('cdd_orders') || '[]');
+                    orders.push({
+                        orderNumber: result.data.orderNumber,
+                        orderId: result.data.orderId,
+                        createdAt: new Date().toISOString(),
+                        serviceType: orderData.service_type,
+                    });
+                    localStorage.setItem('cdd_orders', JSON.stringify(orders));
+                } catch (_) { /* ignore */ }
+            } else {
+                alert('Failed to place order: ' + (result.error || result.data?.message || 'Unknown error'));
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
             }
         } catch (err) {
-            console.warn('Order API not available yet. Showing local confirmation.', err);
+            console.error('Order submission failed:', err);
+            alert('Something went wrong. Please try again or call (361) 555-1234.');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    }
+
+    // ── Order Tracking ──────────────────────────────────────
+    const trackBtn = document.getElementById('trackBtn');
+    if (trackBtn) {
+        trackBtn.addEventListener('click', trackOrder);
+    }
+
+    const trackOrderNumber = document.getElementById('trackOrderNumber');
+    if (trackOrderNumber) {
+        trackOrderNumber.addEventListener('keydown', e => {
+            if (e.key === 'Enter') trackOrder();
+        });
+    }
+
+    async function trackOrder() {
+        const orderNum = document.getElementById('trackOrderNumber').value.trim().toUpperCase();
+        const phone = document.getElementById('trackPhone').value.trim();
+        const resultEl = document.getElementById('trackingResult');
+
+        if (!orderNum && !phone) {
+            alert('Please enter an order number or phone number');
+            return;
         }
 
-        // Show success
-        form.style.display = 'none';
-        progressBar.style.display = 'none';
-        orderSuccess.classList.add('active');
-        document.getElementById('orderIdDisplay').textContent = orderData.orderId;
+        const btn = document.getElementById('trackBtn');
+        btn.disabled = true;
+        btn.textContent = 'Tracking...';
 
-        // Store order ID in localStorage for reference
         try {
-            const orders = JSON.parse(localStorage.getItem('cdd_orders') || '[]');
-            orders.push({ orderId: orderData.orderId, createdAt: orderData.createdAt, serviceType: orderData.serviceType });
-            localStorage.setItem('cdd_orders', JSON.stringify(orders));
-        } catch (_) { /* ignore */ }
+            const params = {};
+            if (orderNum) params.order_number = orderNum;
+            if (phone) params.phone = phone;
 
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalText;
+            const result = await CoyoteAPI.get('/api/get-orders', params);
+
+            if (result.ok && result.data && (Array.isArray(result.data.data) ? result.data.data.length > 0 : result.data.data)) {
+                const order = Array.isArray(result.data.data) ? result.data.data[0] : result.data.data;
+                displayTrackingResult(order);
+            } else {
+                alert('Order not found. Please check your order number and phone number.');
+            }
+        } catch (err) {
+            console.error('Tracking failed:', err);
+            alert('Unable to track order right now. Please try again.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Track Order';
+        }
+    }
+
+    function displayTrackingResult(order) {
+        const resultEl = document.getElementById('trackingResult');
+        const serviceLabels = {
+            ride: 'On-Demand Ride',
+            package_delivery: 'Package Delivery',
+            grocery_run: 'Grocery & Supply Run',
+            group_transport: 'Group Transport',
+        };
+
+        document.getElementById('trackingOrderNum').textContent = `Order #${order.order_number}`;
+
+        const statusEl = document.getElementById('trackingStatus');
+        statusEl.textContent = order.status.replace('_', ' ');
+        statusEl.className = 'status-badge-track ' + order.status;
+
+        document.getElementById('trackingService').textContent = serviceLabels[order.service_type] || order.service_type;
+        document.getElementById('trackingScheduled').textContent = order.is_asap
+            ? 'ASAP'
+            : `${order.scheduled_date} at ${order.scheduled_time}`;
+        document.getElementById('trackingPickup').textContent = `${order.pickup_address}, ${order.pickup_city}`;
+        document.getElementById('trackingDropoff').textContent = order.dropoff_address
+            ? `${order.dropoff_address}, ${order.dropoff_city || order.pickup_city}`
+            : 'Same as pickup';
+        document.getElementById('trackingPrice').textContent = order.estimated_price
+            ? `$${parseFloat(order.estimated_price).toFixed(2)}`
+            : '—';
+        document.getElementById('trackingDriver').textContent = order.driver_id
+            ? 'Assigned'
+            : 'Not yet assigned';
+
+        resultEl.classList.add('active');
+    }
+
+    // ── Auto-track from URL ─────────────────────────────────
+    function initFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const trackNum = params.get('track');
+        if (trackNum) {
+            document.getElementById('trackOrderNumber').value = trackNum;
+            setTimeout(() => {
+                document.getElementById('trackingSection').scrollIntoView({ behavior: 'smooth' });
+            }, 500);
+        }
     }
 
     // Event listeners
     function init() {
         initDateTime();
+        initFromUrl();
         updateServiceType();
 
         // Service type radio clicks
@@ -369,12 +500,10 @@
         // Card selections
         setupCardSelection('#rideDetails', 'passengers');
         setupCardSelection('#deliveryDetails', 'packageSize');
-        setupCardSelection('#deliveryDetails', 'rushDelivery');
-        setupCardSelection('.form-step[data-step="4"]', 'paymentMethod');
 
         // Real-time error clearing
         ['pickupAddress', 'pickupCity', 'pickupZip', 'dropoffAddress', 'dropoffCity', 'dropoffZip',
-         'customerFirstName', 'customerLastName', 'customerEmail', 'customerPhone'].forEach(id => {
+         'customerFirstName', 'customerLastName', 'customerPhone', 'customerEmail'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
                 el.addEventListener('input', () => showError(el, false));
