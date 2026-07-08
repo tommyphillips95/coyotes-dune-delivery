@@ -29,7 +29,7 @@
                 <li><a href="#how-it-works">How It Works</a></li>
                 <li><a href="#zones">Delivery Zones</a></li>
                 <li><a href="#partners">Partner With Us</a></li>
-                <li><a href="/order/" class="btn btn-primary">Order Now</a></li>
+                <li><a href="#order" class="btn btn-primary">Order Now</a></li>
                 <li><a href="/apply/" class="btn btn-outline">Become a Driver</a></li>
                 <li><a href="/driver/" class="btn btn-outline">Driver Portal</a></li>
             </ul>
@@ -44,7 +44,7 @@
             <h1 class="hero-title">Delivery Done Right,<br>Coast to Coast.</h1>
             <p class="hero-tagline">Reliable rides and deliveries connecting Port Aransas, Padre Island, and everywhere in between. Built for island life.</p>
             <div class="hero-cta">
-                <a href="/order/" class="btn btn-large btn-primary">Order Now</a>
+                <a href="#order" class="btn btn-large btn-primary">Order Now</a>
                 <a href="/apply/" class="btn btn-large btn-outline">Become a Driver</a>
             </div>
             <p class="hero-sub">No sign-up fees. Flexible hours. Weekly payouts.</p>
@@ -100,9 +100,143 @@
                     <p>Coordinate pickups for events, fishing trips, or beach outings. Multiple vehicles available.</p>
                 </div>
             </div>
-            <div class="order-cta">
-                <a href="/order/" class="btn btn-large btn-primary">Book a Ride or Delivery</a>
-                <p class="order-phone">Or call <a href="tel:+13615551234">(361) 555-1234</a> to speak with dispatch</p>
+
+            <!-- Order Form -->
+            <div class="form-container" id="orderFormContainer" style="max-width: 720px; margin: 48px auto 0;">
+                <div class="form-header">
+                    <h1>Book Your Ride or Delivery</h1>
+                    <p>Fill out the details below and we will dispatch a driver right away.</p>
+                </div>
+                <form id="orderForm" class="form-steps" style="padding: 32px 40px 40px;">
+                    <div class="form-group">
+                        <label for="serviceType">Service Type <span class="required">*</span></label>
+                        <select id="serviceType" name="service_type" required>
+                            <option value="">Select a service...</option>
+                            <option value="ride">On-Demand Ride</option>
+                            <option value="package_delivery">Package Delivery</option>
+                            <option value="grocery_run">Grocery Run</option>
+                            <option value="group_transport">Group Transport</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="customerName">Full Name <span class="required">*</span></label>
+                            <input type="text" id="customerName" name="customer_name" placeholder="Jane Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="customerPhone">Phone Number <span class="required">*</span></label>
+                            <input type="tel" id="customerPhone" name="customer_phone" placeholder="(361) 555-1234" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="customerEmail">Email Address</label>
+                        <input type="email" id="customerEmail" name="customer_email" placeholder="jane@example.com">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="pickupAddress">Pickup Address <span class="required">*</span></label>
+                            <input type="text" id="pickupAddress" name="pickup_address" placeholder="123 Beach Blvd, Port Aransas" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="pickupCity">Pickup City <span class="required">*</span></label>
+                            <input type="text" id="pickupCity" name="pickup_city" placeholder="Port Aransas" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dropoffAddress">Drop-off Address <span class="required">*</span></label>
+                            <input type="text" id="dropoffAddress" name="dropoff_address" placeholder="456 Padre Blvd, Padre Island" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="dropoffCity">Drop-off City <span class="required">*</span></label>
+                            <input type="text" id="dropoffCity" name="dropoff_city" placeholder="Padre Island" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>When do you need this service?</label>
+                        <div class="form-row" style="gap: 12px; margin-top: 8px;">
+                            <label class="checkbox-group" style="flex: 1; margin-bottom: 0; cursor: pointer;">
+                                <input type="radio" name="timing" value="asap" checked style="width: 18px; height: 18px; accent-color: var(--navy);">
+                                <span>As Soon As Possible</span>
+                            </label>
+                            <label class="checkbox-group" style="flex: 1; margin-bottom: 0; cursor: pointer;">
+                                <input type="radio" name="timing" value="scheduled" style="width: 18px; height: 18px; accent-color: var(--navy);">
+                                <span>Schedule for Later</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="scheduleFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="scheduledDate">Date</label>
+                            <input type="date" id="scheduledDate" name="scheduled_date">
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduledTime">Time</label>
+                            <input type="time" id="scheduledTime" name="scheduled_time">
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="passengerField">
+                        <div class="form-group">
+                            <label for="passengerCount">Passengers</label>
+                            <input type="number" id="passengerCount" name="passenger_count" min="1" max="20" value="1">
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="packageField" style="display: none;">
+                        <label for="packageDescription">Package / Item Description</label>
+                        <textarea id="packageDescription" name="package_description" rows="3" placeholder="Describe what needs to be delivered..."></textarea>
+                    </div>
+
+                    <div class="form-group" id="packageSizeField" style="display: none;">
+                        <label for="packageSize">Package Size</label>
+                        <select id="packageSize" name="package_size">
+                            <option value="">Select size...</option>
+                            <option value="small">Small (fits in a bag)</option>
+                            <option value="medium">Medium (fits in a car seat)</option>
+                            <option value="large">Large (fits in a trunk)</option>
+                            <option value="oversized">Oversized (needs a truck or van)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="specialInstructions">Special Instructions</label>
+                        <textarea id="specialInstructions" name="special_instructions" rows="2" placeholder="Gate code, pet friendly, fragile items, etc."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="estimatedPrice">Estimated Price (optional)</label>
+                        <input type="number" id="estimatedPrice" name="estimated_price" min="0" step="0.01" placeholder="0.00">
+                    </div>
+
+                    <div class="form-nav" style="padding-top: 16px;">
+                        <button type="submit" class="btn btn-primary" id="orderSubmitBtn" style="width: 100%;">
+                            <span id="orderBtnText">Submit Order</span>
+                        </button>
+                    </div>
+                    <p class="order-phone" style="text-align: center; margin-top: 16px;">Or call <a href="tel:+13615551234">(361) 555-1234</a> to speak with dispatch</p>
+                </form>
+
+                <!-- Success State -->
+                <div class="form-success" id="orderSuccess" style="padding: 56px 40px;">
+                    <div class="success-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+                    <h2>Order Received</h2>
+                    <p>Your request has been submitted and a driver will be assigned shortly.</p>
+                    <div class="app-id" id="orderNumberDisplay">COY-00000000-0000</div>
+                    <p style="color: var(--muted); font-size: 0.9rem;">Save this number to track your order status.</p>
+                    <button type="button" class="btn btn-outline" id="orderResetBtn" style="margin-top: 20px;">Place Another Order</button>
+                </div>
             </div>
         </div>
     </section>
@@ -360,7 +494,7 @@
                     <ul>
                         <li><a href="/apply/">Become a Driver</a></li>
                         <li><a href="/driver/">Driver Portal</a></li>
-                        <li><a href="/order/">Book a Ride</a></li>
+                        <li><a href="#order">Book a Ride</a></li>
                         <li><a href="#how-it-works">How It Works</a></li>
                         <li><a href="#zones">Delivery Zones</a></li>
                     </ul>
