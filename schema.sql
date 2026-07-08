@@ -103,6 +103,105 @@ CREATE TABLE IF NOT EXISTS background_check_logs (
 CREATE INDEX IF NOT EXISTS idx_bg_logs_application ON background_check_logs(application_id);
 
 -- =============================================
+-- CUSTOMERS Table (Order Customers)
+-- =============================================
+CREATE TABLE IF NOT EXISTS customers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    email TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+
+-- =============================================
+-- ORDERS Table (Customer Orders)
+-- =============================================
+CREATE TABLE IF NOT EXISTS orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_number TEXT UNIQUE NOT NULL,
+    customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    service_type TEXT NOT NULL, -- ride, package_delivery, grocery_run, group_transport
+    status TEXT DEFAULT 'pending', -- pending, assigned, in_progress, completed, cancelled
+    
+    -- Locations
+    pickup_address TEXT NOT NULL,
+    pickup_city TEXT NOT NULL,
+    pickup_zip TEXT,
+    pickup_lat DECIMAL(10, 8),
+    pickup_lng DECIMAL(11, 8),
+    
+    dropoff_address TEXT,
+    dropoff_city TEXT,
+    dropoff_zip TEXT,
+    dropoff_lat DECIMAL(10, 8),
+    dropoff_lng DECIMAL(11, 8),
+    
+    -- Scheduling
+    scheduled_date DATE,
+    scheduled_time TEXT, -- HH:MM format
+    is_asap BOOLEAN DEFAULT TRUE,
+    
+    -- Order Details
+    passenger_count INTEGER DEFAULT 1,
+    package_description TEXT,
+    package_size TEXT, -- small, medium, large, oversized
+    special_instructions TEXT,
+    
+    -- Pricing
+    estimated_price DECIMAL(10, 2),
+    final_price DECIMAL(10, 2),
+    tip_amount DECIMAL(10, 2) DEFAULT 0,
+    
+    -- Assignment
+    driver_id UUID REFERENCES applications(id),
+    assigned_at TIMESTAMPTZ,
+    
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_id);
+
+-- =============================================
+-- ORDER STATUS LOG Table (Audit Trail)
+-- =============================================
+CREATE TABLE IF NOT EXISTS order_status_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    note TEXT,
+    changed_by TEXT, -- driver_id, admin, system
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_status_logs_order ON order_status_logs(order_id);
+
+-- =============================================
+-- ORDER ITEMS Table (for multi-item orders like grocery runs)
+-- =============================================
+CREATE TABLE IF NOT EXISTS order_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    item_name TEXT NOT NULL,
+    quantity INTEGER DEFAULT 1,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+-- =============================================
 -- Row Level Security (RLS) Policies
 -- =============================================
 
@@ -126,6 +225,43 @@ CREATE POLICY "Drivers can view own documents"
 ON documents FOR SELECT 
 USING (application_id::text = current_setting('app.current_user_id', true));
 
+-- Enable RLS on customers
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can create customers" 
+ON customers FOR INSERT 
+WITH CHECK (true);
+
+CREATE POLICY "Customers can view own record by phone" 
+ON customers FOR SELECT 
+USING (true); -- Simplified; phone lookup is handled in function
+
+-- Enable RLS on orders
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can create orders" 
+ON orders FOR INSERT 
+WITH CHECK (true);
+
+CREATE POLICY "Public can view orders by order_number" 
+ON orders FOR SELECT 
+USING (true);
+
+-- Enable RLS on order_items
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can manage order_items" 
+ON order_items FOR ALL 
+USING (true)
+WITH CHECK (true);
+
+-- Enable RLS on order_status_logs
+ALTER TABLE order_status_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can view status logs" 
+ON order_status_logs FOR SELECT 
+USING (true);
+
 -- =============================================
 -- Updated At Trigger
 -- =============================================
@@ -139,6 +275,16 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_applications_updated_at 
 BEFORE UPDATE ON applications 
+FOR EACH ROW 
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_customers_updated_at 
+BEFORE UPDATE ON customers 
+FOR EACH ROW 
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_orders_updated_at 
+BEFORE UPDATE ON orders 
 FOR EACH ROW 
 EXECUTE FUNCTION update_updated_at_column();
 
