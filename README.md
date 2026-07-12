@@ -11,10 +11,17 @@ Coyote's Dune Delivery is a modern web application that allows prospective deliv
 - **Check application status** using a unique Applicant ID
 - **Track onboarding progress** through the admin dashboard
 
+Customers can:
+- **Book rides and deliveries** across the Texas Gulf Coast
+- **Track orders** in real-time with order number lookup
+- **Receive SMS notifications** for order updates
+
 Administrators can:
 - **Review and manage applications** via a secure admin dashboard
 - **Update application statuses** (pending, approved, rejected, etc.)
 - **Search and filter applicants** by status, name, or ID
+- **Dispatch orders** to approved drivers and track deliveries
+- **Send bulk SMS alerts** to all approved drivers about new orders
 
 ---
 
@@ -35,8 +42,9 @@ Administrators can:
 
 ### Backend (Serverless Deployment — Netlify Functions)
 - **Netlify Functions** (AWS Lambda-compatible)
-- **better-sqlite3** with `/tmp` database storage (see ⚠️ Production Note below)
+- **Supabase** (PostgreSQL) for persistent data storage
 - **jsonwebtoken** for JWT authentication
+- **Twilio** for SMS notifications
 
 ### Deployment Targets
 - **Netlify** — static site + serverless functions (recommended for frontend + API)
@@ -63,6 +71,7 @@ This installs:
 - `cors`
 - `dotenv`
 - `nodemon` (dev dependency)
+- `twilio` (for SMS notifications)
 
 ### 2. Environment Variables
 
@@ -76,6 +85,10 @@ NODE_ENV=development
 # Database (local development)
 DATABASE_PATH=./database/coyote-dune-delivery.db
 
+# Supabase (production database)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+
 # JWT
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 JWT_EXPIRES=24h
@@ -83,6 +96,11 @@ JWT_EXPIRES=24h
 # Admin Credentials (change these!)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=coyotedune2024
+
+# Twilio (for SMS notifications — optional but recommended)
+TWILIO_ACCOUNT_SID=your-twilio-account-sid
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_PHONE_NUMBER=+15551234567
 ```
 
 > ⚠️ **Security:** Never commit `.env` files to version control. Use different credentials in production.
@@ -112,6 +130,8 @@ The SQLite database file will be created at the path specified in `DATABASE_PATH
 | Status Checker | `http://localhost:3000/status` |
 | Admin Login | `http://localhost:3000/admin` |
 | Admin Dashboard | `http://localhost:3000/admin/dashboard.html` |
+| Book a Ride | `http://localhost:3000/order` |
+| Driver Portal | `http://localhost:3000/driver` |
 
 ---
 
@@ -145,7 +165,13 @@ In the Netlify Dashboard → Site Settings → Environment Variables, add:
 | `ADMIN_USERNAME` | Your chosen admin username | ✅ |
 | `ADMIN_PASSWORD` | Your chosen admin password | ✅ |
 | `JWT_EXPIRES` | `24h` (or `7d`, etc.) | Optional |
-| `DATABASE_PATH` | `/tmp/coyote-dune-delivery.db` | Optional (default used) |
+| `SUPABASE_URL` | Your Supabase project URL | ✅ |
+| `SUPABASE_SERVICE_KEY` | Your Supabase service role key | ✅ |
+| `TWILIO_ACCOUNT_SID` | Your Twilio Account SID | Optional |
+| `TWILIO_AUTH_TOKEN` | Your Twilio Auth Token | Optional |
+| `TWILIO_PHONE_NUMBER` | Your Twilio phone number (E.164 format) | Optional |
+
+> 💡 **Twilio Setup:** Sign up at [twilio.com](https://www.twilio.com), get a free trial number, and add your credentials above. SMS notifications will be sent to customers on order creation, driver assignment, and order completion.
 
 #### Step 4: Deploy
 
@@ -164,8 +190,9 @@ Or connect your GitHub repo to Netlify for **automatic deploys on every push**.
 │  │  Static Files (frontend/)   │    │
 │  │  - index.html               │    │
 │  │  - apply/index.html         │    │
-│  │  - status/index.html        │    │
+│  │  - order/index.html         │    │
 │  │  - admin/                   │    │
+│  │  - driver/                  │    │
 │  │  - css/, js/, assets/      │    │
 │  └─────────────────────────────┘    │
 │  ┌─────────────────────────────┐    │
@@ -175,16 +202,18 @@ Or connect your GitHub repo to Netlify for **automatic deploys on every push**.
 │  │  - update-application.js  ← /api/update-application │
 │  │  - login-admin.js         ← /api/login-admin       │
 │  │  - get-status.js          ← /api/get-status        │
+│  │  - create-order.js        ← /api/create-order      │
+│  │  - submit-order.js        ← /api/submit-order      │
+│  │  - get-orders.js          ← /api/get-orders        │
+│  │  - update-order.js        ← /api/update-order      │
+│  │  - send-sms.js            ← /api/send-sms          │
+│  │  - driver-sms-alert.js    ← /api/driver-sms-alert  │
+│  │  - checkr*.js             ← /api/checkr/*          │
 │  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 ```
 
-> ⚠️ **Production Note:** SQLite in `/tmp` is **ephemeral** on Netlify Functions — data resets on every cold start. For production, migrate to a **real cloud database** such as:
-> - **Supabase** (PostgreSQL, free tier available)
-> - **PlanetScale** (MySQL-compatible, free tier available)
-> - **Neon** (Serverless PostgreSQL)
-> - **MongoDB Atlas** (NoSQL, free tier available)
-> - **CockroachDB Serverless** (distributed SQL)
+> ⚠️ **Production Note:** The app uses **Supabase** (PostgreSQL) for persistent data storage. SQLite in `/tmp` is **ephemeral** on Netlify Functions — data resets on every cold start. Supabase provides persistent, scalable data storage in serverless environments.
 
 ---
 
@@ -252,6 +281,12 @@ After the backend is live:
 |--------|----------|-------------|---------------|
 | `POST` | `/api/submit-application` | Submit a new driver application | Full application JSON object |
 | `GET` | `/api/get-status?applicantId=XXX` | Check application status | `applicantId` query param |
+| `POST` | `/api/create-order` | Create a new customer order | Order details JSON |
+| `POST` | `/api/submit-order` | Submit customer order (legacy) | Order details JSON |
+| `GET` | `/api/get-orders` | Get orders by number or phone | `order_number` or `phone` query |
+| `PATCH` | `/api/update-order` | Update order status | `{ id, status, driver_id }` |
+| `POST` | `/api/send-sms` | Send a single SMS | `{ to_phone, message_body, order_id }` |
+| `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `{ message, driver_portal_url, order_id }` |
 
 ### Admin Endpoints (JWT Bearer Token Required)
 
@@ -322,6 +357,30 @@ curl -X PUT https://your-site.netlify.app/api/update-application?applicantId=CDD
   -d '{"status": "approved", "notes": "Background check passed. Welcome to the team!"}'
 ```
 
+### Example: Send SMS
+
+```bash
+curl -X POST https://your-site.netlify.app/api/send-sms \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to_phone": "+15551234567",
+    "message_body": "Your order COY-20250712-1234 has been received. We'll assign a driver shortly.",
+    "order_id": "your-order-uuid"
+  }'
+```
+
+### Example: Send Driver Alert (Bulk SMS)
+
+```bash
+curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE" \
+  -d '{
+    "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
+    "order_id": "your-order-uuid"
+  }'
+```
+
 ---
 
 ## 🗄 Database Schema
@@ -363,6 +422,39 @@ curl -X PUT https://your-site.netlify.app/api/update-application?applicantId=CDD
 | `createdAt` | TEXT | ISO datetime |
 | `updatedAt` | TEXT | ISO datetime |
 
+### Table: `orders`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | Primary key |
+| `order_number` | TEXT | Unique, e.g. `CDD-ABC123-DEF` |
+| `customer_id` | UUID | References `customers(id)` |
+| `service_type` | TEXT | ride, package_delivery, grocery_run, group_transport |
+| `status` | TEXT | Default: `pending` |
+| `pickup_address` | TEXT | Required |
+| `pickup_city` | TEXT | Required |
+| `dropoff_address` | TEXT | Optional |
+| `dropoff_city` | TEXT | Optional |
+| `estimated_price` | DECIMAL | Auto-calculated |
+| `final_price` | DECIMAL | Set on completion |
+| `driver_id` | UUID | References `applications(id)` |
+| `created_at` | TIMESTAMPTZ | Auto |
+| `updated_at` | TIMESTAMPTZ | Auto |
+| `completed_at` | TIMESTAMPTZ | Set on completion |
+
+### Table: `sms_logs`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | Primary key |
+| `order_id` | UUID | References `orders(id)`, nullable |
+| `phone_number` | TEXT | Required |
+| `message` | TEXT | Required |
+| `status` | TEXT | pending, sent, failed, delivered |
+| `twilio_sid` | TEXT | Twilio message SID |
+| `error` | TEXT | Error message if failed |
+| `created_at` | TIMESTAMPTZ | Auto |
+
 ### Status Enum Values
 
 | Status | Description |
@@ -387,16 +479,18 @@ coyotes-dune-delivery/
 │   ├── index.html             # Public homepage
 │   ├── apply/
 │   │   └── index.html         # Driver application form
-│   ├── status/
-│   │   └── index.html         # Status checker page
+│   ├── order/
+│   │   └── index.html         # Customer order form
 │   ├── admin/
 │   │   ├── index.html         # Admin login page
 │   │   └── dashboard.html     # Admin dashboard
+│   ├── driver/
+│   │   └── index.html         # Driver portal
 │   ├── css/
-│   │   └── styles.css         # Coastal theme styles
+│   │   └── style.css          # Coastal theme styles
 │   ├── js/
-│   │   ├── app.js             # Application form logic
-│   │   ├── status.js          # Status checker logic
+│   │   ├── main.js            # Shared utilities
+│   │   ├── order.js           # Order form logic
 │   │   └── admin.js           # Admin dashboard logic
 │   └── 404.html               # Custom 404 page
 ├── netlify/
@@ -405,14 +499,73 @@ coyotes-dune-delivery/
 │       ├── get-applications.js
 │       ├── update-application.js
 │       ├── login-admin.js
-│       └── get-status.js
+│       ├── get-status.js
+│       ├── create-order.js
+│       ├── submit-order.js
+│       ├── get-orders.js
+│       ├── update-order.js
+│       ├── send-sms.js        # Twilio SMS sending
+│       ├── driver-sms-alert.js # Bulk driver SMS alerts
+│       └── checkr*.js         # Background check integration
 ├── database/                  # SQLite database (local dev)
 │   └── coyote-dune-delivery.db
 ├── netlify.toml               # Netlify deployment config
+├── schema.sql                 # Supabase database schema
 ├── .env                       # Environment variables (NOT in git)
 ├── .gitignore                 # Git ignore rules
 ├── package.json               # Node dependencies
 └── README.md                  # This file
+```
+
+---
+
+## 📱 SMS Notifications (Twilio Integration)
+
+The app automatically sends SMS notifications to customers at key points in the order lifecycle:
+
+### Triggered SMS Events
+
+| Event | Trigger | Message |
+|-------|---------|---------|
+| **Order Created** | `create-order.js` or `submit-order.js` | "Your order [ORDER-123] has been received. We'll assign a driver shortly." |
+| **Driver Assigned** | `update-order.js` (status → `assigned`) | "Your driver [Name] is on the way! Track: [URL]" |
+| **Order Completed** | `update-order.js` (status → `completed`) | "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!" |
+| **Driver Alert** | `driver-sms-alert.js` (manual/admin) | "New order available! Log in to accept: [driver portal URL]" |
+
+### Setup
+
+1. Sign up at [twilio.com](https://www.twilio.com)
+2. Get a free trial phone number (or buy a number)
+3. Copy your **Account SID**, **Auth Token**, and **Phone Number**
+4. Add them to Netlify environment variables (see Deployment section above)
+5. Verify your customer's phone numbers in Twilio console (trial mode) or upgrade to paid account for unrestricted sending
+
+### Manual SMS API
+
+You can also send SMS manually via the `/api/send-sms` endpoint:
+
+```bash
+curl -X POST https://your-site.netlify.app/api/send-sms \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to_phone": "+15551234567",
+    "message_body": "Hello from Coyote's Dune Delivery!",
+    "order_id": "optional-order-uuid"
+  }'
+```
+
+### Bulk Driver Alerts
+
+Send SMS to all approved drivers with one API call:
+
+```bash
+curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT" \
+  -d '{
+    "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
+    "order_id": "optional-order-uuid"
+  }'
 ```
 
 ---
@@ -425,9 +578,9 @@ coyotes-dune-delivery/
 |---------|-------------|
 | **Stripe Connect Payouts** | Integrate Stripe Connect to pay drivers directly. Onboard drivers as Stripe Connect recipients, automate weekly payouts based on completed deliveries. |
 | **Real Background Check API** | Replace mock background checks with a real provider like **Checkr** or **Sterling**. Automate the check trigger on application submission and surface results in the admin dashboard. |
-| **SMS Notifications** | Add **Twilio** integration to send drivers SMS updates when their application status changes (e.g., "Your application has been approved!"). |
+| ✅ **SMS Notifications** | Add **Twilio** integration to send customers and drivers SMS updates. |
 | **Email via SendGrid / Nodemailer** | Send branded confirmation emails on application submission, status updates, and onboarding instructions using **SendGrid** or **Nodemailer** with SMTP. |
-| **Cloud Database Migration** | Migrate from SQLite to **Supabase** (PostgreSQL) or **PlanetScale** for persistent, scalable data storage in serverless environments. |
+| ✅ **Cloud Database Migration** | Migrate from SQLite to **Supabase** (PostgreSQL) for persistent, scalable data storage in serverless environments. |
 
 ### Phase 2 — Mid Term (3–6 months)
 
@@ -477,6 +630,13 @@ Set the `JWT_EXPIRES` environment variable to a longer duration, e.g., `7d` for 
 ### Issue: CORS errors in the browser
 
 The Netlify functions include CORS headers. If you're seeing CORS errors, ensure your frontend origin matches the `Access-Control-Allow-Origin` header (currently set to `*` for development).
+
+### Issue: SMS not sending
+
+1. Check that all three Twilio environment variables are set in Netlify
+2. Verify your Twilio phone number is active and has credit
+3. In trial mode, you must verify recipient phone numbers in the Twilio console
+4. Check the Netlify function logs for error messages
 
 ---
 
