@@ -569,6 +569,152 @@ a:hover {
 }
 
 /* =============================================
+   Local Partners
+   ============================================= */
+.partners-menu {
+    background: var(--warm-white);
+}
+
+.partners-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+}
+
+.partner-card {
+    background: var(--pure-white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+}
+
+.partner-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
+    border-color: var(--sand-muted);
+}
+
+.partner-card-image {
+    position: relative;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.partner-card-image.partner-restaurant {
+    background: linear-gradient(135deg, #FFF5EB 0%, #FDE8D0 100%);
+    color: #C45A3E;
+}
+
+.partner-card-image.partner-grocery {
+    background: linear-gradient(135deg, #F0F7F0 0%, #D4E8D4 100%);
+    color: #3D8B5A;
+}
+
+.partner-card-image.partner-bait {
+    background: linear-gradient(135deg, #EBF3FA 0%, #D0E4F5 100%);
+    color: #2A6FA0;
+}
+
+.partner-icon {
+    width: 80px;
+    height: 80px;
+}
+
+.partner-category {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 100px;
+    background: var(--pure-white);
+    box-shadow: var(--shadow-sm);
+}
+
+.partner-restaurant .partner-category {
+    color: #C45A3E;
+}
+
+.partner-grocery .partner-category {
+    color: #3D8B5A;
+}
+
+.partner-bait .partner-category {
+    color: #2A6FA0;
+}
+
+.partner-card-body {
+    padding: 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.partner-card-body h3 {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    color: var(--navy);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.partner-location {
+    font-size: 0.82rem;
+    color: var(--sand);
+    font-weight: 600;
+    margin-bottom: 10px;
+    letter-spacing: 0.02em;
+}
+
+.partner-desc {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 18px;
+    flex: 1;
+}
+
+.partner-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+
+.partner-link {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--navy);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.partner-link:hover {
+    color: var(--sand);
+    gap: 8px;
+}
+
+.partner-hours {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* =============================================
    Delivery Zones
    ============================================= */
 .zones {
@@ -1124,6 +1270,10 @@ a:hover {
     .footer-grid {
         grid-template-columns: 1fr 1fr;
     }
+
+    .partners-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 @media (max-width: 768px) {
@@ -1165,6 +1315,7 @@ a:hover {
     .benefits-grid { grid-template-columns: 1fr; }
     .testimonials-grid { grid-template-columns: 1fr; }
     .order-grid { grid-template-columns: 1fr; }
+    .partners-grid { grid-template-columns: 1fr; }
 
     .chat-panel { width: calc(100vw - 48px); right: -12px; }
 
@@ -1182,6 +1333,8 @@ a:hover {
     .benefit-card { padding: 24px; }
     .testimonial { padding: 24px; }
     .order-card { padding: 32px 24px; }
+    .partner-card-body { padding: 20px; }
+    .partner-card-footer { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
 
 /* =============================================
