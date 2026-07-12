@@ -111,12 +111,14 @@ CREATE TABLE IF NOT EXISTS customers (
     last_name TEXT NOT NULL,
     phone TEXT NOT NULL,
     email TEXT,
+    stripe_customer_id TEXT, -- Stripe Customer ID for recurring payments
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_stripe ON customers(stripe_customer_id);
 
 -- =============================================
 -- ORDERS Table (Customer Orders)
@@ -127,40 +129,45 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     service_type TEXT NOT NULL, -- ride, package_delivery, grocery_run, group_transport
     status TEXT DEFAULT 'pending', -- pending, assigned, in_progress, completed, cancelled
-    
+
+    -- Stripe Payment Fields
+    stripe_payment_intent_id TEXT, -- Stripe PaymentIntent ID
+    stripe_customer_id TEXT, -- Stripe Customer ID
+    payment_status TEXT DEFAULT 'pending', -- pending, paid, failed, refunded
+
     -- Locations
     pickup_address TEXT NOT NULL,
     pickup_city TEXT NOT NULL,
     pickup_zip TEXT,
     pickup_lat DECIMAL(10, 8),
     pickup_lng DECIMAL(11, 8),
-    
+
     dropoff_address TEXT,
     dropoff_city TEXT,
     dropoff_zip TEXT,
     dropoff_lat DECIMAL(10, 8),
     dropoff_lng DECIMAL(11, 8),
-    
+
     -- Scheduling
     scheduled_date DATE,
     scheduled_time TEXT, -- HH:MM format
     is_asap BOOLEAN DEFAULT TRUE,
-    
+
     -- Order Details
     passenger_count INTEGER DEFAULT 1,
     package_description TEXT,
     package_size TEXT, -- small, medium, large, oversized
     special_instructions TEXT,
-    
+
     -- Pricing
     estimated_price DECIMAL(10, 2),
     final_price DECIMAL(10, 2),
     tip_amount DECIMAL(10, 2) DEFAULT 0,
-    
+
     -- Assignment
     driver_id UUID REFERENCES applications(id),
     assigned_at TIMESTAMPTZ,
-    
+
     -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -172,6 +179,8 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_driver ON orders(driver_id);
+CREATE INDEX IF NOT EXISTS idx_orders_stripe_payment_intent ON orders(stripe_payment_intent_id);
+CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
 
 -- =============================================
 -- ORDER STATUS LOG Table (Audit Trail)
@@ -181,7 +190,7 @@ CREATE TABLE IF NOT EXISTS order_status_logs (
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     status TEXT NOT NULL,
     note TEXT,
-    changed_by TEXT, -- driver_id, admin, system
+    changed_by TEXT, -- driver_id, admin, system, stripe_webhook
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -367,6 +376,9 @@ EXECUTE FUNCTION update_updated_at_column();
 --    TWILIO_ACCOUNT_SID = your-twilio-account-sid
 --    TWILIO_AUTH_TOKEN = your-twilio-auth-token
 --    TWILIO_PHONE_NUMBER = your-twilio-phone-number
+--    STRIPE_SECRET_KEY = sk_live_... (or sk_test_... for test mode)
+--    STRIPE_PUBLISHABLE_KEY = pk_live_... (or pk_test_... for test mode)
+--    STRIPE_WEBHOOK_SECRET = whsec_...
 --    GA4_MEASUREMENT_ID = G-XXXXXXXXXX
 --    FIREBASE_API_KEY = your-firebase-api-key
 --    FIREBASE_PROJECT_ID = your-firebase-project-id
