@@ -202,6 +202,24 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 
 -- =============================================
+-- SMS LOGS Table (Twilio SMS Notification History)
+-- =============================================
+CREATE TABLE IF NOT EXISTS sms_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+    phone_number TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT DEFAULT 'pending', -- pending, sent, failed, delivered
+    twilio_sid TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_logs_order ON sms_logs(order_id);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_phone ON sms_logs(phone_number);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_created_at ON sms_logs(created_at DESC);
+
+-- =============================================
 -- Row Level Security (RLS) Policies
 -- =============================================
 
@@ -262,6 +280,13 @@ CREATE POLICY "Public can view status logs"
 ON order_status_logs FOR SELECT 
 USING (true);
 
+-- Enable RLS on sms_logs
+ALTER TABLE sms_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can view all sms_logs" 
+ON sms_logs FOR SELECT 
+USING (true); -- Auth handled in Netlify function
+
 -- =============================================
 -- Updated At Trigger
 -- =============================================
@@ -311,4 +336,7 @@ EXECUTE FUNCTION update_updated_at_column();
 --    JWT_SECRET = a-random-32-char-string
 --    ADMIN_USERNAME = admin
 --    ADMIN_PASSWORD = your-secure-password
+--    TWILIO_ACCOUNT_SID = your-twilio-account-sid
+--    TWILIO_AUTH_TOKEN = your-twilio-auth-token
+--    TWILIO_PHONE_NUMBER = your-twilio-phone-number
 -- 7. Deploy from GitHub in Netlify dashboard
