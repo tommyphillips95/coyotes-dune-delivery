@@ -275,6 +275,13 @@
                         currency: 'USD',
                     });
                 }
+                if (typeof logAnalyticsEvent === 'function') {
+                    logAnalyticsEvent('order_submitted', {
+                        category: 'order',
+                        service_type: data.service_type,
+                        estimated_price: data.estimated_price || 0,
+                    });
+                }
             } else {
                 // Show error
                 const errorMsg = (result.data && result.data.message) || result.error || 'Something went wrong. Please try again or call dispatch.';
@@ -302,6 +309,30 @@
             if (scheduleFields) scheduleFields.style.display = 'none';
         });
     }
+
+    // ── Analytics: Track "Order Now" CTA clicks ─────────────
+    document.querySelectorAll('a[href="#order"]').forEach(link => {
+        link.addEventListener('click', () => {
+            if (typeof trackEvent === 'function') {
+                trackEvent('cta', 'click', 'order_now');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('order_now_clicked');
+            }
+        });
+    });
+
+    // ── Analytics: Track driver application CTA clicks ──────
+    document.querySelectorAll('a[href="/apply/"]').forEach(link => {
+        link.addEventListener('click', () => {
+            if (typeof trackEvent === 'function') {
+                trackEvent('cta', 'click', 'driver_apply');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('driver_apply_clicked');
+            }
+        });
+    });
 
     // ── API Helper ──────────────────────────────────────────
     window.CoyoteAPI = {
