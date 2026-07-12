@@ -409,38 +409,100 @@
         document.getElementById('appIdDisplay').textContent = appId;
     }
 
-    // ── SSN Formatting ──────────────────────────────────────
+    // ── SSN Formatting (with proper backspace support) ──────
     function bindSSNFormatting() {
         const ssn = document.getElementById('ssn');
         if (!ssn) return;
-        ssn.addEventListener('input', (e) => {
-            let val = e.target.value.replace(/\D/g, '');
-            if (val.length > 9) val = val.slice(0, 9);
-            if (val.length >= 5) {
-                val = val.slice(0, 3) + '-' + val.slice(3, 5) + '-' + val.slice(5);
-            } else if (val.length >= 3) {
-                val = val.slice(0, 3) + '-' + val.slice(3);
+
+        // Handle backspace to skip over separator characters
+        ssn.addEventListener('keydown', function(e) {
+            if (e.key !== 'Backspace') return;
+            const cursor = this.selectionStart;
+            const val = this.value;
+            // If cursor is right after a dash, move cursor back one more char
+            // so backspace deletes the digit before the dash, not the dash itself
+            if (cursor > 0 && (val[cursor - 1] === '-')) {
+                e.preventDefault();
+                const newVal = val.slice(0, cursor - 2) + val.slice(cursor);
+                const digitsOnly = newVal.replace(/\D/g, '').slice(0, 9);
+                this.value = formatSSN(digitsOnly);
+                // Place cursor where it should be
+                const newCursor = Math.max(0, cursor - 2);
+                this.setSelectionRange(newCursor, newCursor);
             }
-            e.target.value = val;
+        });
+
+        ssn.addEventListener('input', function(e) {
+            const cursor = this.selectionStart;
+            const prevLen = this.value.length;
+            let val = this.value.replace(/\D/g, '').slice(0, 9);
+            this.value = formatSSN(val);
+            // Adjust cursor position for added separators
+            const newLen = this.value.length;
+            const added = newLen - prevLen;
+            if (added > 0 && cursor < newLen) {
+                this.setSelectionRange(cursor + added, cursor + added);
+            }
         });
     }
 
-    // ── Phone Formatting ──────────────────────────────────
+    function formatSSN(digits) {
+        if (digits.length >= 5) {
+            return digits.slice(0, 3) + '-' + digits.slice(3, 5) + '-' + digits.slice(5);
+        } else if (digits.length >= 3) {
+            return digits.slice(0, 3) + '-' + digits.slice(3);
+        }
+        return digits;
+    }
+
+    // ── Phone Formatting (with proper backspace support) ────
     function bindPhoneFormatting() {
         ['phone', 'emergencyPhone'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.addEventListener('input', (e) => {
-                let val = e.target.value.replace(/\D/g, '');
-                if (val.length > 10) val = val.slice(0, 10);
-                if (val.length >= 6) {
-                    val = '(' + val.slice(0, 3) + ') ' + val.slice(3, 6) + '-' + val.slice(6);
-                } else if (val.length >= 3) {
-                    val = '(' + val.slice(0, 3) + ') ' + val.slice(3);
+
+            // Handle backspace to skip over separator characters
+            el.addEventListener('keydown', function(e) {
+                if (e.key !== 'Backspace') return;
+                const cursor = this.selectionStart;
+                const val = this.value;
+                const separators = ['(', ')', ' ', '-'];
+                if (cursor > 0 && separators.indexOf(val[cursor - 1]) !== -1) {
+                    e.preventDefault();
+                    // Find how many separator chars to skip backwards
+                    let skip = 1;
+                    while (cursor - skip - 1 >= 0 && separators.indexOf(val[cursor - skip - 1]) !== -1) {
+                        skip++;
+                    }
+                    const newVal = val.slice(0, cursor - skip - 1) + val.slice(cursor);
+                    const digitsOnly = newVal.replace(/\D/g, '').slice(0, 10);
+                    this.value = formatPhone(digitsOnly);
+                    const newCursor = Math.max(0, cursor - skip - 1);
+                    this.setSelectionRange(newCursor, newCursor);
                 }
-                e.target.value = val;
+            });
+
+            el.addEventListener('input', function(e) {
+                const cursor = this.selectionStart;
+                const prevLen = this.value.length;
+                let val = this.value.replace(/\D/g, '').slice(0, 10);
+                this.value = formatPhone(val);
+                const newLen = this.value.length;
+                const added = newLen - prevLen;
+                if (added > 0 && cursor < newLen) {
+                    this.setSelectionRange(cursor + added, cursor + added);
+                }
             });
         });
+    }
+
+    function formatPhone(digits) {
+        if (digits.length >= 6) {
+            return '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
+        } else if (digits.length >= 3) {
+            return '(' + digits.slice(0, 3) + ') ' + digits.slice(3);
+        }
+        return digits;
     }
 
     // ── Init ────────────────────────────────────────────────
