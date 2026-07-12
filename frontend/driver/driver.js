@@ -120,8 +120,30 @@
             showPortal();
             renderStatus(data);
             showToast('Welcome back!', 'success');
+
+            // ── Analytics: Driver portal login ───────────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('driver', 'login_success');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('driver_login_success', { applicant_id: applicantId });
+            }
+            if (typeof logAnalyticsEvent === 'function') {
+                logAnalyticsEvent('driver_login_success', {
+                    category: 'driver',
+                    applicant_id: applicantId,
+                });
+            }
         } catch (err) {
             loginError.textContent = err.message || 'Login failed. Check your ID and email.';
+
+            // ── Analytics: Driver portal login failed ────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('driver', 'login_failed');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('driver_login_failed', { applicant_id: applicantId });
+            }
         }
     }
 
@@ -129,6 +151,10 @@
         clearSession();
         showLogin();
         showToast('Logged out', 'success');
+
+        if (typeof trackEvent === 'function') {
+            trackEvent('driver', 'logout');
+        }
     }
 
     async function loadStatus() {
@@ -350,6 +376,20 @@
         updateOnlineUI();
         showToast('You are now online. Sharing your location.', 'success');
 
+        // ── Analytics: Go Online clicked ───────────────────
+        if (typeof trackEvent === 'function') {
+            trackEvent('driver', 'go_online');
+        }
+        if (typeof firebaseTrackEvent === 'function') {
+            firebaseTrackEvent('driver_go_online', { applicant_id: session.applicantId });
+        }
+        if (typeof logAnalyticsEvent === 'function') {
+            logAnalyticsEvent('driver_go_online', {
+                category: 'driver',
+                applicant_id: session.applicantId,
+            });
+        }
+
         // Start watching position
         gpsWatchId = navigator.geolocation.watchPosition(
             onPositionUpdate,
@@ -370,6 +410,14 @@
         isOnline = false;
         if (session) { session.isOnline = false; saveSession(); }
         updateOnlineUI();
+
+        // ── Analytics: Go Offline ──────────────────────────
+        if (typeof trackEvent === 'function') {
+            trackEvent('driver', 'go_offline');
+        }
+        if (typeof firebaseTrackEvent === 'function') {
+            firebaseTrackEvent('driver_go_offline', { applicant_id: session && session.applicantId });
+        }
 
         if (gpsWatchId !== null) {
             navigator.geolocation.clearWatch(gpsWatchId);
