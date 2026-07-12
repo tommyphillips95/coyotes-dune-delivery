@@ -11,6 +11,8 @@
  * Usage:
  *   trackEvent('order', 'submitted', 'ride', 25.00);
  *   trackConversion('purchase', { value: 25.00, currency: 'USD' });
+ *   trackPageView('/order/success');
+ *   logAnalyticsEvent('order_submitted', { service_type: 'ride', price: 25 });
  */
 
 (function () {
@@ -18,6 +20,37 @@
 
     // ── Configuration ───────────────────────────────────────
     const MEASUREMENT_ID = window.__GA4_ID__ || 'G-XXXXXXXXXX'; // placeholder
+
+    // ── Session ID (persists for 30 min, shared with Firebase) ──
+    const SESSION_KEY = 'cdd_analytics_session';
+    const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
+    function getOrCreateSessionId() {
+        try {
+            const raw = sessionStorage.getItem(SESSION_KEY);
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (data.expires && Date.now() < data.expires) {
+                    // Extend session
+                    data.expires = Date.now() + SESSION_DURATION_MS;
+                    sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+                    return data.id;
+                }
+            }
+        } catch (_) { /* ignore */ }
+        const id = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        try {
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+                id,
+                expires: Date.now() + SESSION_DURATION_MS,
+            }));
+        } catch (_) { /* ignore */ }
+        return id;
+    }
+
+    const sessionId = getOrCreateSessionId();
+    // Expose for Firebase and other scripts
+    window.__CDD_SESSION_ID__ = sessionId;
 
     // ── Load GA4 Script ─────────────────────────────────────
     function loadGA4() {
@@ -56,6 +89,7 @@
         const params = {
             event_category: category,
             event_action: action,
+            session_id: sessionId,
         };
         if (label !== undefined) params.event_label = String(label);
         if (value !== undefined && !isNaN(value)) params.value = Number(value);
@@ -73,7 +107,8 @@
             console.warn('[Analytics] gtag not ready');
             return;
         }
-        window.gtag('event', eventName, params || {});
+        const payload = Object.assign({}, params || {}, { session_id: sessionId });
+        window.gtag('event', eventName, payload);
     };
 
     /**
@@ -86,11 +121,51 @@
             console.warn('[Analytics] gtag not ready');
             return;
         }
-        const config = { send_page_view: true };
+        const config = { send_page_view: true, session_id: sessionId };
         if (pagePath) config.page_path = pagePath;
         if (pageTitle) config.page_title = pageTitle;
         window.gtag('config', MEASUREMENT_ID, config);
     };
+
+    /**
+     * Log an analytics event to the server-side analytics_events table.
+     * Non-blocking — fires and forgets.
+     * @param {string} eventName
+     * @param {Object} [metadata]
+     * @param {string} [userId]
+     */
+    window.logAnalyticsEvent = function (eventName, metadata, userId) {
+        const payload = {
+            event_name: eventName,
+            category: (metadata && metadata.category) || 'general',
+            user_id: userId || null,
+            session_id: sessionId,
+            metadata: metadata || {},
+        };
+
+        // Fire to server-side logger if available
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+            try {
+                navigator.sendBeacon('/api/log-analytics-event', JSON.stringify(payload));
+            } catch (_) {
+                // Fallback to fetch
+                fetchPostLog(payload);
+            }
+        } else {
+            fetchPostLog(payload);
+        }
+    };
+
+    function fetchPostLog(payload) {
+        try {
+            fetch('/api/log-analytics-event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                keepalive: true,
+            }).catch(() => {});
+        } catch (_) { /* ignore */ }
+    }
 
     // ── Auto-track outbound links ───────────────────────────
     function trackOutboundLinks() {
