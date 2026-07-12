@@ -1,10 +1,10 @@
 /**
- * Netlify Function: Submit Customer Order
+ * Netlify Function: Submit Customer Order (with SMS notifications)
  * POST /api/submit-order
  *
  * Accepts customer ride and delivery orders,
  * upserts the customer record, generates an order number,
- * and inserts the order into Supabase.
+ * inserts the order into Supabase, and sends confirmation SMS.
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -21,6 +21,48 @@ function splitName(fullName) {
   const firstName = parts[0] || '';
   const lastName = parts.slice(1).join(' ') || '';
   return { firstName, lastName };
+}
+
+/**
+ * Helper: Send SMS via the send-sms function (internal invoke)
+ */
+async function sendSMS({ to_phone, message_body, order_id }) {
+  try {
+    const twilio = require('twilio');
+    const client = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    const message = await client.messages.create({
+      body: message_body,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: to_phone,
+    });
+
+    return { success: true, messageSid: message.sid };
+  } catch (err) {
+    console.error('SMS send error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Helper: Log SMS to Supabase
+ */
+async function logSMS(supabase, { order_id, phone_number, message, status, twilio_sid, error }) {
+  try {
+    await supabase.from('sms_logs').insert([{
+      order_id,
+      phone_number,
+      message,
+      status,
+      twilio_sid,
+      error,
+    }]);
+  } catch (logErr) {
+    console.error('Failed to log SMS:', logErr);
+  }
 }
 
 exports.handler = async (event) => {
@@ -139,6 +181,31 @@ exports.handler = async (event) => {
       .single();
 
     if (error) throw error;
+
+    // ── Send confirmation SMS to customer ───────────────────
+    const smsEnabled = !!(
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_PHONE_NUMBER
+    );
+
+    if (smsEnabled && phone.length >= 10) {
+      const smsMessage = `Your order ${data.order_number} has been received. We'll assign a driver shortly. — Coyote's Dune Delivery`;
+      const smsResult = await sendSMS({
+        to_phone: phone,
+        message_body: smsMessage,
+        order_id: data.id,
+      });
+
+      await logSMS(supabase, {
+        order_id: data.id,
+        phone_number: phone,
+        message: smsMessage,
+        status: smsResult.success ? 'sent' : 'failed',
+        twilio_sid: smsResult.messageSid || null,
+        error: smsResult.error || null,
+      });
+    }
 
     return {
       statusCode: 201,
