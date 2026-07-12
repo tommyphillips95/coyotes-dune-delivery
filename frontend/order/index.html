@@ -9,6 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
+    <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
+    <script src="../js/analytics.js"></script>
+    <script src="../js/firebase-analytics.js"></script>
     <style>
         /* Order-specific styles */
         .service-selector {
@@ -862,16 +866,7 @@
         </div>
     </footer>
 
-    <!-- Stripe.js loaded from CDN -->
-    <script src="https://js.stripe.com/v3/"></script>
-    <!-- Stripe publishable key placeholder — set via Netlify env var or inline before this script -->
-    <script>
-        // Set this from your Netlify environment variable or replace directly
-        window.STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
-    </script>
-
     <script src="../js/main.js"></script>
     <script src="../js/order.js"></script>
-    <script src="../js/stripe-payment.js"></script>
 </body>
 </html>
