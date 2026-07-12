@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS applications (
     background_check_report_id TEXT,
     background_check_completed_at TIMESTAMPTZ,
     status TEXT DEFAULT 'pending', -- pending, background_check, approved, rejected, on_hold
+    fcm_token TEXT, -- Firebase Cloud Messaging token for push notifications
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -229,6 +230,44 @@ CREATE INDEX IF NOT EXISTS idx_sms_logs_phone ON sms_logs(phone_number);
 CREATE INDEX IF NOT EXISTS idx_sms_logs_created_at ON sms_logs(created_at DESC);
 
 -- =============================================
+-- FCM TOKENS Table (Push Notification Device Tokens)
+-- =============================================
+CREATE TABLE IF NOT EXISTS fcm_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL, -- references customers.id or applications.id
+    token TEXT NOT NULL UNIQUE,
+    device_type TEXT, -- web, android, ios
+    user_type TEXT NOT NULL, -- customer, driver, admin
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user ON fcm_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_fcm_tokens_token ON fcm_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user_type ON fcm_tokens(user_type);
+CREATE INDEX IF NOT EXISTS idx_fcm_tokens_active ON fcm_tokens(is_active);
+
+-- =============================================
+-- PUSH NOTIFICATION LOGS Table (Audit Trail)
+-- =============================================
+CREATE TABLE IF NOT EXISTS push_notification_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    fcm_token TEXT,
+    topic TEXT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    data_payload JSONB,
+    message_id TEXT,
+    status TEXT DEFAULT 'pending', -- pending, sent, failed
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_logs_token ON push_notification_logs(fcm_token);
+CREATE INDEX IF NOT EXISTS idx_push_logs_created_at ON push_notification_logs(created_at DESC);
+
+-- =============================================
 -- ANALYTICS EVENTS Table (Server-Side Event Tracking)
 -- =============================================
 CREATE TABLE IF NOT EXISTS analytics_events (
@@ -324,6 +363,21 @@ CREATE POLICY "Public can create analytics events"
 ON analytics_events FOR INSERT 
 WITH CHECK (true);
 
+-- Enable RLS on fcm_tokens
+ALTER TABLE fcm_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own fcm_tokens" 
+ON fcm_tokens FOR ALL 
+USING (user_id::text = current_setting('app.current_user_id', true))
+WITH CHECK (user_id::text = current_setting('app.current_user_id', true));
+
+-- Enable RLS on push_notification_logs
+ALTER TABLE push_notification_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can view all push_notification_logs" 
+ON push_notification_logs FOR SELECT 
+USING (true); -- Auth handled in Netlify function
+
 -- =============================================
 -- Updated At Trigger
 -- =============================================
@@ -347,6 +401,11 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_orders_updated_at 
 BEFORE UPDATE ON orders 
+FOR EACH ROW 
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_fcm_tokens_updated_at 
+BEFORE UPDATE ON fcm_tokens 
 FOR EACH ROW 
 EXECUTE FUNCTION update_updated_at_column();
 
@@ -382,4 +441,8 @@ EXECUTE FUNCTION update_updated_at_column();
 --    GA4_MEASUREMENT_ID = G-XXXXXXXXXX
 --    FIREBASE_API_KEY = your-firebase-api-key
 --    FIREBASE_PROJECT_ID = your-firebase-project-id
+--    FIREBASE_MESSAGING_SENDER_ID = your-firebase-messaging-sender-id
+--    FIREBASE_APP_ID = your-firebase-app-id
+--    FIREBASE_VAPID_KEY = your-firebase-vapid-key
+--    FIREBASE_ADMIN_SDK_JSON = your-firebase-admin-sdk-json
 -- 7. Deploy from GitHub in Netlify dashboard
