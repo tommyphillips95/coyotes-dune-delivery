@@ -351,6 +351,24 @@
         .tracking-detail-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
         .tracking-detail-value { font-size: 0.92rem; color: var(--charcoal); font-weight: 500; }
 
+        /* Payment status badges in tracking */
+        .payment-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-left: 8px;
+        }
+        .payment-status-badge.paid { background: rgba(76, 140, 100, 0.12); color: #4C8C64; }
+        .payment-status-badge.pending { background: rgba(201, 168, 124, 0.15); color: #8B6F4E; }
+        .payment-status-badge.failed { background: rgba(196, 90, 62, 0.1); color: #C45A3E; }
+        .payment-status-badge.refunded { background: rgba(100, 100, 100, 0.1); color: #666; }
+
         @media (max-width: 768px) {
             .service-selector { grid-template-columns: 1fr; }
             .location-group { flex-direction: column; gap: 0; }
@@ -787,6 +805,12 @@
                                 <div class="tracking-detail-value" id="trackingDriver">Not yet assigned</div>
                             </div>
                         </div>
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                            <div class="tracking-detail-label">Payment Status</div>
+                            <div class="tracking-detail-value" id="trackingPaymentStatus">
+                                <span class="payment-status-badge pending">Pending</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -838,7 +862,16 @@
         </div>
     </footer>
 
+    <!-- Stripe.js loaded from CDN -->
+    <script src="https://js.stripe.com/v3/"></script>
+    <!-- Stripe publishable key placeholder — set via Netlify env var or inline before this script -->
+    <script>
+        // Set this from your Netlify environment variable or replace directly
+        window.STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
+    </script>
+
     <script src="../js/main.js"></script>
     <script src="../js/order.js"></script>
+    <script src="../js/stripe-payment.js"></script>
 </body>
 </html>
