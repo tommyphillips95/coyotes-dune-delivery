@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="admin.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
+    <script src="../js/analytics.js"></script>
+    <script src="../js/firebase-analytics.js"></script>
 </head>
 <body>
     <!-- LOGIN SCREEN -->
@@ -48,6 +52,10 @@
                 <a href="checkr.html" class="nav-item">
                     <span class="icon">🔍</span>
                     <span>Background Checks</span>
+                </a>
+                <a href="analytics.html" class="nav-item">
+                    <span class="icon">📊</span>
+                    <span>Analytics</span>
                 </a>
                 <a href="#" class="nav-item" data-section="drivers">
                     <span class="icon">🚗</span>
