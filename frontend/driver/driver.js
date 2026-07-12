@@ -1,11 +1,20 @@
-/* ===== Driver Portal JS ===== */
+/**
+ * Coyote's Dune Delivery — Driver Portal JavaScript
+ * Includes: auth, profile, documents, and GPS location sharing (Go Online)
+ */
+
 (function() {
     'use strict';
 
-    const API_BASE = '/api/drivers';
+    const API_BASE = '/api';
+    const GPS_POST_INTERVAL_MS = 30000; // 30 seconds
 
-    let session = null; // { applicantId, email, token?, data }
+    let session = null;
     let pendingFiles = [];
+    let gpsWatchId = null;
+    let gpsPostTimer = null;
+    let lastPosition = null;
+    let isOnline = false;
 
     /* ===== DOM refs ===== */
     const loginScreen = document.getElementById('login-screen');
@@ -36,6 +45,11 @@
 
     const toastContainer = document.getElementById('toast-container');
 
+    /* ===== GPS / Go Online refs ===== */
+    const goOnlineBtn = document.getElementById('go-online-btn');
+    const gpsStatus = document.getElementById('gps-status');
+    const gpsIndicator = document.getElementById('gps-indicator');
+
     /* ===== Init ===== */
     function init() {
         const saved = localStorage.getItem('driver_session');
@@ -49,6 +63,11 @@
             showLogin();
         }
         bindEvents();
+
+        // Restore online state if page was refreshed
+        if (session && session.isOnline) {
+            startGPSTracking();
+        }
     }
 
     /* ===== Auth / Session ===== */
@@ -67,6 +86,7 @@
     }
 
     function clearSession() {
+        stopGPSTracking();
         session = null;
         localStorage.removeItem('driver_session');
     }
@@ -80,7 +100,7 @@
         return fetch(API_BASE + endpoint, opts).then(async r => {
             const data = await r.json().catch(() => ({}));
             if (!r.ok) {
-                const err = new Error(data.message || `HTTP ${r.status}`);
+                const err = new Error(data.message || data.error || `HTTP ${r.status}`);
                 err.status = r.status; err.data = data; throw err;
             }
             return data;
@@ -94,7 +114,7 @@
         const email = document.getElementById('login-email').value.trim().toLowerCase();
         if (!applicantId || !email) { loginError.textContent = 'Please fill in both fields.'; return; }
         try {
-            const data = await api('POST', '/status', { applicantId, email });
+            const data = await api('POST', '/get-status', { applicantId, email });
             session = { applicantId, email, data };
             saveSession();
             showPortal();
@@ -114,7 +134,7 @@
     async function loadStatus() {
         if (!session) return;
         try {
-            const data = await api('POST', '/status', { applicantId: session.applicantId, email: session.email });
+            const data = await api('POST', '/get-status', { applicantId: session.applicantId, email: session.email });
             session.data = data;
             saveSession();
             renderStatus(data);
@@ -226,7 +246,7 @@
             bank_routing: document.getElementById('edit-bank-routing').value.trim(),
         };
         try {
-            await api('PUT', '/' + session.applicantId, payload);
+            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), payload);
             Object.assign(session.data, payload);
             saveSession();
             renderProfile(session.data);
@@ -281,13 +301,13 @@
         fd.append('email', session.email);
         pendingFiles.forEach(f => fd.append('documents', f));
         try {
-            const res = await fetch(API_BASE + '/' + session.applicantId + '/documents', { method: 'POST', body: fd });
+            const res = await fetch(API_BASE + '/update-application/' + session.applicantId + '/documents', { method: 'POST', body: fd });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'Upload failed');
             pendingFiles = [];
             renderUploadPreview();
             showToast('Documents uploaded', 'success');
-            loadStatus(); // refresh doc list
+            loadStatus();
         } catch (err) {
             showToast(err.message || 'Upload failed', 'error');
         }
@@ -305,6 +325,154 @@
         `).join('');
     }
 
+    /* ===== GPS / Go Online ===== */
+    function toggleOnline() {
+        if (isOnline) {
+            stopGPSTracking();
+        } else {
+            startGPSTracking();
+        }
+    }
+
+    function startGPSTracking() {
+        if (!navigator.geolocation) {
+            showToast('Geolocation is not supported by your browser', 'error');
+            return;
+        }
+
+        if (!session || !session.applicantId) {
+            showToast('Please log in first', 'error');
+            return;
+        }
+
+        isOnline = true;
+        if (session) { session.isOnline = true; saveSession(); }
+        updateOnlineUI();
+        showToast('You are now online. Sharing your location.', 'success');
+
+        // Start watching position
+        gpsWatchId = navigator.geolocation.watchPosition(
+            onPositionUpdate,
+            onPositionError,
+            {
+                enableHighAccuracy: true,
+                maximumAge: 30000,
+                timeout: 10000,
+            }
+        );
+
+        // Also post immediately and then every 30 seconds
+        postLocationImmediately();
+        gpsPostTimer = setInterval(postLocation, GPS_POST_INTERVAL_MS);
+    }
+
+    function stopGPSTracking() {
+        isOnline = false;
+        if (session) { session.isOnline = false; saveSession(); }
+        updateOnlineUI();
+
+        if (gpsWatchId !== null) {
+            navigator.geolocation.clearWatch(gpsWatchId);
+            gpsWatchId = null;
+        }
+        if (gpsPostTimer) {
+            clearInterval(gpsPostTimer);
+            gpsPostTimer = null;
+        }
+        lastPosition = null;
+        showToast('You are now offline. Location sharing stopped.', 'success');
+    }
+
+    function updateOnlineUI() {
+        if (!goOnlineBtn) return;
+        if (isOnline) {
+            goOnlineBtn.textContent = 'Go Offline';
+            goOnlineBtn.classList.remove('btn-primary');
+            goOnlineBtn.classList.add('btn-danger');
+            if (gpsStatus) gpsStatus.textContent = 'Online — sharing location';
+            if (gpsIndicator) {
+                gpsIndicator.classList.remove('offline');
+                gpsIndicator.classList.add('online');
+            }
+        } else {
+            goOnlineBtn.textContent = 'Go Online';
+            goOnlineBtn.classList.remove('btn-danger');
+            goOnlineBtn.classList.add('btn-primary');
+            if (gpsStatus) gpsStatus.textContent = 'Offline';
+            if (gpsIndicator) {
+                gpsIndicator.classList.remove('online');
+                gpsIndicator.classList.add('offline');
+            }
+        }
+    }
+
+    function onPositionUpdate(position) {
+        lastPosition = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: new Date().toISOString(),
+        };
+        console.log('GPS position updated:', lastPosition);
+    }
+
+    function onPositionError(error) {
+        console.error('GPS error:', error);
+        let msg = 'Unable to get your location.';
+        switch (error.code) {
+            case error.PERMISSION_DENIED: msg = 'Location permission denied. Please enable location services.'; break;
+            case error.POSITION_UNAVAILABLE: msg = 'Location information is unavailable.'; break;
+            case error.TIMEOUT: msg = 'Location request timed out.'; break;
+        }
+        showToast(msg, 'error');
+    }
+
+    async function postLocationImmediately() {
+        if (!lastPosition) {
+            // Try to get a one-time position
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    lastPosition = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                        timestamp: new Date().toISOString(),
+                    };
+                    postLocation();
+                },
+                onPositionError,
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        } else {
+            postLocation();
+        }
+    }
+
+    async function postLocation() {
+        if (!lastPosition || !session || !session.applicantId) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/update-driver-location`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    driver_id: session.applicantId,
+                    lat: lastPosition.lat,
+                    lng: lastPosition.lng,
+                    accuracy: lastPosition.accuracy,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                console.log('Location posted successfully');
+            } else {
+                console.error('Failed to post location:', data.error || data.message);
+            }
+        } catch (err) {
+            console.error('Error posting location:', err);
+        }
+    }
+
     /* ===== Utilities ===== */
     function esc(str) {
         if (str == null) return '';
@@ -320,7 +488,7 @@
         toast.className = 'toast ' + type;
         toast.textContent = message;
         toastContainer.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        setTimeout(() => toast.remove(), 4000);
     }
 
     /* ===== Events ===== */
@@ -337,6 +505,15 @@
         uploadInput.addEventListener('change', onFileInputChange);
         uploadPreview.addEventListener('click', removeFile);
         uploadSubmit.addEventListener('click', onUploadSubmit);
+
+        // GPS / Go Online
+        if (goOnlineBtn) goOnlineBtn.addEventListener('click', toggleOnline);
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (gpsPostTimer) clearInterval(gpsPostTimer);
+            if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+        });
     }
 
     init();
