@@ -20,9 +20,9 @@
     // ── Firebase Config (placeholder — override via env) ────
     const FIREBASE_CONFIG = {
         apiKey: window.__FIREBASE_API_KEY__ || 'YOUR_FIREBASE_API_KEY',
-        authDomain: window.__FIREBASE_PROJECT_ID__ + '.firebaseapp.com',
+        authDomain: (window.__FIREBASE_PROJECT_ID__ || 'your-project-id') + '.firebaseapp.com',
         projectId: window.__FIREBASE_PROJECT_ID__ || 'your-project-id',
-        storageBucket: window.__FIREBASE_PROJECT_ID__ + '.appspot.com',
+        storageBucket: (window.__FIREBASE_PROJECT_ID__ || 'your-project-id') + '.appspot.com',
         messagingSenderId: window.__FIREBASE_MESSAGING_SENDER_ID__ || '000000000000',
         appId: window.__FIREBASE_APP_ID__ || '1:000000000000:web:xxxxxxxxxxxxxxxx',
         measurementId: window.__FIREBASE_MEASUREMENT_ID__ || 'G-XXXXXXXXXX',
@@ -30,6 +30,9 @@
 
     let analytics = null;
     let isReady = false;
+
+    // ── Session ID (synced with GA4) ────────────────────────
+    const sessionId = window.__CDD_SESSION_ID__ || ('fb_sess_' + Date.now());
 
     // ── Load Firebase SDKs dynamically ──────────────────────
     async function loadFirebase() {
@@ -65,6 +68,11 @@
             analytics = window.firebase.analytics();
             isReady = true;
             console.log('[Firebase Analytics] Initialized');
+
+            // Set session ID as user property for cross-platform sync
+            try {
+                analytics.setUserProperties({ cdd_session_id: sessionId });
+            } catch (_) { /* ignore */ }
         } catch (err) {
             console.warn('[Firebase Analytics] Init failed:', err.message);
         }
@@ -83,7 +91,8 @@
             return;
         }
         try {
-            analytics.logEvent(eventName, params || {});
+            const payload = Object.assign({}, params || {}, { cdd_session_id: sessionId });
+            analytics.logEvent(eventName, payload);
         } catch (err) {
             console.warn('[Firebase Analytics] logEvent failed:', err.message);
         }
@@ -100,7 +109,10 @@
             return;
         }
         try {
-            const params = { firebase_screen: screenName };
+            const params = {
+                firebase_screen: screenName,
+                cdd_session_id: sessionId,
+            };
             if (screenClass) params.firebase_screen_class = screenClass;
             analytics.logEvent('screen_view', params);
         } catch (err) {
