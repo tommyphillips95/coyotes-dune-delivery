@@ -21,6 +21,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "jsonwebtoken": "^9.0.2",
+    "stripe": "^14.0.0",
     "twilio": "^5.2.0"
   }
 }
