@@ -275,6 +275,7 @@ CREATE TABLE IF NOT EXISTS analytics_events (
     event_name TEXT NOT NULL,
     category TEXT DEFAULT 'general',
     user_id TEXT,
+    session_id TEXT,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -282,6 +283,7 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 CREATE INDEX IF NOT EXISTS idx_analytics_events_name ON analytics_events(event_name);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_category ON analytics_events(category);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_session ON analytics_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
 
 -- =============================================
