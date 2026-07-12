@@ -9,6 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
+    <script src="js/analytics.js"></script>
+    <script src="js/firebase-analytics.js"></script>
     <!-- Firebase SDK (required for FCM) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
@@ -47,8 +51,8 @@
             <h1 class="hero-title">Delivery Done Right,<br>Coast to Coast.</h1>
             <p class="hero-tagline">Reliable rides and deliveries connecting Port Aransas, Padre Island, and everywhere in between. Built for island life.</p>
             <div class="hero-cta">
-                <a href="#order" class="btn btn-large btn-primary">Order Now</a>
-                <a href="/apply/" class="btn btn-large btn-outline">Become a Driver</a>
+                <a href="#order" class="btn btn-large btn-primary" data-track='{"category":"cta","action":"click","label":"hero_order"}'>Order Now</a>
+                <a href="/apply/" class="btn btn-large btn-outline" data-track='{"category":"cta","action":"click","label":"hero_apply"}'>Become a Driver</a>
             </div>
             <p class="hero-sub">No sign-up fees. Flexible hours. Weekly payouts.</p>
         </div>
@@ -415,7 +419,7 @@
                 </div>
             </div>
             <div class="partners-cta">
-                <a href="/apply/" class="btn btn-large btn-primary">Apply to Drive</a>
+                <a href="/apply/" class="btn btn-large btn-primary" data-track='{"category":"cta","action":"click","label":"benefits_apply"}'>Apply to Drive</a>
             </div>
         </div>
     </section>
