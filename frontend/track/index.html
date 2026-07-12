@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Your Driver — Coyote's Dune Delivery</title>
+    <meta name="description" content="Track your Coyote's Dune Delivery driver in real-time on a live map.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        :root {
+            --sand: #C9A87C;
+            --sand-light: #D4BC94;
+            --sand-muted: #E8DCC8;
+            --navy: #1A2F4B;
+            --navy-light: #2A4A6F;
+            --navy-soft: #3A5A7F;
+            --charcoal: #2C2C2C;
+            --muted: #6B6B6B;
+            --border: #E5E0D8;
+            --warm-white: #FAF8F5;
+            --pure-white: #FFFFFF;
+            --radius: 8px;
+            --radius-lg: 14px;
+            --radius-sm: 6px;
+            --font-body: 'Inter', sans-serif;
+            --font-display: 'Playfair Display', serif;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-body); background: var(--warm-white); color: var(--charcoal); line-height: 1.6; }
+
+        /* Navbar */
+        .navbar { background: var(--pure-white); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        .nav-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .navbar .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--navy); font-weight: 700; font-size: 1.1rem; }
+        .logo-icon { color: var(--sand); }
+
+        /* Track page layout */
+        .track-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .track-header { margin-bottom: 20px; }
+        .track-header h1 { font-family: var(--font-display); font-size: 1.6rem; color: var(--navy); margin-bottom: 4px; }
+        .track-header p { color: var(--muted); font-size: 0.95rem; }
+
+        /* Map container */
+        .track-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; min-height: 600px; }
+        @media (max-width: 900px) { .track-layout { grid-template-columns: 1fr; } }
+
+        .track-sidebar { display: flex; flex-direction: column; gap: 16px; }
+        .track-card { background: var(--pure-white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+        .track-card h3 { font-size: 0.95rem; color: var(--navy); margin-bottom: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+
+        /* Order lookup form */
+        .lookup-form { display: flex; flex-direction: column; gap: 10px; }
+        .lookup-form input {
+            padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-family: var(--font-body); font-size: 0.95rem; color: var(--charcoal); background: var(--pure-white);
+        }
+        .lookup-form input:focus { outline: none; border-color: var(--sand); box-shadow: 0 0 0 3px rgba(201, 168, 124, 0.12); }
+        .lookup-form button {
+            padding: 12px; border: none; border-radius: var(--radius-sm); background: var(--navy);
+            color: var(--pure-white); font-family: var(--font-body); font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; transition: var(--transition);
+        }
+        .lookup-form button:hover { background: var(--navy-light); }
+        .lookup-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* Status timeline */
+        .status-timeline { position: relative; padding-left: 24px; }
+        .status-timeline::before {
+            content: ''; position: absolute; left: 7px; top: 4px; bottom: 4px;
+            width: 2px; background: var(--border);
+        }
+        .timeline-item { position: relative; margin-bottom: 18px; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-dot {
+            position: absolute; left: -24px; top: 2px; width: 14px; height: 14px;
+            border-radius: 50%; border: 2px solid var(--border); background: var(--pure-white);
+        }
+        .timeline-dot.active { border-color: var(--sand); background: var(--sand); }
+        .timeline-dot.completed { border-color: #4C8C64; background: #4C8C64; }
+        .timeline-label { font-size: 0.88rem; font-weight: 500; color: var(--charcoal); }
+        .timeline-time { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+        /* ETA display */
+        .eta-box {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            color: var(--pure-white); border-radius: var(--radius-lg); padding: 20px; text-align: center;
+        }
+        .eta-box .eta-label { font-size: 0.8rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .eta-box .eta-value { font-size: 1.8rem; font-weight: 700; margin: 6px 0; font-family: var(--font-display); }
+        .eta-box .eta-unit { font-size: 0.85rem; opacity: 0.8; }
+
+        /* Driver info */
+        .driver-info { display: flex; align-items: center; gap: 12px; }
+        .driver-avatar {
+            width: 48px; height: 48px; border-radius: 50%; background: var(--sand-muted);
+            display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+        }
+        .driver-name { font-weight: 600; color: var(--navy); font-size: 0.95rem; }
+        .driver-vehicle { font-size: 0.82rem; color: var(--muted); }
+
+        /* Map */
+        .map-container {
+            background: var(--pure-white); border: 1px solid var(--border); border-radius: var(--radius-lg);
+            overflow: hidden; position: relative; min-height: 500px;
+        }
+        #map { width: 100%; height: 100%; min-height: 500px; }
+        .map-loading {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: var(--warm-white); color: var(--muted); font-size: 0.95rem;
+        }
+        .map-error {
+            position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: var(--warm-white); padding: 40px; text-align: center;
+        }
+        .map-error h3 { color: var(--navy); margin-bottom: 8px; }
+
+        /* Order details */
+        .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+        .order-detail-row:last-child { border-bottom: none; }
+        .order-detail-label { color: var(--muted); }
+        .order-detail-value { color: var(--charcoal); font-weight: 500; }
+
+        /* Live pulse */
+        .live-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #4C8C64; font-weight: 600; }
+        .live-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #4C8C64;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Footer */
+        .footer { background: var(--navy); color: rgba(255,255,255,0.7); padding: 40px 24px; margin-top: 40px; }
+        .footer-inner { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        .footer-brand { display: flex; align-items: center; gap: 10px; color: var(--pure-white); font-weight: 700; text-decoration: none; }
+        .footer-links { display: flex; gap: 24px; }
+        .footer-links a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.9rem; }
+        .footer-links a:hover { color: var(--pure-white); }
+
+        /* Hidden states */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <svg class="logo-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+                <span>Coyote's Dune Delivery</span>
+            </a>
+            <div class="footer-links" style="gap: 16px;">
+                <a href="/order/">Book a Ride</a>
+                <a href="/driver/">Driver Portal</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="track-page">
+        <div class="track-header">
+            <h1>Track Your Delivery</h1>
+            <p>See your driver's location in real-time and follow your order's progress.</p>
+        </div>
+
+        <div class="track-layout">
+            <!-- Sidebar -->
+            <aside class="track-sidebar">
+                <!-- Order Lookup -->
+                <div class="track-card">
+                    <h3>🔍 Find Your Order</h3>
+                    <form class="lookup-form" id="lookupForm">
+                        <input type="text" id="lookupOrderNum" placeholder="Order number (e.g., CDD-ABC123)" required>
+                        <input type="tel" id="lookupPhone" placeholder="Phone number" required>
+                        <button type="submit" id="lookupBtn">Track Order</button>
+                    </form>
+                </div>
+
+                <!-- ETA Card (hidden until tracking) -->
+                <div class="track-card hidden" id="etaCard">
+                    <div class="live-indicator" style="margin-bottom: 10px;">
+                        <span class="live-dot"></span>
+                        <span>Live Tracking</span>
+                    </div>
+                    <div class="eta-box">
+                        <div class="eta-label">Estimated Arrival</div>
+                        <div class="eta-value" id="etaValue">--</div>
+                        <div class="eta-unit" id="etaUnit">minutes</div>
+                    </div>
+                </div>
+
+                <!-- Driver Info (hidden until tracking) -->
+                <div class="track-card hidden" id="driverCard">
+                    <h3>🚗 Your Driver</h3>
+                    <div class="driver-info" id="driverInfo">
+                        <div class="driver-avatar">🐺</div>
+                        <div>
+                            <div class="driver-name" id="driverName">Not assigned yet</div>
+                            <div class="driver-vehicle" id="driverVehicle">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Order Details (hidden until tracking) -->
+                <div class="track-card hidden" id="orderCard">
+                    <h3>📋 Order Details</h3>
+                    <div class="order-detail-row">
+                        <span class="order-detail-label">Order #</span>
+                        <span class="order-detail-value" id="detailOrderNum">--</span>
+                    </div>
+                    <div class="order-detail-row">
+                        <span class="order-detail-label">Service</span>
+                        <span class="order-detail-value" id="detailService">--</span>
+                    </div>
+                    <div class="order-detail-row">
+                        <span class="order-detail-label">Pickup</span>
+                        <span class="order-detail-value" id="detailPickup">--</span>
+                    </div>
+                    <div class="order-detail-row">
+                        <span class="order-detail-label">Drop-off</span>
+                        <span class="order-detail-value" id="detailDropoff">--</span>
+                    </div>
+                    <div class="order-detail-row">
+                        <span class="order-detail-label">Status</span>
+                        <span class="order-detail-value" id="detailStatus">--</span>
+                    </div>
+                </div>
+
+                <!-- Status Timeline (hidden until tracking) -->
+                <div class="track-card hidden" id="timelineCard">
+                    <h3>📍 Status Timeline</h3>
+                    <div class="status-timeline" id="statusTimeline">
+                        <div class="timeline-item" data-status="pending">
+                            <div class="timeline-dot active"></div>
+                            <div class="timeline-label">Order Received</div>
+                            <div class="timeline-time" id="timePending">--</div>
+                        </div>
+                        <div class="timeline-item" data-status="assigned">
+                            <div class="timeline-dot" id="dotAssigned"></div>
+                            <div class="timeline-label">Driver Assigned</div>
+                            <div class="timeline-time" id="timeAssigned">--</div>
+                        </div>
+                        <div class="timeline-item" data-status="in_progress">
+                            <div class="timeline-dot" id="dotInProgress"></div>
+                            <div class="timeline-label">On the Way</div>
+                            <div class="timeline-time" id="timeInProgress">--</div>
+                        </div>
+                        <div class="timeline-item" data-status="completed">
+                            <div class="timeline-dot" id="dotCompleted"></div>
+                            <div class="timeline-label">Delivered</div>
+                            <div class="timeline-time" id="timeCompleted">--</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Map -->
+            <div class="map-container">
+                <div class="map-loading" id="mapLoading">Enter your order details to see the live map.</div>
+                <div class="map-error hidden" id="mapError">
+                    <h3>Map Unavailable</h3>
+                    <p>Please add a Google Maps API key to enable live tracking.</p>
+                </div>
+                <div id="map" class="hidden"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <a href="/" class="footer-brand">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+                <span>Coyote's Dune Delivery</span>
+            </a>
+            <div class="footer-links">
+                <a href="/order/">Book a Ride</a>
+                <a href="/apply/">Become a Driver</a>
+                <a href="/driver/">Driver Portal</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Google Maps API -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap" id="gmapsScript"></script>
+    <script src="track.js"></script>
+</body>
+</html>
