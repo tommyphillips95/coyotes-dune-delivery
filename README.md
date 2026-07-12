@@ -23,6 +23,100 @@ Administrators can:
 - **Search and filter applicants** by status, name, or ID
 - **Dispatch orders** to approved drivers and track deliveries
 - **Send bulk SMS alerts** to all approved drivers about new orders
+- **View analytics dashboard** with KPIs, conversion rates, and zone data
+
+---
+
+## 📊 Analytics & Tracking
+
+This app integrates **Google Analytics 4 (GA4)** and **Firebase Analytics** for comprehensive event tracking across all user journeys.
+
+### Setup
+
+#### 1. Google Analytics 4
+
+1. Go to [Google Analytics](https://analytics.google.com) and create a new property
+2. Copy your **Measurement ID** (looks like `G-XXXXXXXXXX`)
+3. In Netlify Dashboard → Site Settings → Environment Variables, add:
+   - `GA4_MEASUREMENT_ID` = `G-XXXXXXXXXX`
+4. The frontend pages already include the placeholder. To override dynamically, set `window.__GA4_ID__` before loading `analytics.js`
+
+#### 2. Firebase Analytics
+
+1. Go to [Firebase Console](https://console.firebase.google.com) and create a project
+2. Add a web app and copy the config values
+3. In Netlify environment variables, add:
+   - `FIREBASE_API_KEY`
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_MESSAGING_SENDER_ID`
+   - `FIREBASE_APP_ID`
+   - `FIREBASE_MEASUREMENT_ID` (optional, can reuse GA4 ID)
+4. The frontend pages already include the placeholder. To override dynamically, set `window.__FIREBASE_API_KEY__`, `window.__FIREBASE_PROJECT_ID__`, etc. before loading `firebase-analytics.js`
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GA4_MEASUREMENT_ID` | Your GA4 Measurement ID (G-XXXXXXXXXX) | ✅ |
+| `FIREBASE_API_KEY` | Firebase API key | Optional |
+| `FIREBASE_PROJECT_ID` | Firebase project ID | Optional |
+| `FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID | Optional |
+| `FIREBASE_APP_ID` | Firebase app ID | Optional |
+| `FIREBASE_MEASUREMENT_ID` | Firebase Analytics measurement ID | Optional |
+
+### Key Events Tracked
+
+#### Customer Events
+| Event | Trigger | Data |
+|-------|---------|------|
+| `order_submitted` | Customer submits order form | `service_type`, `estimated_price` |
+| `purchase` | Order placed successfully | `value`, `currency`, `service_type` |
+| `order_now_clicked` | "Order Now" CTA clicked | — |
+
+#### Driver Application Events
+| Event | Trigger | Data |
+|-------|---------|------|
+| `application_started` | Step 1 of apply form shown | `step`, `total_steps` |
+| `application_step_progressed` | User advances to next step | `step`, `total_steps` |
+| `application_submitted` | Application form submitted | `application_id` |
+| `generate_lead` | Conversion tracking | `lead_type` |
+
+#### Admin Events
+| Event | Trigger | Data |
+|-------|---------|------|
+| `admin_login_success` | Admin logs in successfully | `admin_user` |
+| `admin_login_failed` | Admin login fails | `admin_user` |
+| `application_status_changed` | Status updated (single or bulk) | `application_id`, `new_status` |
+| `background_check_initiated` | Status set to background_check | `application_id` |
+| `analytics_dashboard_view` | Admin opens analytics page | — |
+
+#### Driver Portal Events
+| Event | Trigger | Data |
+|-------|---------|------|
+| `driver_login_success` | Driver logs into portal | `applicant_id` |
+| `driver_login_failed` | Driver login fails | `applicant_id` |
+| `driver_go_online` | Driver clicks "Go Online" | `applicant_id` |
+| `driver_go_offline` | Driver clicks "Go Offline" | `applicant_id` |
+
+### Server-Side Analytics
+
+Events are also logged to the Supabase `analytics_events` table via the `logAnalyticsEvent()` helper. This provides:
+- **Session tracking** — 30-minute session IDs shared between GA4 and Firebase
+- **Offline resilience** — events are stored even when third-party trackers are blocked
+- **Custom queries** — query by `event_name`, `session_id`, `user_id`, or `metadata` JSONB
+
+The `analytics_events` table schema:
+```sql
+CREATE TABLE analytics_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_name TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    user_id TEXT,
+    session_id TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
 
 ---
 
@@ -110,6 +204,11 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 TWILIO_ACCOUNT_SID=your-twilio-account-sid
 TWILIO_AUTH_TOKEN=your-twilio-auth-token
 TWILIO_PHONE_NUMBER=+15551234567
+
+# Analytics (optional but recommended)
+GA4_MEASUREMENT_ID=G-XXXXXXXXXX
+FIREBASE_API_KEY=your-firebase-api-key
+FIREBASE_PROJECT_ID=your-firebase-project-id
 ```
 
 > ⚠️ **Security:** Never commit `.env` files to version control. Use different credentials in production.
@@ -141,6 +240,7 @@ The SQLite database file will be created at the path specified in `DATABASE_PATH
 | Admin Dashboard | `http://localhost:3000/admin/dashboard.html` |
 | Book a Ride | `http://localhost:3000/order` |
 | Driver Portal | `http://localhost:3000/driver` |
+| Analytics Dashboard | `http://localhost:3000/admin/analytics.html` |
 
 ---
 
@@ -182,10 +282,18 @@ In the Netlify Dashboard → Site Settings → Environment Variables, add:
 | `TWILIO_ACCOUNT_SID` | Your Twilio Account SID | Optional |
 | `TWILIO_AUTH_TOKEN` | Your Twilio Auth Token | Optional |
 | `TWILIO_PHONE_NUMBER` | Your Twilio phone number (E.164 format) | Optional |
+| `GA4_MEASUREMENT_ID` | Your GA4 Measurement ID (G-XXXXXXXXXX) | Optional |
+| `FIREBASE_API_KEY` | Your Firebase API key | Optional |
+| `FIREBASE_PROJECT_ID` | Your Firebase project ID | Optional |
+| `FIREBASE_MESSAGING_SENDER_ID` | Your Firebase messaging sender ID | Optional |
+| `FIREBASE_APP_ID` | Your Firebase app ID | Optional |
+| `FIREBASE_VAPID_KEY` | Your Firebase VAPID key | Optional |
 
 > 💡 **Stripe Setup:** Sign up at [stripe.com](https://www.stripe.com), get your API keys from the Dashboard → Developers → API keys. Use `pk_test_...` / `sk_test_...` for development, `pk_live_...` / `sk_live_...` for production. Set up a webhook endpoint pointing to `https://your-site.netlify.app/api/payment-webhook` and copy the webhook signing secret.
 
 > 💡 **Twilio Setup:** Sign up at [twilio.com](https://www.twilio.com), get a free trial number, and add your credentials above. SMS notifications will be sent to customers on order creation, driver assignment, and order completion.
+
+> 💡 **Analytics Setup:** Sign up at [Google Analytics](https://analytics.google.com) for GA4 and [Firebase Console](https://console.firebase.google.com) for Firebase Analytics. Add the respective IDs to your Netlify environment variables.
 
 #### Step 4: Deploy
 
@@ -225,6 +333,7 @@ Or connect your GitHub repo to Netlify for **automatic deploys on every push**.
 │  │  - send-sms.js            ← /api/send-sms          │
 │  │  - driver-sms-alert.js    ← /api/driver-sms-alert  │
 │  │  - checkr*.js             ← /api/checkr/*          │
+│  │  - log-analytics-event.js ← /api/log-analytics-event │
 │  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 ```
@@ -361,6 +470,7 @@ Use any future expiry date, any 3-digit CVC, and any ZIP code.
 | `POST` | `/api/payment-webhook` | Stripe webhook receiver | Raw Stripe event body |
 | `POST` | `/api/send-sms` | Send a single SMS | `{ to_phone, message_body, order_id }` |
 | `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `{ message, driver_portal_url, order_id }` |
+| `POST` | `/api/log-analytics-event` | Log an analytics event server-side | `{ event_name, category, user_id, session_id, metadata }` |
 
 ### Admin Endpoints (JWT Bearer Token Required)
 
@@ -467,6 +577,20 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
   }'
 ```
 
+### Example: Log Analytics Event
+
+```bash
+curl -X POST https://your-site.netlify.app/api/log-analytics-event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_name": "order_submitted",
+    "category": "order",
+    "user_id": "customer_123",
+    "session_id": "sess_1234567890",
+    "metadata": {"service_type": "ride", "estimated_price": 25.50}
+  }'
+```
+
 ---
 
 ## 🗄 Database Schema
@@ -557,6 +681,18 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
 | `error` | TEXT | Error message if failed |
 | `created_at` | TIMESTAMPTZ | Auto |
 
+### Table: `analytics_events`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | Primary key |
+| `event_name` | TEXT | Required |
+| `category` | TEXT | Default: `general` |
+| `user_id` | TEXT | Optional |
+| `session_id` | TEXT | Optional |
+| `metadata` | JSONB | Default: `{}` |
+| `created_at` | TIMESTAMPTZ | Auto |
+
 ### Status Enum Values
 
 | Status | Description |
@@ -585,16 +721,22 @@ coyotes-dune-delivery/
 │   │   └── index.html         # Customer order form (with Stripe payment)
 │   ├── admin/
 │   │   ├── index.html         # Admin login page
-│   │   └── dashboard.html     # Admin dashboard
+│   │   ├── admin.js           # Admin dashboard logic
+│   │   ├── admin.css          # Admin dashboard styles
+│   │   ├── checkr.html        # Background check management
+│   │   └── analytics.html     # Analytics dashboard (NEW)
 │   ├── driver/
 │   │   └── index.html         # Driver portal
 │   ├── css/
 │   │   └── style.css          # Coastal theme styles
 │   ├── js/
-│   │   ├── main.js            # Shared utilities
-│   │   ├── order.js           # Order form logic
+│   │   ├── main.js            # Shared utilities + order form tracking
+│   │   ├── order.js           # Order form logic + tracking
+│   │   ├── apply.js           # Driver application + tracking
+│   │   ├── analytics.js       # GA4 integration (NEW)
+│   │   ├── firebase-analytics.js # Firebase Analytics integration (NEW)
 │   │   ├── stripe-payment.js  # Stripe payment integration
-│   │   └── admin.js           # Admin dashboard logic
+│   │   └── firebase-messaging.js # FCM push notifications
 │   └── 404.html               # Custom 404 page
 ├── netlify/
 │   └── functions/             # Serverless functions (deployed to Netlify)
@@ -607,11 +749,12 @@ coyotes-dune-delivery/
 │       ├── submit-order.js
 │       ├── get-orders.js
 │       ├── update-order.js
-│       ├── create-payment-intent.js  # Stripe PaymentIntent creation
-│       ├── payment-webhook.js        # Stripe webhook handler
-│       ├── send-sms.js               # Twilio SMS sending
-│       ├── driver-sms-alert.js       # Bulk driver SMS alerts
-│       └── checkr*.js                # Background check integration
+│       ├── create-payment-intent.js
+│       ├── payment-webhook.js
+│       ├── send-sms.js
+│       ├── driver-sms-alert.js
+│       ├── checkr*.js
+│       └── log-analytics-event.js
 ├── database/                  # SQLite database (local dev)
 │   └── coyote-dune-delivery.db
 ├── netlify.toml               # Netlify deployment config
@@ -714,6 +857,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
 | Feature | Description |
 |---------|-------------|
 | ✅ **Stripe Payment Processing** | Secure card payments with Stripe Elements, PaymentIntents, and webhooks. |
+| ✅ **Analytics Dashboard** | GA4 + Firebase Analytics with server-side event logging and admin KPI dashboard. |
 | **Stripe Connect Payouts** | Integrate Stripe Connect to pay drivers directly. Onboard drivers as Stripe Connect recipients, automate weekly payouts based on completed deliveries. |
 | **Real Background Check API** | Replace mock background checks with a real provider like **Checkr** or **Sterling**. Automate the check trigger on application submission and surface results in the admin dashboard. |
 | ✅ **SMS Notifications** | Add **Twilio** integration to send customers and drivers SMS updates. |
@@ -736,7 +880,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
 |---------|-------------|
 | **Route Optimization** | Integrate a route optimization engine (**OSRM**, **GraphHopper**, or **Google Routes API**) to suggest the most efficient delivery routes. |
 | **Multi-Region Support** | Expand beyond the initial region with geofenced zones, regional admin accounts, and localized pricing. |
-| **Analytics Dashboard** | Add charts and KPIs for admins: driver retention, average delivery time, revenue per driver, etc. |
+| **Analytics Dashboard v2** | Add charts and KPIs for admins: driver retention, average delivery time, revenue per driver, cohort analysis, etc. |
 | **Automated Onboarding** | Self-service onboarding with document verification, training video completion tracking, and quiz-based certification. |
 | **AI-Powered Dispatch** | Use machine learning to predict demand hotspots and proactively suggest driver positioning. |
 
@@ -789,6 +933,14 @@ The Netlify functions include CORS headers. If you're seeing CORS errors, ensure
 1. Check that `STRIPE_PUBLISHABLE_KEY` is set in the frontend. You can set it inline in `frontend/order/index.html` or via a Netlify environment variable injected at build time.
 2. Check the browser console for JavaScript errors
 3. Ensure Stripe.js is loading from `https://js.stripe.com/v3/`
+
+### Issue: Analytics not tracking
+
+1. Check that `GA4_MEASUREMENT_ID` is set in Netlify environment variables or inline in the HTML
+2. Verify `analytics.js` and `firebase-analytics.js` are loading in the browser Network tab
+3. Check browser console for `[Analytics] gtag not ready` or `[Firebase Analytics] Not ready` warnings
+4. Ad blockers may block GA4 and Firebase — the `logAnalyticsEvent()` fallback still logs to Supabase
+5. Check the Supabase `analytics_events` table for server-side events
 
 ---
 
