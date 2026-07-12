@@ -7,6 +7,80 @@
     <link rel="stylesheet" href="driver.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* GPS / Go Online styles */
+        .gps-card {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            color: var(--pure-white);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .gps-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .gps-card-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .gps-status-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .gps-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #C45A3E;
+            transition: background 0.3s ease;
+        }
+        .gps-indicator.online {
+            background: #4C8C64;
+            animation: gpsPulse 1.5s infinite;
+        }
+        @keyframes gpsPulse {
+            0% { box-shadow: 0 0 0 0 rgba(76, 140, 100, 0.5); }
+            70% { box-shadow: 0 0 0 8px rgba(76, 140, 100, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(76, 140, 100, 0); }
+        }
+        .gps-card .btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .gps-card .btn-primary {
+            background: var(--sand);
+            color: var(--navy);
+        }
+        .gps-card .btn-primary:hover {
+            background: var(--sand-light);
+        }
+        .gps-card .btn-danger {
+            background: #C45A3E;
+            color: var(--pure-white);
+        }
+        .gps-card .btn-danger:hover {
+            background: #A84A32;
+        }
+        .gps-note {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+    </style>
 </head>
 <body>
     <!-- LOGIN SCREEN -->
@@ -55,6 +129,21 @@
 
             <!-- Approved-only sections wrapper -->
             <div id="approved-content" style="display:none;">
+                <!-- Go Online / GPS Card -->
+                <section class="gps-card" id="gps-card">
+                    <div class="gps-card-header">
+                        <h3>📍 Location Sharing</h3>
+                    </div>
+                    <div class="gps-status-row">
+                        <div class="gps-indicator offline" id="gps-indicator"></div>
+                        <span id="gps-status">Offline</span>
+                    </div>
+                    <button id="go-online-btn" class="btn btn-primary">Go Online</button>
+                    <p class="gps-note">
+                        When online, your GPS location is shared with dispatch every 30 seconds so customers can track their delivery in real-time. Make sure location services are enabled on your device.
+                    </p>
+                </section>
+
                 <!-- Profile Card -->
                 <section class="card">
                     <div class="card-header">
