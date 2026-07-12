@@ -360,6 +360,33 @@
                     });
                     localStorage.setItem('cdd_orders', JSON.stringify(orders));
                 } catch (_) { /* ignore */ }
+
+                // ── Analytics: Order submitted ─────────────────
+                const estimatedTotal = calculateEstimate();
+                if (typeof trackEvent === 'function') {
+                    trackEvent('order', 'submitted', serviceType, estimatedTotal);
+                }
+                if (typeof firebaseTrackEvent === 'function') {
+                    firebaseTrackEvent('order_submitted', {
+                        service_type: serviceType,
+                        estimated_price: estimatedTotal,
+                    });
+                }
+                if (typeof trackConversion === 'function') {
+                    trackConversion('purchase', {
+                        value: estimatedTotal,
+                        currency: 'USD',
+                        service_type: serviceType,
+                    });
+                }
+                if (typeof logAnalyticsEvent === 'function') {
+                    logAnalyticsEvent('order_submitted', {
+                        category: 'order',
+                        service_type: serviceType,
+                        estimated_price: estimatedTotal,
+                        order_number: result.data.orderNumber,
+                    });
+                }
             } else {
                 alert('Failed to place order: ' + (result.error || result.data?.message || 'Unknown error'));
                 submitBtn.disabled = false;
