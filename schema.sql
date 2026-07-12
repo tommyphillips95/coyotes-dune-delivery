@@ -285,6 +285,24 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(c
 CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
 
 -- =============================================
+-- DRIVER LOCATIONS Table (GPS Tracking)
+-- =============================================
+CREATE TABLE IF NOT EXISTS driver_locations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    driver_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+    lat DECIMAL(10, 8) NOT NULL,
+    lng DECIMAL(11, 8) NOT NULL,
+    accuracy DECIMAL(8, 2), -- GPS accuracy in meters
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for fast driver location lookups
+CREATE INDEX IF NOT EXISTS idx_driver_locations_driver_id ON driver_locations(driver_id);
+CREATE INDEX IF NOT EXISTS idx_driver_locations_timestamp ON driver_locations(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_driver_locations_order_id ON driver_locations(order_id);
+
+-- =============================================
 -- Row Level Security (RLS) Policies
 -- =============================================
 
@@ -378,6 +396,17 @@ CREATE POLICY "Admins can view all push_notification_logs"
 ON push_notification_logs FOR SELECT 
 USING (true); -- Auth handled in Netlify function
 
+-- Enable RLS on driver_locations
+ALTER TABLE driver_locations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can view driver locations" 
+ON driver_locations FOR SELECT 
+USING (true);
+
+CREATE POLICY "Public can insert driver locations" 
+ON driver_locations FOR INSERT 
+WITH CHECK (true);
+
 -- =============================================
 -- Updated At Trigger
 -- =============================================
@@ -445,4 +474,5 @@ EXECUTE FUNCTION update_updated_at_column();
 --    FIREBASE_APP_ID = your-firebase-app-id
 --    FIREBASE_VAPID_KEY = your-firebase-vapid-key
 --    FIREBASE_ADMIN_SDK_JSON = your-firebase-admin-sdk-json
+--    GOOGLE_MAPS_API_KEY = your-google-maps-api-key
 -- 7. Deploy from GitHub in Netlify dashboard
