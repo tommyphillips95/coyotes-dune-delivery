@@ -13,6 +13,7 @@ Coyote's Dune Delivery is a modern web application that allows prospective deliv
 
 Customers can:
 - **Book rides and deliveries** across the Texas Gulf Coast
+- **Pay securely with Stripe** — cards, Apple Pay, Google Pay
 - **Track orders** in real-time with order number lookup
 - **Receive SMS notifications** for order updates
 
@@ -31,6 +32,7 @@ Administrators can:
 - **HTML5** semantic markup
 - **CSS3** with custom properties (CSS variables) for the coastal theme
 - **Vanilla JavaScript** (ES6+), no framework required
+- **Stripe.js** for secure card payment processing
 - **Responsive design** — mobile-first, works on all devices
 
 ### Backend (Local Development)
@@ -44,6 +46,7 @@ Administrators can:
 - **Netlify Functions** (AWS Lambda-compatible)
 - **Supabase** (PostgreSQL) for persistent data storage
 - **jsonwebtoken** for JWT authentication
+- **Stripe** for payment processing (PaymentIntents + webhooks)
 - **Twilio** for SMS notifications
 
 ### Deployment Targets
@@ -71,6 +74,7 @@ This installs:
 - `cors`
 - `dotenv`
 - `nodemon` (dev dependency)
+- `stripe` (for payment processing)
 - `twilio` (for SMS notifications)
 
 ### 2. Environment Variables
@@ -96,6 +100,11 @@ JWT_EXPIRES=24h
 # Admin Credentials (change these!)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=coyotedune2024
+
+# Stripe (for payment processing — required for checkout)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 
 # Twilio (for SMS notifications — optional but recommended)
 TWILIO_ACCOUNT_SID=your-twilio-account-sid
@@ -167,9 +176,14 @@ In the Netlify Dashboard → Site Settings → Environment Variables, add:
 | `JWT_EXPIRES` | `24h` (or `7d`, etc.) | Optional |
 | `SUPABASE_URL` | Your Supabase project URL | ✅ |
 | `SUPABASE_SERVICE_KEY` | Your Supabase service role key | ✅ |
+| `STRIPE_SECRET_KEY` | Your Stripe secret key (sk_live_... or sk_test_...) | ✅ |
+| `STRIPE_PUBLISHABLE_KEY` | Your Stripe publishable key (pk_live_... or pk_test_...) | ✅ |
+| `STRIPE_WEBHOOK_SECRET` | Your Stripe webhook endpoint secret (whsec_...) | ✅ |
 | `TWILIO_ACCOUNT_SID` | Your Twilio Account SID | Optional |
 | `TWILIO_AUTH_TOKEN` | Your Twilio Auth Token | Optional |
 | `TWILIO_PHONE_NUMBER` | Your Twilio phone number (E.164 format) | Optional |
+
+> 💡 **Stripe Setup:** Sign up at [stripe.com](https://www.stripe.com), get your API keys from the Dashboard → Developers → API keys. Use `pk_test_...` / `sk_test_...` for development, `pk_live_...` / `sk_live_...` for production. Set up a webhook endpoint pointing to `https://your-site.netlify.app/api/payment-webhook` and copy the webhook signing secret.
 
 > 💡 **Twilio Setup:** Sign up at [twilio.com](https://www.twilio.com), get a free trial number, and add your credentials above. SMS notifications will be sent to customers on order creation, driver assignment, and order completion.
 
@@ -206,6 +220,8 @@ Or connect your GitHub repo to Netlify for **automatic deploys on every push**.
 │  │  - submit-order.js        ← /api/submit-order      │
 │  │  - get-orders.js          ← /api/get-orders        │
 │  │  - update-order.js        ← /api/update-order      │
+│  │  - create-payment-intent.js ← /api/create-payment-intent │
+│  │  - payment-webhook.js     ← /api/payment-webhook   │
 │  │  - send-sms.js            ← /api/send-sms          │
 │  │  - driver-sms-alert.js    ← /api/driver-sms-alert  │
 │  │  - checkr*.js             ← /api/checkr/*          │
@@ -273,6 +289,62 @@ After the backend is live:
 
 ---
 
+## 💳 Stripe Payment Processing
+
+The app integrates **Stripe** for secure customer payments. Here's how it works:
+
+### Payment Flow
+
+1. **Customer places an order** via `/order/` — the order is created in Supabase with `status: 'pending'` and `payment_status: 'pending'`
+2. **Payment form appears** with Stripe Elements (card input, Apple Pay, Google Pay)
+3. **Customer enters card details** and clicks "Pay Now"
+4. **Frontend calls `/api/create-payment-intent`** — server creates a Stripe PaymentIntent and returns `client_secret`
+5. **Frontend confirms payment** with `stripe.confirmCardPayment()` — Stripe processes the card
+6. **Stripe sends webhook** to `/api/payment-webhook` — server updates order `payment_status` to `paid` or `failed`
+7. **Success/failure screen** is shown to the customer
+
+### Stripe Webhook Setup
+
+1. Go to [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks)
+2. Click "Add endpoint"
+3. Enter your endpoint URL: `https://coyotes-dune-delivery.netlify.app/api/payment-webhook`
+4. Select these events to listen for:
+   - `payment_intent.succeeded`
+   - `payment_intent.payment_failed`
+   - `payment_intent.canceled`
+   - `charge.refunded`
+5. Copy the **Signing secret** (starts with `whsec_...`)
+6. Add it to Netlify environment variables as `STRIPE_WEBHOOK_SECRET`
+
+### Testing Payments
+
+Use Stripe's test card numbers:
+
+| Card Number | Scenario |
+|-------------|----------|
+| `4242 4242 4242 4242` | Payment succeeds |
+| `4000 0000 0000 0002` | Card declined |
+| `4000 0000 0000 3220` | 3D Secure required |
+
+Use any future expiry date, any 3-digit CVC, and any ZIP code.
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/create-payment-intent` | Creates a Stripe PaymentIntent for an order |
+| `POST` | `/api/payment-webhook` | Receives Stripe webhook events |
+
+### Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `STRIPE_SECRET_KEY` | Your Stripe secret key | `sk_test_...` or `sk_live_...` |
+| `STRIPE_PUBLISHABLE_KEY` | Your Stripe publishable key | `pk_test_...` or `pk_live_...` |
+| `STRIPE_WEBHOOK_SECRET` | Webhook endpoint signing secret | `whsec_...` |
+
+---
+
 ## 📡 API Endpoints Reference
 
 ### Public Endpoints (No Auth Required)
@@ -285,6 +357,8 @@ After the backend is live:
 | `POST` | `/api/submit-order` | Submit customer order (legacy) | Order details JSON |
 | `GET` | `/api/get-orders` | Get orders by number or phone | `order_number` or `phone` query |
 | `PATCH` | `/api/update-order` | Update order status | `{ id, status, driver_id }` |
+| `POST` | `/api/create-payment-intent` | Create Stripe PaymentIntent | `{ order_id, amount, customer_email }` |
+| `POST` | `/api/payment-webhook` | Stripe webhook receiver | Raw Stripe event body |
 | `POST` | `/api/send-sms` | Send a single SMS | `{ to_phone, message_body, order_id }` |
 | `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `{ message, driver_portal_url, order_id }` |
 
@@ -297,6 +371,18 @@ After the backend is live:
 | `GET` | `/api/get-applications?status=pending` | Filter by status | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?search=john` | Search by name/email/ID | `Authorization: Bearer <token>` |
 | `PUT` | `/api/update-application` | Update application status | `Authorization: Bearer <token>` |
+
+### Example: Create Payment Intent
+
+```bash
+curl -X POST https://your-site.netlify.app/api/create-payment-intent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "your-order-uuid",
+    "amount": 25.50,
+    "customer_email": "customer@example.com"
+  }'
+```
 
 ### Example: Submit Application
 
@@ -374,7 +460,7 @@ curl -X POST https://your-site.netlify.app/api/send-sms \
 ```bash
 curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
     "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
     "order_id": "your-order-uuid"
@@ -431,6 +517,9 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
 | `customer_id` | UUID | References `customers(id)` |
 | `service_type` | TEXT | ride, package_delivery, grocery_run, group_transport |
 | `status` | TEXT | Default: `pending` |
+| `stripe_payment_intent_id` | TEXT | Stripe PaymentIntent ID |
+| `stripe_customer_id` | TEXT | Stripe Customer ID |
+| `payment_status` | TEXT | pending, paid, failed, refunded |
 | `pickup_address` | TEXT | Required |
 | `pickup_city` | TEXT | Required |
 | `dropoff_address` | TEXT | Optional |
@@ -441,6 +530,19 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
 | `created_at` | TIMESTAMPTZ | Auto |
 | `updated_at` | TIMESTAMPTZ | Auto |
 | `completed_at` | TIMESTAMPTZ | Set on completion |
+
+### Table: `customers`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | Primary key |
+| `first_name` | TEXT | Required |
+| `last_name` | TEXT | Required |
+| `phone` | TEXT | Required |
+| `email` | TEXT | Optional |
+| `stripe_customer_id` | TEXT | Stripe Customer ID for recurring payments |
+| `created_at` | TIMESTAMPTZ | Auto |
+| `updated_at` | TIMESTAMPTZ | Auto |
 
 ### Table: `sms_logs`
 
@@ -480,7 +582,7 @@ coyotes-dune-delivery/
 │   ├── apply/
 │   │   └── index.html         # Driver application form
 │   ├── order/
-│   │   └── index.html         # Customer order form
+│   │   └── index.html         # Customer order form (with Stripe payment)
 │   ├── admin/
 │   │   ├── index.html         # Admin login page
 │   │   └── dashboard.html     # Admin dashboard
@@ -491,6 +593,7 @@ coyotes-dune-delivery/
 │   ├── js/
 │   │   ├── main.js            # Shared utilities
 │   │   ├── order.js           # Order form logic
+│   │   ├── stripe-payment.js  # Stripe payment integration
 │   │   └── admin.js           # Admin dashboard logic
 │   └── 404.html               # Custom 404 page
 ├── netlify/
@@ -504,9 +607,11 @@ coyotes-dune-delivery/
 │       ├── submit-order.js
 │       ├── get-orders.js
 │       ├── update-order.js
-│       ├── send-sms.js        # Twilio SMS sending
-│       ├── driver-sms-alert.js # Bulk driver SMS alerts
-│       └── checkr*.js         # Background check integration
+│       ├── create-payment-intent.js  # Stripe PaymentIntent creation
+│       ├── payment-webhook.js        # Stripe webhook handler
+│       ├── send-sms.js               # Twilio SMS sending
+│       ├── driver-sms-alert.js       # Bulk driver SMS alerts
+│       └── checkr*.js                # Background check integration
 ├── database/                  # SQLite database (local dev)
 │   └── coyote-dune-delivery.db
 ├── netlify.toml               # Netlify deployment config
@@ -516,6 +621,38 @@ coyotes-dune-delivery/
 ├── package.json               # Node dependencies
 └── README.md                  # This file
 ```
+
+---
+
+## 💳 Stripe Payment Integration
+
+### How It Works
+
+1. Customer fills out the order form and clicks "Place Order"
+2. Order is created in Supabase with `payment_status: 'pending'`
+3. A secure payment form appears with Stripe Elements
+4. Customer enters card details and confirms payment
+5. Stripe processes the payment and sends a webhook
+6. Order is updated to `payment_status: 'paid'`
+7. Customer sees a success screen
+
+### Customer Experience
+
+- **Card input** is handled by Stripe Elements — your server never sees raw card numbers
+- **Apple Pay / Google Pay** are automatically enabled via Stripe's automatic payment methods
+- **"Pay Later" button** allows customers to skip online payment and pay the driver in person
+- **Error handling** shows clear messages for declined cards, expired cards, etc.
+
+### Payment Status Tracking
+
+Orders have a `payment_status` field with these values:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Order created, awaiting payment |
+| `paid` | Payment successfully processed |
+| `failed` | Payment attempt failed |
+| `refunded` | Payment was refunded |
 
 ---
 
@@ -576,6 +713,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
 
 | Feature | Description |
 |---------|-------------|
+| ✅ **Stripe Payment Processing** | Secure card payments with Stripe Elements, PaymentIntents, and webhooks. |
 | **Stripe Connect Payouts** | Integrate Stripe Connect to pay drivers directly. Onboard drivers as Stripe Connect recipients, automate weekly payouts based on completed deliveries. |
 | **Real Background Check API** | Replace mock background checks with a real provider like **Checkr** or **Sterling**. Automate the check trigger on application submission and surface results in the admin dashboard. |
 | ✅ **SMS Notifications** | Add **Twilio** integration to send customers and drivers SMS updates. |
@@ -637,6 +775,20 @@ The Netlify functions include CORS headers. If you're seeing CORS errors, ensure
 2. Verify your Twilio phone number is active and has credit
 3. In trial mode, you must verify recipient phone numbers in the Twilio console
 4. Check the Netlify function logs for error messages
+
+### Issue: Stripe payments not working
+
+1. Check that `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, and `STRIPE_WEBHOOK_SECRET` are set in Netlify
+2. Verify you're using the correct keys (test vs live)
+3. Check that the webhook endpoint URL is correct and the webhook secret matches
+4. Check Netlify function logs for Stripe API errors
+5. Ensure the `stripe` package is installed (`npm install stripe`)
+
+### Issue: Payment form not showing
+
+1. Check that `STRIPE_PUBLISHABLE_KEY` is set in the frontend. You can set it inline in `frontend/order/index.html` or via a Netlify environment variable injected at build time.
+2. Check the browser console for JavaScript errors
+3. Ensure Stripe.js is loading from `https://js.stripe.com/v3/`
 
 ---
 
