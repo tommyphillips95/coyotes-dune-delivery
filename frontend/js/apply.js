@@ -62,6 +62,19 @@
         if (header) header.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // ── Analytics: Track step progression ───────────────────
+    function trackStepProgression(stepNum) {
+        if (typeof trackEvent === 'function') {
+            trackEvent('application', 'step_progressed', 'step_' + stepNum);
+        }
+        if (typeof firebaseTrackEvent === 'function') {
+            firebaseTrackEvent('application_step_progressed', { step: stepNum, total_steps: TOTAL_STEPS });
+        }
+        if (typeof logAnalyticsEvent === 'function') {
+            logAnalyticsEvent('application_step_progressed', { category: 'application', step: stepNum });
+        }
+    }
+
     // ── Validation ──────────────────────────────────────────
     const validators = {
         firstName: (v) => v.trim().length >= 1,
@@ -187,6 +200,7 @@
                 const nextStep = parseInt(btn.dataset.next, 10);
                 if (validateStep(currentStep)) {
                     showStep(nextStep);
+                    trackStepProgression(nextStep);
                     if (nextStep === 6) buildSummary();
                 }
             });
@@ -382,6 +396,20 @@
             showSuccess(appId);
             clearSavedData();
 
+            // ── Analytics: Application submitted ───────────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('application', 'submitted', 'driver_application');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('application_submitted', { application_id: appId });
+            }
+            if (typeof trackConversion === 'function') {
+                trackConversion('generate_lead', { lead_type: 'driver_application' });
+            }
+            if (typeof logAnalyticsEvent === 'function') {
+                logAnalyticsEvent('application_submitted', { category: 'application', application_id: appId });
+            }
+
         } catch (err) {
             console.error('Submission error:', err);
             // Fallback: show success with generated ID anyway
@@ -514,6 +542,17 @@
         bindPhoneFormatting();
         loadFormData();
         if (form) form.addEventListener('submit', submitApplication);
+
+        // ── Analytics: Application started ─────────────────
+        if (typeof trackEvent === 'function') {
+            trackEvent('application', 'started', 'step_1');
+        }
+        if (typeof firebaseTrackEvent === 'function') {
+            firebaseTrackEvent('application_started', { step: 1, total_steps: TOTAL_STEPS });
+        }
+        if (typeof logAnalyticsEvent === 'function') {
+            logAnalyticsEvent('application_started', { category: 'application', step: 1 });
+        }
     }
 
     if (document.readyState === 'loading') {
