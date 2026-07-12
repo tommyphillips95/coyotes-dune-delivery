@@ -101,8 +101,27 @@
             showDashboard();
             loadApplications();
             showToast('Welcome back!', 'success');
+
+            // ── Analytics: Admin login success ───────────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('admin', 'login_success');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('admin_login_success', { admin_user: username });
+            }
+            if (typeof logAnalyticsEvent === 'function') {
+                logAnalyticsEvent('admin_login_success', { category: 'admin', admin_user: username });
+            }
         } catch (err) {
             loginError.textContent = err.message || 'Login failed';
+
+            // ── Analytics: Admin login failed ────────────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('admin', 'login_failed');
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('admin_login_failed', { admin_user: username });
+            }
         }
     }
 
@@ -111,6 +130,10 @@
         localStorage.removeItem('admin_token');
         showLogin();
         showToast('Logged out', 'success');
+
+        if (typeof trackEvent === 'function') {
+            trackEvent('admin', 'logout');
+        }
     }
 
     /* ===== Load Applications ===== */
@@ -340,6 +363,21 @@
             updateStats();
             closeDetail();
             showToast('Application updated', 'success');
+
+            // ── Analytics: Application status changed ──────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('admin', 'status_change', status);
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('application_status_changed', { application_id: currentDetailId, new_status: status });
+            }
+            if (typeof logAnalyticsEvent === 'function') {
+                logAnalyticsEvent('application_status_changed', {
+                    category: 'admin',
+                    application_id: currentDetailId,
+                    new_status: status,
+                });
+            }
         } catch (err) {
             showToast(err.message || 'Update failed', 'error');
         }
@@ -404,6 +442,21 @@
             applyFiltersAndSort();
             updateStats();
             showToast(`Updated ${ids.length} applications`, 'success');
+
+            // ── Analytics: Bulk status change ────────────────
+            if (typeof trackEvent === 'function') {
+                trackEvent('admin', 'bulk_status_change', status, ids.length);
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('application_bulk_status_changed', { new_status: status, count: ids.length });
+            }
+            if (typeof logAnalyticsEvent === 'function') {
+                logAnalyticsEvent('application_bulk_status_changed', {
+                    category: 'admin',
+                    new_status: status,
+                    count: ids.length,
+                });
+            }
         } catch (err) {
             showToast(err.message || 'Bulk update failed', 'error');
         }
@@ -417,6 +470,37 @@
             applyFiltersAndSort();
             updateStats();
             showToast(`Status updated to ${fmtStatus(status)}`, 'success');
+
+            // ── Analytics: Status change from row action ─────
+            if (typeof trackEvent === 'function') {
+                trackEvent('admin', 'status_change', status);
+            }
+            if (typeof firebaseTrackEvent === 'function') {
+                firebaseTrackEvent('application_status_changed', { application_id: id, new_status: status });
+            }
+            if (typeof logAnalyticsEvent === 'function') {
+                logAnalyticsEvent('application_status_changed', {
+                    category: 'admin',
+                    application_id: id,
+                    new_status: status,
+                });
+            }
+
+            // ── Analytics: Background check initiated ─────────
+            if (status === 'background_check') {
+                if (typeof trackEvent === 'function') {
+                    trackEvent('admin', 'background_check_initiated');
+                }
+                if (typeof firebaseTrackEvent === 'function') {
+                    firebaseTrackEvent('background_check_initiated', { application_id: id });
+                }
+                if (typeof logAnalyticsEvent === 'function') {
+                    logAnalyticsEvent('background_check_initiated', {
+                        category: 'admin',
+                        application_id: id,
+                    });
+                }
+            }
         } catch (err) {
             showToast(err.message || 'Status update failed', 'error');
         }
