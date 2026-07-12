@@ -258,6 +258,23 @@
                     orderNumDisplay.textContent = result.data.orderNumber || result.data.orderId;
                 }
                 orderSuccess.style.display = 'block';
+
+                // ── Analytics: Order submitted ─────────────────────
+                if (typeof trackEvent === 'function') {
+                    trackEvent('order', 'submitted', data.service_type, data.estimated_price || 0);
+                }
+                if (typeof firebaseTrackEvent === 'function') {
+                    firebaseTrackEvent('order_submitted', {
+                        service_type: data.service_type,
+                        estimated_price: data.estimated_price || 0,
+                    });
+                }
+                if (typeof trackConversion === 'function') {
+                    trackConversion('generate_lead', {
+                        value: data.estimated_price || 0,
+                        currency: 'USD',
+                    });
+                }
             } else {
                 // Show error
                 const errorMsg = (result.data && result.data.message) || result.error || 'Something went wrong. Please try again or call dispatch.';
