@@ -220,6 +220,23 @@ CREATE INDEX IF NOT EXISTS idx_sms_logs_phone ON sms_logs(phone_number);
 CREATE INDEX IF NOT EXISTS idx_sms_logs_created_at ON sms_logs(created_at DESC);
 
 -- =============================================
+-- ANALYTICS EVENTS Table (Server-Side Event Tracking)
+-- =============================================
+CREATE TABLE IF NOT EXISTS analytics_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_name TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    user_id TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_analytics_events_name ON analytics_events(event_name);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_category ON analytics_events(category);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
+
+-- =============================================
 -- Row Level Security (RLS) Policies
 -- =============================================
 
@@ -287,6 +304,17 @@ CREATE POLICY "Admins can view all sms_logs"
 ON sms_logs FOR SELECT 
 USING (true); -- Auth handled in Netlify function
 
+-- Enable RLS on analytics_events
+ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can view analytics events" 
+ON analytics_events FOR SELECT 
+USING (true);
+
+CREATE POLICY "Public can create analytics events" 
+ON analytics_events FOR INSERT 
+WITH CHECK (true);
+
 -- =============================================
 -- Updated At Trigger
 -- =============================================
@@ -339,4 +367,7 @@ EXECUTE FUNCTION update_updated_at_column();
 --    TWILIO_ACCOUNT_SID = your-twilio-account-sid
 --    TWILIO_AUTH_TOKEN = your-twilio-auth-token
 --    TWILIO_PHONE_NUMBER = your-twilio-phone-number
+--    GA4_MEASUREMENT_ID = G-XXXXXXXXXX
+--    FIREBASE_API_KEY = your-firebase-api-key
+--    FIREBASE_PROJECT_ID = your-firebase-project-id
 -- 7. Deploy from GitHub in Netlify dashboard
