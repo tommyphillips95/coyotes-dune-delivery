@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="admin.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
+    <script src="../js/analytics.js"></script>
+    <script src="../js/firebase-analytics.js"></script>
     <style>
         /* Analytics-specific styles */
         .analytics-grid {
@@ -107,6 +111,38 @@
             color: #4b5563;
         }
 
+        .orders-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+        .orders-table th,
+        .orders-table td {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .orders-table th {
+            font-weight: 600;
+            color: #6b7280;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .orders-table tr:hover { background: #f9fafb; }
+        .status-badge-small {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status-badge-small.pending { background: rgba(201,168,124,0.12); color: #8b6f4e; }
+        .status-badge-small.assigned { background: rgba(42,74,110,0.12); color: #2a4a6e; }
+        .status-badge-small.in_progress { background: rgba(42,74,110,0.18); color: #1e3a5f; }
+        .status-badge-small.completed { background: rgba(76,140,100,0.12); color: #4C8C64; }
+        .status-badge-small.cancelled { background: rgba(196,90,62,0.1); color: #C45A3E; }
+
         .events-table {
             width: 100%;
             border-collapse: collapse;
@@ -193,6 +229,15 @@
             color: #9ca3af;
         }
         .empty-state-icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 900px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -270,7 +315,7 @@
             <div class="analytics-card conversion">
                 <div class="card-label">Conversion Rate</div>
                 <div class="card-value" id="stat-conversion">—</div>
-                <div class="card-delta neutral" id="stat-conversion-delta">Orders vs. visitors</div>
+                <div class="card-delta neutral" id="stat-conversion-delta">Applications submitted / approved</div>
             </div>
             <div class="analytics-card zones">
                 <div class="card-label">Active Zones</div>
@@ -279,16 +324,43 @@
             </div>
         </section>
 
-        <!-- Top Delivery Zones -->
-        <section class="section-card">
-            <h3>📍 Top Delivery Zones</h3>
-            <ul class="zone-list" id="zoneList">
-                <li class="empty-state">
-                    <div class="loading-spinner"></div>
-                    <p>Loading zone data…</p>
-                </li>
-            </ul>
-        </section>
+        <!-- Two-column layout: Zones + Recent Orders -->
+        <div class="two-col">
+            <!-- Top Delivery Zones -->
+            <section class="section-card">
+                <h3>📍 Top Delivery Zones</h3>
+                <ul class="zone-list" id="zoneList">
+                    <li class="empty-state">
+                        <div class="loading-spinner"></div>
+                        <p>Loading zone data…</p>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Recent Orders Table -->
+            <section class="section-card">
+                <h3>📦 Recent Orders</h3>
+                <table class="orders-table">
+                    <thead>
+                        <tr>
+                            <th>Order #</th>
+                            <th>Service</th>
+                            <th>Pickup</th>
+                            <th>Status</th>
+                            <th>Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentOrdersBody">
+                        <tr>
+                            <td colspan="5" class="empty-state">
+                                <div class="loading-spinner"></div>
+                                <p>Loading orders…</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+        </div>
 
         <!-- Recent Events -->
         <section class="section-card">
@@ -319,7 +391,7 @@
         'use strict';
 
         // ── Auth check ────────────────────────────────────────
-        const token = localStorage.getItem('coyote_auth_token');
+        const token = localStorage.getItem('admin_token');
         if (!token) {
             window.location.href = 'index.html';
             return;
@@ -406,12 +478,14 @@
                 document.getElementById('stat-orders').textContent = rangeOrders.length;
                 document.getElementById('stat-applications').textContent = rangeApps.length;
 
-                // Conversion rate (orders / total interactions proxy)
-                const totalInteractions = rangeOrders.length + rangeApps.length;
-                const conversion = totalInteractions > 0
-                    ? ((rangeOrders.length / totalInteractions) * 100).toFixed(1)
+                // Conversion rate: applications submitted / applications approved
+                const approvedApps = allApps.filter(a => a.status === 'approved');
+                const conversionRate = allApps.length > 0
+                    ? ((approvedApps.length / allApps.length) * 100).toFixed(1)
                     : '0.0';
-                document.getElementById('stat-conversion').textContent = conversion + '%';
+                document.getElementById('stat-conversion').textContent = conversionRate + '%';
+                document.getElementById('stat-conversion-delta').textContent =
+                    approvedApps.length + ' approved / ' + allApps.length + ' total';
 
                 // Active zones (unique pickup cities)
                 const zoneCounts = {};
@@ -438,8 +512,11 @@
                     }).join('');
                 }
 
+                // Render recent orders table (last 10)
+                renderRecentOrders(allOrders.slice(0, 10));
+
                 // Recent events (from analytics_events table)
-                await loadRecentEvents(startDate, endDate);
+                await loadRecentEvents(startDate, endDate, allOrders, allApps);
 
                 // Update timestamp
                 document.getElementById('last-updated').textContent = 'Updated ' + now.toLocaleTimeString();
@@ -453,16 +530,38 @@
             }
         }
 
-        async function loadRecentEvents(startDate, endDate) {
-            try {
-                // We query analytics_events via a direct Supabase REST call
-                // Since there's no dedicated function, we use the orders/applications as proxy events
-                const ordersRes = await apiGet('get-orders');
-                const appsRes = await apiGet('get-applications');
+        function renderRecentOrders(orders) {
+            const tbody = document.getElementById('recentOrdersBody');
+            if (!orders || orders.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-icon">📦</div><p>No orders yet</p></td></tr>';
+                return;
+            }
 
+            const serviceLabels = {
+                ride: 'Ride',
+                package_delivery: 'Package',
+                grocery_run: 'Grocery',
+                group_transport: 'Group',
+            };
+
+            tbody.innerHTML = orders.map(o => {
+                const statusClass = (o.status || 'pending').replace('_', '');
+                return `<tr>
+                    <td><strong>${escapeHtml(o.order_number || '—')}</strong></td>
+                    <td>${escapeHtml(serviceLabels[o.service_type] || o.service_type)}</td>
+                    <td>${escapeHtml(o.pickup_city || '—')}</td>
+                    <td><span class="status-badge-small ${statusClass}">${escapeHtml((o.status || 'pending').replace('_', ' '))}</span></td>
+                    <td>${o.estimated_price ? '$' + parseFloat(o.estimated_price).toFixed(2) : '—'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function loadRecentEvents(startDate, endDate, allOrders, allApps) {
+            try {
                 const events = [];
 
-                (ordersRes.data || []).slice(0, 10).forEach(o => {
+                // Use orders as proxy events
+                (allOrders || []).slice(0, 10).forEach(o => {
                     events.push({
                         name: 'Order Submitted',
                         category: 'order',
@@ -471,12 +570,13 @@
                     });
                 });
 
-                (appsRes.data || []).slice(0, 10).forEach(a => {
+                // Use applications as proxy events
+                (allApps || []).slice(0, 10).forEach(a => {
                     events.push({
                         name: 'Application Submitted',
                         category: 'driver',
                         time: a.created_at,
-                        details: `${a.first_name} ${a.last_name} — ${a.status}`,
+                        details: `${a.first_name || ''} ${a.last_name || ''} — ${a.status}`,
                     });
                 });
 
@@ -553,6 +653,9 @@
         if (typeof trackEvent === 'function') {
             trackEvent('admin', 'analytics_view');
         }
+        if (typeof firebaseTrackEvent === 'function') {
+            firebaseTrackEvent('analytics_dashboard_view');
+        }
 
         // ── Init ──────────────────────────────────────────────
         loadDashboard();
@@ -562,7 +665,7 @@
 
         // Global logout
         window.logout = function() {
-            localStorage.removeItem('coyote_auth_token');
+            localStorage.removeItem('admin_token');
             window.location.href = 'index.html';
         };
     })();
