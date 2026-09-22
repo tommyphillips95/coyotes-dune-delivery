@@ -7,87 +7,11 @@
     <link rel="stylesheet" href="driver.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
     <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
     <script src="../js/analytics.js"></script>
     <script src="../js/firebase-analytics.js"></script>
-    <style>
-        /* GPS / Go Online styles */
-        .gps-card {
-            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
-            color: var(--pure-white);
-            border-radius: var(--radius-lg);
-            padding: 24px;
-            margin-bottom: 20px;
-        }
-        .gps-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-        .gps-card-header h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin: 0;
-        }
-        .gps-status-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-            font-size: 0.9rem;
-        }
-        .gps-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #C45A3E;
-            transition: background 0.3s ease;
-        }
-        .gps-indicator.online {
-            background: #4C8C64;
-            animation: gpsPulse 1.5s infinite;
-        }
-        @keyframes gpsPulse {
-            0% { box-shadow: 0 0 0 0 rgba(76, 140, 100, 0.5); }
-            70% { box-shadow: 0 0 0 8px rgba(76, 140, 100, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(76, 140, 100, 0); }
-        }
-        .gps-card .btn {
-            width: 100%;
-            padding: 14px;
-            font-size: 1rem;
-            font-weight: 600;
-            border: none;
-            border-radius: var(--radius);
-            cursor: pointer;
-            transition: var(--transition);
-        }
-        .gps-card .btn-primary {
-            background: var(--sand);
-            color: var(--navy);
-        }
-        .gps-card .btn-primary:hover {
-            background: var(--sand-light);
-        }
-        .gps-card .btn-danger {
-            background: #C45A3E;
-            color: var(--pure-white);
-        }
-        .gps-card .btn-danger:hover {
-            background: #A84A32;
-        }
-        .gps-note {
-            font-size: 0.8rem;
-            opacity: 0.7;
-            margin-top: 10px;
-            line-height: 1.4;
-        }
-    </style>
 </head>
 <body>
-    <!-- LOGIN SCREEN -->
     <div id="login-screen" class="login-screen">
         <div class="login-card">
             <div class="login-brand">
@@ -111,7 +35,6 @@
         </div>
     </div>
 
-    <!-- MAIN PORTAL (hidden until authenticated) -->
     <div id="portal" class="portal" style="display:none;">
         <header class="portal-header">
             <div class="header-brand">
@@ -122,7 +45,6 @@
         </header>
 
         <main class="portal-main">
-            <!-- Status Banner -->
             <section id="status-banner" class="status-banner">
                 <div class="status-content">
                     <h2 id="status-title">Welcome!</h2>
@@ -131,77 +53,54 @@
                 <div id="status-badge" class="status-badge">pending</div>
             </section>
 
-            <!-- Approved-only sections wrapper -->
             <div id="approved-content" style="display:none;">
-                <!-- Go Online / GPS Card -->
                 <section class="gps-card" id="gps-card">
                     <div class="gps-card-header">
-                        <h3>📍 Location Sharing</h3>
+                        <h3>Location Sharing</h3>
                     </div>
                     <div class="gps-status-row">
                         <div class="gps-indicator offline" id="gps-indicator"></div>
                         <span id="gps-status">Offline</span>
                     </div>
                     <button id="go-online-btn" class="btn btn-primary">Go Online</button>
-                    <p class="gps-note">
-                        When online, your GPS location is shared with dispatch every 30 seconds so customers can track their delivery in real-time. Make sure location services are enabled on your device.
-                    </p>
+                    <p class="gps-note">When online, GPS posts every 15 seconds so customers can track the run.</p>
                 </section>
 
-                <!-- Profile Card -->
+                <section class="offer-card hidden" id="offer-card">
+                    <div class="offer-card-header">
+                        <h3>Incoming offer</h3>
+                        <span class="offer-timer" id="offer-timer">90s</span>
+                    </div>
+                    <p class="offer-route" id="offer-route">—</p>
+                    <p class="offer-meta" id="offer-meta"></p>
+                    <div class="offer-actions">
+                        <button type="button" id="offer-accept" class="btn btn-primary">Accept</button>
+                        <button type="button" id="offer-decline" class="btn btn-danger">Decline</button>
+                    </div>
+                    <p class="gps-note" id="offer-status">90 second window. Next nearest driver if you pass.</p>
+                </section>
+
                 <section class="card">
                     <div class="card-header">
-                        <h3>👤 Driver Profile</h3>
+                        <h3>Driver Profile</h3>
                         <button id="edit-profile-btn" class="btn btn-secondary btn-sm">Edit</button>
                     </div>
                     <div class="card-body" id="profile-display">
-                        <div class="info-grid" id="profile-grid">
-                            <!-- populated by JS -->
-                        </div>
+                        <div class="info-grid" id="profile-grid"></div>
                     </div>
                     <div class="card-body" id="profile-edit" style="display:none;">
                         <form id="profile-form" class="edit-form">
                             <div class="form-grid">
-                                <div class="form-group">
-                                    <label>Phone</label>
-                                    <input type="tel" id="edit-phone" name="phone">
-                                </div>
-                                <div class="form-group">
-                                    <label>Vehicle Make</label>
-                                    <input type="text" id="edit-vehicle-make" name="vehicle_make">
-                                </div>
-                                <div class="form-group">
-                                    <label>Vehicle Model</label>
-                                    <input type="text" id="edit-vehicle-model" name="vehicle_model">
-                                </div>
-                                <div class="form-group">
-                                    <label>Vehicle Year</label>
-                                    <input type="number" id="edit-vehicle-year" name="vehicle_year">
-                                </div>
-                                <div class="form-group">
-                                    <label>License Plate</label>
-                                    <input type="text" id="edit-vehicle-plate" name="vehicle_plate">
-                                </div>
-                                <div class="form-group">
-                                    <label>Insurance Provider</label>
-                                    <input type="text" id="edit-insurance-provider" name="insurance_provider">
-                                </div>
-                                <div class="form-group">
-                                    <label>Policy Number</label>
-                                    <input type="text" id="edit-insurance-policy" name="insurance_policy">
-                                </div>
-                                <div class="form-group">
-                                    <label>Bank Name</label>
-                                    <input type="text" id="edit-bank-name" name="bank_name">
-                                </div>
-                                <div class="form-group">
-                                    <label>Account Number</label>
-                                    <input type="text" id="edit-bank-account" name="bank_account">
-                                </div>
-                                <div class="form-group">
-                                    <label>Routing Number</label>
-                                    <input type="text" id="edit-bank-routing" name="bank_routing">
-                                </div>
+                                <div class="form-group"><label>Phone</label><input type="tel" id="edit-phone" name="phone"></div>
+                                <div class="form-group"><label>Vehicle Make</label><input type="text" id="edit-vehicle-make" name="vehicle_make"></div>
+                                <div class="form-group"><label>Vehicle Model</label><input type="text" id="edit-vehicle-model" name="vehicle_model"></div>
+                                <div class="form-group"><label>Vehicle Year</label><input type="number" id="edit-vehicle-year" name="vehicle_year"></div>
+                                <div class="form-group"><label>License Plate</label><input type="text" id="edit-vehicle-plate" name="vehicle_plate"></div>
+                                <div class="form-group"><label>Insurance Provider</label><input type="text" id="edit-insurance-provider" name="insurance_provider"></div>
+                                <div class="form-group"><label>Policy Number</label><input type="text" id="edit-insurance-policy" name="insurance_policy"></div>
+                                <div class="form-group"><label>Bank Name</label><input type="text" id="edit-bank-name" name="bank_name"></div>
+                                <div class="form-group"><label>Account Number</label><input type="text" id="edit-bank-account" name="bank_account"></div>
+                                <div class="form-group"><label>Routing Number</label><input type="text" id="edit-bank-routing" name="bank_routing"></div>
                             </div>
                             <div class="form-actions">
                                 <button type="button" id="cancel-edit-btn" class="btn btn-secondary">Cancel</button>
@@ -212,11 +111,8 @@
                     </div>
                 </section>
 
-                <!-- Document Upload -->
                 <section class="card">
-                    <div class="card-header">
-                        <h3>📎 Documents & Renewals</h3>
-                    </div>
+                    <div class="card-header"><h3>Documents & Renewals</h3></div>
                     <div class="card-body">
                         <p class="card-desc">Upload updated insurance cards, license renewals, or other documents.</p>
                         <div id="upload-dropzone" class="upload-dropzone">
@@ -228,55 +124,12 @@
                         <button id="upload-submit" class="btn btn-primary" style="display:none;margin-top:12px;">Upload Files</button>
                         <div id="upload-list" class="upload-list">
                             <h4>Your Documents</h4>
-                            <div id="driver-docs-list">
-                                <!-- populated by JS -->
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Earnings Placeholder -->
-                <section class="card">
-                    <div class="card-header">
-                        <h3>💰 Earnings</h3>
-                        <span class="badge badge-soon">Coming Soon</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="earnings-placeholder">
-                            <div class="placeholder-icon">📊</div>
-                            <p>Earnings tracking and payout history will appear here once the payment system is integrated.</p>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Support -->
-                <section class="card">
-                    <div class="card-header">
-                        <h3>🎧 Support</h3>
-                    </div>
-                    <div class="card-body">
-                        <p class="card-desc">Need help? Contact our support team.</p>
-                        <div class="support-options">
-                            <a href="mailto:support@coyotedunedelivery.com" class="support-link">
-                                <span class="support-icon">✉️</span>
-                                <div>
-                                    <strong>Email Support</strong>
-                                    <span>support@coyotedunedelivery.com</span>
-                                </div>
-                            </a>
-                            <a href="tel:+15551234567" class="support-link">
-                                <span class="support-icon">📞</span>
-                                <div>
-                                    <strong>Phone Support</strong>
-                                    <span>(555) 123-4567</span>
-                                </div>
-                            </a>
+                            <div id="driver-docs-list"></div>
                         </div>
                     </div>
                 </section>
             </div>
 
-            <!-- Rejected / On Hold message -->
             <div id="non-approved-message" class="non-approved-message" style="display:none;">
                 <div class="message-box">
                     <p>If you have questions about your application, please contact support.</p>
@@ -286,9 +139,8 @@
         </main>
     </div>
 
-    <!-- TOAST NOTIFICATIONS -->
     <div id="toast-container" class="toast-container"></div>
-
     <script src="driver.js"></script>
+    <script src="../js/driver-offer.js"></script>
 </body>
 </html>
