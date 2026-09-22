@@ -5,7 +5,7 @@
 
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./ _cors".replace(" ", ""));
-const { milesBetween, isBeachCity, requiredClass } = require("./zones");
+const { priceQuote } = require("./zones");
 
 function generateOrderNumber() {
   const prefix = "CDD";
@@ -92,23 +92,16 @@ exports.handler = async (event) => {
       scheduledTime = body.scheduled_time;
     }
 
-    const priceMap = {
-      ride: { base: 12, per_mile: 2.5 },
-      package_delivery: { base: 15, per_mile: 2.0 },
-      grocery_run: { base: 18, per_mile: 1.5 },
-      group_transport: { base: 35, per_mile: 3.0 },
-    };
-    const pricing = priceMap[body.service_type] || priceMap.ride;
     const pickupCity = body.pickup_city.trim();
     const dropoffCity = (body.dropoff_city || body.pickup_city).trim();
-    const miles = milesBetween(pickupCity, dropoffCity);
-    let estimatedPrice = pricing.base + miles * pricing.per_mile;
-    if (isBeachCity(pickupCity) || isBeachCity(dropoffCity)) estimatedPrice += 8;
-    if (body.passenger_count && body.passenger_count > 1) estimatedPrice += (body.passenger_count - 1) * 3;
-    if (body.package_size === "large") estimatedPrice += 8;
-    if (body.package_size === "oversized") estimatedPrice += 15;
-    estimatedPrice = Math.round(estimatedPrice * 100) / 100;
-    const vehicle = requiredClass(pickupCity, dropoffCity);
+    const priced = priceQuote(pickupCity, dropoffCity, {
+      service_type: body.service_type,
+      passenger_count: body.passenger_count,
+      package_size: body.package_size,
+    });
+    const miles = priced.miles;
+    const estimatedPrice = priced.total;
+    const vehicle = priced.requiredClass;
 
     const orderData = {
       order_number: orderNumber,
