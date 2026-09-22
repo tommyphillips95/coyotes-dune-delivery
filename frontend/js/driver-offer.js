@@ -1,10 +1,28 @@
-/* Incoming auto-offer card. Loaded after driver.js.
-   Polls /api/pending-offer and posts /api/respond-offer. 90s countdown. */
+/* Incoming auto-offer card. Polls /api/pending-offer, posts /api/respond-offer.
+   Injects the 90s Accept/Decline card if the portal HTML does not have it. */
 (function () {
   const POLL_MS = 4000;
   let pollTimer = null;
   let tickTimer = null;
   let current = null;
+
+  function ensureCard() {
+    if (document.getElementById("offer-card")) return;
+    if (!document.getElementById("offer-style")) {
+      const style = document.createElement("style");
+      style.id = "offer-style";
+      style.textContent = ".offer-card{background:#fff;border:2px solid #C9A87C;border-radius:14px;padding:20px;margin-bottom:20px}.offer-card.hidden{display:none}.offer-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.offer-timer{font-variant-numeric:tabular-nums;font-weight:700;color:#C45A3E}.offer-route{font-weight:600;margin:0 0 6px}.offer-meta{font-size:.88rem;color:#6B6B6B;margin:0 0 14px}.offer-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.offer-actions .btn{padding:12px;border:none;border-radius:8px;font-weight:600;cursor:pointer}.offer-actions .btn-primary{background:#4C8C64;color:#fff}.offer-actions .btn-danger{background:#C45A3E;color:#fff}";
+      document.head.appendChild(style);
+    }
+    const card = document.createElement("section");
+    card.id = "offer-card";
+    card.className = "offer-card hidden";
+    card.innerHTML = "<div class=\"offer-card-header\"><h3>Incoming offer</h3><span class=\"offer-timer\" id=\"offer-timer\">90s</span></div><p class=\"offer-route\" id=\"offer-route\">\u2014</p><p class=\"offer-meta\" id=\"offer-meta\"></p><div class=\"offer-actions\"><button type=\"button\" id=\"offer-accept\" class=\"btn btn-primary\">Accept</button><button type=\"button\" id=\"offer-decline\" class=\"btn btn-danger\">Decline</button></div><p class=\"gps-note\" id=\"offer-status\">90 second window. Next nearest driver if you pass.</p>";
+    const host = document.getElementById("approved-content") || document.querySelector(".portal-main") || document.body;
+    const gps = document.getElementById("gps-card");
+    if (gps && gps.parentNode) gps.parentNode.insertBefore(card, gps.nextSibling);
+    else host.insertBefore(card, host.firstChild);
+  }
 
   function session() {
     try { return JSON.parse(localStorage.getItem("driver_session") || "null"); }
@@ -17,7 +35,6 @@
   }
 
   function toast(msg, type) {
-    if (typeof window.showToast === "function") return window.showToast(msg, type);
     const box = document.getElementById("toast-container");
     if (!box) return;
     const el = document.createElement("div");
@@ -35,6 +52,7 @@
   }
 
   function render(offer) {
+    ensureCard();
     const card = document.getElementById("offer-card");
     if (!card) return;
     current = offer;
@@ -102,17 +120,18 @@
     }
   }
 
-  function start() {
-    if (pollTimer) return;
-    poll();
-    pollTimer = setInterval(poll, POLL_MS);
-  }
-
-  document.addEventListener("DOMContentLoaded", function () {
+  function bind() {
+    ensureCard();
     const acceptBtn = document.getElementById("offer-accept");
     const declineBtn = document.getElementById("offer-decline");
     if (acceptBtn) acceptBtn.addEventListener("click", function () { respond("accept"); });
     if (declineBtn) declineBtn.addEventListener("click", function () { respond("decline"); });
-    start();
-  });
+    if (!pollTimer) {
+      poll();
+      pollTimer = setInterval(poll, POLL_MS);
+    }
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
+  else bind();
 })();
