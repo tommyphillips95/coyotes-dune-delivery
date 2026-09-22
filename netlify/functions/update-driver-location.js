@@ -1,9 +1,6 @@
 /**
- * Netlify Function: Update Driver Location
  * POST /api/update-driver-location
- * 
- * Body: { driver_id, lat, lng, order_id (optional), accuracy (optional) }
- * Stores the driver's current GPS location in the driver_locations table.
+ * Body: { driver_id, lat, lng, order_id?, accuracy?, online? }
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -26,41 +23,23 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
 
-    // Validate required fields
     if (!body.driver_id) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'driver_id is required' }),
-      };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'driver_id is required' }) };
     }
 
     if (body.lat === undefined || body.lng === undefined) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'lat and lng are required' }),
-      };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'lat and lng are required' }) };
     }
 
-    // Validate lat/lng are valid numbers
     const lat = parseFloat(body.lat);
     const lng = parseFloat(body.lng);
 
     if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Invalid latitude or longitude values' }),
-      };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid latitude or longitude values' }) };
     }
 
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-    // Insert location record
     const locationData = {
       driver_id: body.driver_id,
       lat: lat,
@@ -70,13 +49,11 @@ exports.handler = async (event) => {
       timestamp: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('driver_locations')
-      .insert([locationData])
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('driver_locations').insert([locationData]).select().single();
     if (error) throw error;
+
+    const online = body.online !== false;
+    await supabase.from('applications').update({ online }).eq('id', body.driver_id);
 
     return {
       statusCode: 201,
