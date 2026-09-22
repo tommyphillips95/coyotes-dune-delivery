@@ -1,5 +1,6 @@
-/* Coastal Bend service area — vehicle class + access flags.
-   Source of truth for order pricing, driver class, and weather holds. */
+/* Coastal Bend service area — vehicle class + access flags + price.
+   Source of truth for order pricing, driver class, and weather holds.
+   Keep in sync with netlify/functions/zones.js. */
 (function (root) {
   const ZONES = {
     market: "Texas Gulf Coast",
@@ -19,14 +20,19 @@
       "Mustang Island-Port Aransas": 6,
       "Mustang Island-Padre Island": 14,
       "Padre Island-Mustang Island": 14,
+      "Mustang Island-Mustang Island": 4,
       "Corpus Christi-Port Aransas": 35,
       "Port Aransas-Corpus Christi": 35,
       "Corpus Christi-Padre Island": 22,
       "Padre Island-Corpus Christi": 22,
       "Corpus Christi-Mustang Island": 28,
       "Mustang Island-Corpus Christi": 28,
+      "Corpus Christi-Corpus Christi": 6,
       "Rockport-Port Aransas": 25,
-      "Port Aransas-Rockport": 25
+      "Port Aransas-Rockport": 25,
+      "Rockport-Rockport": 5,
+      "Rockport-Corpus Christi": 30,
+      "Corpus Christi-Rockport": 30
     },
     vehicleClasses: [
       { id: "2wd", label: "2WD car / small SUV", sand: false, beach_access: false },
@@ -39,7 +45,17 @@
       wind_mph_hold: 35,
       lightning_hold: true,
       tropical_hold: true
-    }
+    },
+    rates: {
+      ride: { base: 12, per_mile: 2.5 },
+      package_delivery: { base: 15, per_mile: 2.0 },
+      grocery_run: { base: 18, per_mile: 1.5 },
+      group_transport: { base: 35, per_mile: 3.0 }
+    },
+    beachSurcharge: 8,
+    extraPassenger: 3,
+    packageLarge: 8,
+    packageOversized: 15
   };
 
   function norm(name) {
@@ -66,8 +82,8 @@
   }
 
   function milesBetween(pickupCity, dropoffCity) {
-    const a = pickupCity || "";
-    const b = dropoffCity || pickupCity || "";
+    const a = String(pickupCity || "").trim();
+    const b = String(dropoffCity || pickupCity || "").trim();
     const table = ZONES.miles[a + "-" + b];
     if (typeof table === "number") return table;
     const ha = hubByName(a);
@@ -110,6 +126,32 @@
     };
   }
 
+  function priceQuote(pickupCity, dropoffCity, opts) {
+    const o = opts || {};
+    const q = quote(pickupCity, dropoffCity, o.obs);
+    const rates = ZONES.rates[o.service_type || "ride"] || ZONES.rates.ride;
+    let total = rates.base + q.miles * rates.per_mile;
+    const beachSurcharge = q.beach ? ZONES.beachSurcharge : 0;
+    total += beachSurcharge;
+    const pax = parseInt(o.passenger_count || 1, 10) || 1;
+    const extraPax = pax > 1 ? (pax - 1) * ZONES.extraPassenger : 0;
+    total += extraPax;
+    let pkg = 0;
+    if (o.package_size === "large") pkg = ZONES.packageLarge;
+    if (o.package_size === "oversized") pkg = ZONES.packageOversized;
+    total += pkg;
+    total = Math.round(total * 100) / 100;
+    return Object.assign({}, q, {
+      serviceType: o.service_type || "ride",
+      base: rates.base,
+      perMile: rates.per_mile,
+      beachSurcharge: beachSurcharge,
+      extraPassenger: extraPax,
+      packageAdd: pkg,
+      total: total
+    });
+  }
+
   root.COYOTE_ZONES = ZONES;
   root.CoyoteZones = {
     milesBetween: milesBetween,
@@ -118,6 +160,11 @@
     requiredClass: requiredClass,
     weatherHold: weatherHold,
     quote: quote,
+    priceQuote: priceQuote,
     isBeachCity: isBeachCity
   };
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { ZONES: ZONES, CoyoteZones: root.CoyoteZones };
+  }
 })(typeof window !== "undefined" ? window : globalThis);
