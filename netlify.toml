@@ -36,6 +36,11 @@
   status = 200
 
 [[redirects]]
+  from = "/status"
+  to = "/driver/index.html"
+  status = 200
+
+[[redirects]]
   from = "/status/*"
   to = "/driver/index.html"
   status = 200
