@@ -4,7 +4,7 @@
   "description": "Coyote's Dune Delivery - Full-stack driver onboarding platform",
   "main": "index.html",
   "scripts": {
-    "test": "echo \"No tests yet\""
+    "test": "node tests/quote-parity.test.js"
   },
   "repository": {
     "type": "git",
