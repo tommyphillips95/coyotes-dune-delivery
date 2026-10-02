@@ -4,7 +4,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
-const { headers: corsHeaders } = require("./ _cors".replace(" ", ""));
+const { headers: corsHeaders } = require("./_cors");
 const { priceQuote } = require("./zones");
 
 function generateOrderNumber() {
