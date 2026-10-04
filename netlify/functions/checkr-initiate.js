@@ -92,6 +92,17 @@ exports.handler = async (event) => {
     };
   }
 
+  // Verify admin token
+  try {
+    const jwt = require('jsonwebtoken');
+    const token = (event.headers.authorization || '').replace('Bearer ', '');
+    if (!token || !process.env.JWT_SECRET) throw new Error('Unauthorized');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'admin') throw new Error('Admin access required');
+  } catch (err) {
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
   try {
     const body = JSON.parse(event.body || '{}');
     const { applicationId } = body;
