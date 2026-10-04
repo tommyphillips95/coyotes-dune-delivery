@@ -1,0 +1,146 @@
+name: Grok coordination
+
+# Lightweight agent coordination for this repo (see AGENTS.md).
+# - pr-review: one checklist comment per PR (updated in place, never duplicated).
+# - issue-routing: routes agent-task issues to an agent lane by title prefix or label.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches:
+      - main
+      - agent/grok/cdd-launch-v1
+  issues:
+    types: [opened, labeled, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  pr-review:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post or update Grok review checklist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = '<!-- grok-review -->';
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+
+            // Linked agent-task issue: any #N in the PR body that is an issue labeled agent-task.
+            const refs = [...new Set(((pr.body || '').match(/#(\d+)/g) || []).map(r => Number(r.slice(1))))];
+            const linked = [];
+            for (const n of refs) {
+              try {
+                const { data } = await github.rest.issues.get({ owner, repo, issue_number: n });
+                if (!data.pull_request && (data.labels || []).some(l => (l.name || l) === 'agent-task')) linked.push(n);
+              } catch (e) { /* ignore missing refs */ }
+            }
+
+            const toMain = pr.base.ref === 'main';
+            const lines = [
+              MARKER,
+              '### Grok review desk',
+              '',
+              `\`${pr.head.ref}\` → \`${pr.base.ref}\``,
+              '',
+              '- [ ] CI passes (`CI / test`: `npm test` + `node --check` on netlify/functions)',
+              linked.length
+                ? `- [x] Linked \`agent-task\` issue: ${linked.map(n => '#' + n).join(', ')}`
+                : '- [ ] Linked `agent-task` issue (add `Closes #N` to the PR body)',
+              toMain
+                ? '- [ ] **Tommy approval required**: this PR targets `main`'
+                : '- [x] Not targeting `main`: Tommy approval not required, but CI must pass',
+              '',
+              '_Posted by `.github/workflows/grok.yml`. This comment is updated in place, not duplicated._',
+            ];
+            const body = lines.join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const existing = comments.find(c => (c.body || '').includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              core.info(`Updated review comment ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+              core.info('Created review comment');
+            }
+
+  issue-routing:
+    if: >-
+      github.event_name == 'issues' &&
+      contains(github.event.issue.labels.*.name, 'agent-task')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Route agent-task issue to an agent lane
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = '<!-- grok-routing -->';
+            const AGENTS = ['claude', 'codex', 'grok', 'tommy'];
+            const COLORS = { claude: 'd97757', codex: '10a37f', grok: '000000', tommy: '1d76db' };
+            const issue = context.payload.issue;
+            const { owner, repo } = context.repo;
+            const labels = (issue.labels || []).map(l => (l.name || l).toLowerCase());
+
+            // Title prefix wins; fall back to a plain claude/codex/grok label.
+            const m = (issue.title || '').match(/^\s*\[(claude|codex|grok|tommy)\]/i);
+            let agent = m ? m[1].toLowerCase() : null;
+            if (!agent) agent = ['claude', 'codex', 'grok'].find(a => labels.includes(a)) || null;
+            if (!agent) { core.info('No agent lane found in title or labels; nothing to route.'); return; }
+
+            const laneLabel = `agent-${agent}`;
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: laneLabel });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({
+                owner, repo, name: laneLabel, color: COLORS[agent],
+                description: `agent-task routed to ${agent}`,
+              });
+            }
+            if (!labels.includes(laneLabel)) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [laneLabel] });
+            }
+            // If the lane changed (e.g. title edited), drop stale lane labels.
+            for (const a of AGENTS) {
+              const stale = `agent-${a}`;
+              if (a !== agent && labels.includes(stale)) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: issue.number, name: stale });
+              }
+            }
+
+            const notes = {
+              claude: '@claude please pick this up: follow AGENTS.md, branch `agent/claude/<slug>`, open a small PR into `agent/grok/cdd-launch-v1`, and make sure CI passes.',
+              codex: '@codex please pick this up: follow AGENTS.md, branch `agent/codex/<slug>`, open a small PR into `agent/grok/cdd-launch-v1`, and make sure CI passes.',
+              grok: 'Routed to the Grok lane. Grok picks this up from the `agent-task` desk (branch `agent/grok/<slug>`).',
+              tommy: 'Routed to Tommy. These are manual owner steps (secrets, integrations, approvals) that agents cannot do.',
+            };
+            const body = [
+              MARKER,
+              `<!-- grok-routing-agent:${agent} -->`,
+              `**Routed to \`${agent}\`** (label \`${laneLabel}\`).`,
+              '',
+              notes[agent],
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: issue.number, per_page: 100,
+            });
+            const existing = comments.find(c => (c.body || '').includes(MARKER));
+            if (!existing) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body });
+              core.info(`Posted routing comment for ${agent}`);
+            } else if (!existing.body.includes(`grok-routing-agent:${agent} `)) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              core.info(`Lane changed; updated routing comment ${existing.id} to ${agent}`);
+            } else {
+              core.info('Routing comment already present; nothing to do.');
+            }
