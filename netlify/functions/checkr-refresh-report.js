@@ -30,7 +30,8 @@ exports.handler = async (event) => {
 
   try {
     const jwt = require('jsonwebtoken');
-    const JWT_SECRET = process.env.JWT_SECRET || 'coyote-dune-delivery-secret-key-2024';
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) throw new Error('JWT_SECRET not configured');
     const decoded = jwt.verify(token, JWT_SECRET);
     if (decoded.role !== 'admin') {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Admin access required' }) };
