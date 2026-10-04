@@ -11,6 +11,7 @@ Read README.md and LAUNCH.md before changing behavior.
 Summoning agents:
 - Claude: mention `@claude` in an issue, PR comment, or PR review comment (`.github/workflows/claude.yml`, needs the `ANTHROPIC_API_KEY` repo secret).
 - Codex: mention `@codex` in an issue or PR comment (ChatGPT Codex GitHub integration, connected by Tommy).
+- Routing: `.github/workflows/grok.yml` reads the title prefix (`[claude]`/`[codex]`/`[grok]`/`[tommy]`, or a `claude`/`codex`/`grok` label) on `agent-task` issues. It adds an `agent-<name>` label and posts one routing comment (with `@claude`/`@codex` for those lanes). PRs into `main` or `agent/grok/cdd-launch-v1` get one Grok checklist comment.
 
 Rules:
 - Incremental PRs. Do not rewrite this into Next.js/RN as the first move.
