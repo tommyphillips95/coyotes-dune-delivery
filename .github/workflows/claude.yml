@@ -34,5 +34,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Required so Claude can read CI status/logs via the action's CI tools.
+          # Job-level permissions.actions:read alone is not enough for the OIDC exchange.
+          additional_permissions: |
+            actions: read
           # Claude branches follow AGENTS.md naming: agent/claude/<slug>
           branch_prefix: "agent/claude/"
