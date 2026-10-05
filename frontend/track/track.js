@@ -106,10 +106,24 @@
     lookupBtn.disabled = true;
     lookupBtn.textContent = "Tracking...";
     try {
-      const params = new URLSearchParams();
-      if (orderNumber) params.set("order_number", orderNumber);
-      if (phone) params.set("phone", phone);
-      const res = await fetch(API_BASE + "/get-orders?" + params.toString());
+      if (!orderNumber || !phone) {
+        alert("Please enter both order number and phone number.");
+        return;
+      }
+      // Mint a short-lived customer tracking JWT (order_number + phone possession).
+      const authRes = await fetch(API_BASE + "/get-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_number: orderNumber, phone: phone }),
+      });
+      const authJson = await authRes.json();
+      if (!authRes.ok || !authJson.token) {
+        alert("Order not found. Please check your order number and phone number.");
+        return;
+      }
+      const res = await fetch(API_BASE + "/get-orders", {
+        headers: { Authorization: "Bearer " + authJson.token },
+      });
       const json = await res.json();
       const payload = json.data || json;
       const rows = Array.isArray(payload) ? payload : payload && payload.data ? payload.data : payload ? [payload] : [];

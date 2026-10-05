@@ -17,7 +17,8 @@ Customer order, driver apply/portal, admin dispatch, GPS ping tables.
 - SQL: `schema.sql` then `schema/launch_2026_09_22.sql` then `schema/dispatch_offers.sql`
 
 ## To go live this week
-1. Netlify env: JWT, ADMIN_USERNAME, ADMIN_PASSWORD, SUPABASE_*, STRIPE_*, TWILIO_*, SITE_ORIGIN, FIREBASE_*
+1. Netlify env (see root `.env.example`): JWT, ADMIN_USERNAME, ADMIN_PASSWORD, SUPABASE_*, STRIPE_*, TWILIO_*, SITE_ORIGIN=`https://coyote-dune-delivery.netlify.app`, FIREBASE_*
+   Live site: https://coyote-dune-delivery.netlify.app (Coyote Country). Old Beach Brings URL is disabled.
 2. Run `schema.sql` then `schema/launch_2026_09_22.sql` then `schema/dispatch_offers.sql` on the Supabase project
 3. Change admin password in Netlify env — never commit it
 4. Do not collect SSN/bank on `/apply` (Checkr + Stripe Connect)

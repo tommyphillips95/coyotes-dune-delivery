@@ -409,7 +409,7 @@ The app integrates **Stripe** for secure customer payments. Here's how it works:
 
 1. Go to [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks)
 2. Click "Add endpoint"
-3. Enter your endpoint URL: `https://coyotes-dune-delivery.netlify.app/api/payment-webhook`
+3. Enter your endpoint URL: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`
 4. Select these events to listen for:
    - `payment_intent.succeeded`
    - `payment_intent.payment_failed`
@@ -566,7 +566,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
-    "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
+    "message": "New order available! Log in to accept: https://coyote-dune-delivery.netlify.app/driver/",
     "order_id": "your-order-uuid"
   }'
 ```
@@ -837,7 +837,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
-    "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
+    "message": "New order available! Log in to accept: https://coyote-dune-delivery.netlify.app/driver/",
     "order_id": "optional-order-uuid"
   }'
 ```
