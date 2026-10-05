@@ -1,4 +1,4 @@
-# Coyote launch — separate from Nexform
+# Coyote launch checklist
 
 This repo is the delivery product only.
 
