@@ -866,7 +866,14 @@
         </div>
     </footer>
 
+    <!-- Stripe.js + payment UI (publishable key from /api/public-config or window.STRIPE_PUBLISHABLE_KEY) -->
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+      // Optional override; leave empty to load from Netlify via /api/public-config
+      window.STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
+    </script>
     <script src="../js/main.js"></script>
     <script src="../js/order.js"></script>
+    <script src="../js/stripe-payment.js"></script>
 </body>
 </html>

@@ -174,8 +174,39 @@ check("_cors fallback is live site URL", () => {
   if (prev !== undefined) process.env.SITE_ORIGIN = prev;
 });
 
-if (failed) {
-  console.error(failed + " test(s) failed");
-  process.exit(1);
+async function checkAsync(name, fn) {
+  try {
+    await fn();
+    console.log("ok -", name);
+  } catch (e) {
+    failed++;
+    console.error("FAIL -", name, e.message);
+  }
 }
-console.log("All payment/auth hardening tests passed.");
+
+(async () => {
+  const pub = require(path.join(__dirname, "..", "netlify/functions/public-config.js"));
+
+  await checkAsync("public-config rejects POST", async () => {
+    const res = await pub.handler({ httpMethod: "POST", headers: {} });
+    assert.strictEqual(res.statusCode, 405);
+  });
+
+  await checkAsync("public-config GET returns stripePublishableKey field (empty ok)", async () => {
+    const prev = process.env.STRIPE_PUBLISHABLE_KEY;
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
+    const res = await pub.handler({ httpMethod: "GET", headers: {} });
+    assert.strictEqual(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.strictEqual(body.stripePublishableKey, "");
+    assert.strictEqual(body.stripeConfigured, false);
+    assert.match(body.webhookUrl, /coyote-dune-delivery\.netlify\.app\/api\/payment-webhook/);
+    if (prev !== undefined) process.env.STRIPE_PUBLISHABLE_KEY = prev;
+  });
+
+  if (failed) {
+    console.error(failed + " test(s) failed");
+    process.exit(1);
+  }
+  console.log("All payment/auth hardening tests passed.");
+})();
