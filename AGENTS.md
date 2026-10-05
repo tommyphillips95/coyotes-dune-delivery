@@ -4,7 +4,6 @@ This repo is Coyote's Dune Delivery — a live vanilla JS + Netlify + Supabase a
 
 Shared desk for Grok + Claude + Codex: GitHub issues in this repo labeled `agent-task`.
 Pick up work there, put the owner lane in the title (`[grok]`, `[claude]`, `[codex]`, `[tommy]`), and link the issue from your PR.
-(The old `coyote-war-room` repo link is dead; do not rely on it.)
 
 Read README.md and LAUNCH.md before changing behavior.
 
