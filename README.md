@@ -924,7 +924,7 @@ The Netlify functions include CORS headers. If you're seeing CORS errors, ensure
 
 ### Issue: Payment form not showing
 
-1. Check that `STRIPE_PUBLISHABLE_KEY` is set in the frontend. You can set it inline in `frontend/order/index.html` or via a Netlify environment variable injected at build time.
+1. Check that `STRIPE_PUBLISHABLE_KEY` is set in Netlify env. The order page loads it from `GET /api/public-config` (or override `window.STRIPE_PUBLISHABLE_KEY` inline). Webhook URL: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`.
 2. Check the browser console for JavaScript errors
 3. Ensure Stripe.js is loading from `https://js.stripe.com/v3/`
 
