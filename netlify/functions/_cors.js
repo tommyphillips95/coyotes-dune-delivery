@@ -5,7 +5,7 @@ function allowedOrigin(event) {
   if (configured.includes(requestOrigin)) return requestOrigin;
   if (configured.length) return configured[0];
   if (/localhost|127\.0\.0\.1/.test(requestOrigin)) return requestOrigin;
-  return "https://coyotes-dune-delivery.netlify.app";
+  return "https://coyote-dune-delivery.netlify.app";
 }
 
 function headers(event, extra) {

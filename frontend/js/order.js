@@ -253,7 +253,7 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 try {
                     const orders = JSON.parse(localStorage.getItem('cdd_orders') || '[]');
-                    orders.push({ orderNumber: result.data.orderNumber, orderId: result.data.orderId, createdAt: new Date().toISOString(), serviceType: orderData.service_type });
+                    orders.push({ orderNumber: result.data.orderNumber, orderId: result.data.orderId, trackingToken: result.data.trackingToken || null, createdAt: new Date().toISOString(), serviceType: orderData.service_type });
                     localStorage.setItem('cdd_orders', JSON.stringify(orders));
                 } catch (_) {}
                 const estimatedTotal = calculateEstimate();
@@ -282,15 +282,20 @@
     async function trackOrder() {
         const orderNum = document.getElementById('trackOrderNumber').value.trim().toUpperCase();
         const phone = document.getElementById('trackPhone').value.trim();
-        if (!orderNum && !phone) { alert('Please enter an order number or phone number'); return; }
+        if (!orderNum || !phone) { alert('Please enter both order number and phone number'); return; }
         const btn = document.getElementById('trackBtn');
         btn.disabled = true;
         btn.textContent = 'Tracking...';
         try {
-            const params = {};
-            if (orderNum) params.order_number = orderNum;
-            if (phone) params.phone = phone;
-            const result = await CoyoteAPI.get('/api/get-orders', params);
+            const auth = await CoyoteAPI.post('/api/get-orders', { order_number: orderNum, phone: phone });
+            if (!auth.ok || !auth.data || !auth.data.token) {
+                alert('Order not found. Please check your order number and phone number.');
+                return;
+            }
+            const result = await CoyoteAPI.request('/api/get-orders', {
+                method: 'GET',
+                headers: { Authorization: 'Bearer ' + auth.data.token }
+            });
             if (result.ok && result.data && (Array.isArray(result.data.data) ? result.data.data.length > 0 : result.data.data)) {
                 const order = Array.isArray(result.data.data) ? result.data.data[0] : result.data.data;
                 displayTrackingResult(order);

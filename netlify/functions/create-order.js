@@ -6,6 +6,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
 const { priceQuote } = require("./zones");
+const { issueTrackingToken } = require("./_auth");
 
 function generateOrderNumber() {
   const prefix = "CDD";
@@ -151,6 +152,8 @@ exports.handler = async (event) => {
       });
     }
 
+    const trackingToken = issueTrackingToken(order);
+
     return {
       statusCode: 201,
       headers,
@@ -162,6 +165,7 @@ exports.handler = async (event) => {
         miles: miles,
         requiredClass: vehicle,
         status: order.status,
+        trackingToken: trackingToken || undefined,
       }),
     };
   } catch (err) {
