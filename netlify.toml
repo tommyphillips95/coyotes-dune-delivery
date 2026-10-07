@@ -56,3 +56,10 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Local development only; production build settings above are unchanged.
+[dev]
+  framework = "#static"
+  publish = "frontend"
+  port = 8888
+  autoLaunch = false

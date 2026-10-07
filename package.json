@@ -4,7 +4,9 @@
   "description": "Coyote's Dune Delivery - Full-stack driver onboarding platform",
   "main": "index.html",
   "scripts": {
-    "test": "echo \"No tests yet\""
+    "test": "echo \"No tests yet\"",
+    "dev": "netlify dev --offline --no-open",
+    "check": "node scripts/check-environment.js"
   },
   "repository": {
     "type": "git",
@@ -24,5 +26,8 @@
     "jsonwebtoken": "^9.0.2",
     "stripe": "^14.0.0",
     "twilio": "^5.2.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "27.11.2"
   }
 }
