@@ -21,15 +21,18 @@ Container model: **setup** (network on) → optional **maintenance** on cache re
 |---|---|
 | Environment repo | `tommyphillips95/coyotes-dune-delivery` |
 | Default work branch | `agent/grok/cdd-launch-v1` — **never push straight to `main`** |
-| Setup script | `.codex/setup.sh` |
-| Maintenance script | `.codex/maintenance.sh` |
-| Validate | `npm test` and `node --check` on every file in `netlify/functions/` (same as CI) |
+| Node | 22 (22.13+, see `.nvmrc`) |
+| Setup script | `bash scripts/setup-environment.sh` (`.codex/setup.sh` wraps it) |
+| Maintenance script | `bash scripts/setup-environment.sh` (`.codex/maintenance.sh` wraps it with `SKIP_VALIDATE=1`) |
+| Validate | `npm test && npm run check` (same as CI) |
+| Run locally | `npm run dev` (Netlify Dev, offline, port 8888) |
 | Agent branches | `agent/codex/<slug>` |
 | Open PRs into | `agent/grok/cdd-launch-v1` |
 | Summon | `@codex` on an `agent-task` issue or PR comment |
-| Internet | **Setup/maintenance:** on (npm install). **Agent:** off by default — prefer mocked unit tests; do not call live Stripe/Supabase unless Tommy explicitly asks and enables agent network |
+| Internet | **Setup/maintenance:** on (npm). **Agent:** off by default; prefer mocked unit tests, no live Stripe/Supabase calls unless Tommy asks |
+| Secrets | None needed. Never invent keys; root `.env.example` lists names only |
 
-Never invent API keys or commit secrets. Use root `.env.example` for env **names** only. Live site: `https://coyote-dune-delivery.netlify.app`. Stripe webhook URL: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`.
+Live site: `https://coyote-dune-delivery.netlify.app`. Stripe webhook URL: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`. See `docs/codex-cloud.md` and `docs/development-environment.md`.
 
 ## Rules
 

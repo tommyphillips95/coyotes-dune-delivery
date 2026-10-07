@@ -7,8 +7,7 @@ This guide wires ChatGPT Codex Cloud to `tommyphillips95/coyotes-dune-delivery` 
 1. ChatGPT account with Codex Cloud.
 2. GitHub connected in ChatGPT (the `chatgpt-codex-connector` GitHub App must see this repo).
 3. Scripts already in the repo (on `agent/grok/cdd-launch-v1`):
-   - `.codex/setup.sh`
-   - `.codex/maintenance.sh`
+   - `scripts/setup-environment.sh` (wrapped by `.codex/setup.sh` / `.codex/maintenance.sh`)
    - `AGENTS.md` (Codex Cloud section)
 
 > **PR #19** (CI-only workflows onto `main`) is separate: it enables GitHub Actions `grok.yml` routing comments from the default branch. The Codex **app** can still run tasks once the Cloud environment exists, even before #19 merges.
@@ -21,18 +20,18 @@ This guide wires ChatGPT Codex Cloud to `tommyphillips95/coyotes-dune-delivery` 
 4. **Setup script** — paste path or contents of:
 
    ```text
-   .codex/setup.sh
+   bash scripts/setup-environment.sh
    ```
 
-   Setup runs with network (npm). It installs deps and runs `npm test` + `node --check` on Netlify functions so a broken tree fails early.
+   Node 22 (22.13+). Setup runs with network (npm). It runs `npm ci`, then `npm test` + `npm run check`, so a broken tree fails early. No secrets needed.
 
 5. **Maintenance script** — paste:
 
    ```text
-   .codex/maintenance.sh
+   bash scripts/setup-environment.sh
    ```
 
-   Runs on cache resume; re-installs npm deps only (fast, idempotent).
+   Runs on cache resume. (`.codex/maintenance.sh` is the same script with `SKIP_VALIDATE=1`.)
 
 6. **Internet policy**
    - Setup / maintenance: **allow** (needed for `npm install`).
@@ -49,10 +48,9 @@ This guide wires ChatGPT Codex Cloud to `tommyphillips95/coyotes-dune-delivery` 
 ## Validate locally (same as setup)
 
 ```bash
-bash .codex/setup.sh
+bash scripts/setup-environment.sh
 # or:
-npm test
-for f in netlify/functions/*.js; do node --check "$f"; done
+npm test && npm run check
 ```
 
 ## Stripe / live site notes (for agents)

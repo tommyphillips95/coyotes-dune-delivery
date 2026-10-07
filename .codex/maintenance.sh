@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# Codex Cloud maintenance — fast, idempotent refresh of node_modules on cache resume.
+# Codex Cloud maintenance (cache resume): same script, skip validation for speed.
 set -euo pipefail
-
-cd "$(dirname "$0")/.."
-
-echo "==> Coyote's Dune Delivery Codex maintenance"
-
-if [[ -f package-lock.json ]]; then
-  echo "==> npm ci"
-  npm ci --no-audit --no-fund
-else
-  echo "==> npm install"
-  npm install --no-audit --no-fund
-fi
-
-echo "==> maintenance ok"
+SKIP_VALIDATE=1 exec bash "$(dirname "$0")/../scripts/setup-environment.sh"
