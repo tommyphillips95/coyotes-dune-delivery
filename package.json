@@ -4,7 +4,7 @@
   "description": "Coyote's Dune Delivery - Full-stack driver onboarding platform",
   "main": "index.html",
   "scripts": {
-    "test": "echo \"No tests yet\"",
+    "test": "node tests/quote-parity.test.js && node tests/payment-hardening.test.js",
     "dev": "netlify dev --offline --no-open",
     "check": "node scripts/check-environment.js"
   },
@@ -29,5 +29,8 @@
   },
   "devDependencies": {
     "netlify-cli": "27.11.2"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

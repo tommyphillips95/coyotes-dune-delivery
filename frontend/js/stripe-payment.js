@@ -16,8 +16,26 @@
     'use strict';
 
     // ── Configuration ─────────────────────────────────────────
-    // Stripe publishable key is loaded from a global set by the backend or inline
-    const STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
+    // Prefer window.STRIPE_PUBLISHABLE_KEY (inline / Netlify snippet).
+    // Otherwise fetch /api/public-config (Netlify env STRIPE_PUBLISHABLE_KEY).
+    let STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
+
+    async function ensurePublishableKey() {
+        if (STRIPE_PUBLISHABLE_KEY) return STRIPE_PUBLISHABLE_KEY;
+        try {
+            const res = await fetch('/api/public-config');
+            if (!res.ok) return '';
+            const data = await res.json();
+            STRIPE_PUBLISHABLE_KEY = data.stripePublishableKey || '';
+            if (STRIPE_PUBLISHABLE_KEY) {
+                window.STRIPE_PUBLISHABLE_KEY = STRIPE_PUBLISHABLE_KEY;
+            }
+            return STRIPE_PUBLISHABLE_KEY;
+        } catch (err) {
+            console.warn('Could not load Stripe publishable key from /api/public-config', err);
+            return '';
+        }
+    }
 
     // ── State ─────────────────────────────────────────────────
     let stripe = null;
@@ -41,9 +59,14 @@
     let paymentSpinner = null;
 
     // ── Initialize Stripe ─────────────────────────────────────
-    function initStripe() {
+    async function initStripe() {
+        await ensurePublishableKey();
         if (!STRIPE_PUBLISHABLE_KEY) {
-            console.warn('Stripe publishable key not configured. Payment form will not be available.');
+            console.warn('Stripe publishable key not configured. Set STRIPE_PUBLISHABLE_KEY in Netlify or window.STRIPE_PUBLISHABLE_KEY.');
+            return false;
+        }
+        if (typeof Stripe === 'undefined') {
+            console.error('Stripe.js not loaded. Include https://js.stripe.com/v3/ before stripe-payment.js');
             return false;
         }
         try {
@@ -477,7 +500,7 @@
                 document.getElementById('orderIdDisplay').textContent = currentOrderNumber;
 
                 // Initialize Stripe and show payment form
-                if (initStripe()) {
+                if (await initStripe()) {
                     createPaymentForm();
                     document.getElementById('paymentAmount').textContent = `$${currentAmount.toFixed(2)}`;
                 } else {

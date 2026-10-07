@@ -3,7 +3,7 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 [[redirects]]
   from = "/api/checkr/*"
@@ -33,6 +33,11 @@
 [[redirects]]
   from = "/track/*"
   to = "/track/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/status"
+  to = "/driver/index.html"
   status = 200
 
 [[redirects]]

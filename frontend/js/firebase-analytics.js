@@ -1,23 +1,9 @@
 /**
  * Coyote's Dune Delivery — Firebase Analytics Integration
- * Prepares Firebase Analytics for future native app expansion.
- * Logs the same events as GA4 through Firebase for cross-platform tracking.
- *
- * Setup:
- * 1. Create a Firebase project at https://console.firebase.google.com
- * 2. Add a web app and copy the config values
- * 3. Set FIREBASE_API_KEY, FIREBASE_PROJECT_ID in Netlify env vars
- * 4. The script initializes Firebase Analytics automatically
- *
- * Usage:
- *   firebaseTrackEvent('order_submitted', { service_type: 'ride', price: 25.00 });
- *   firebaseTrackScreen('Order Confirmation');
  */
-
 (function () {
     'use strict';
 
-    // ── Firebase Config (placeholder — override via env) ────
     const FIREBASE_CONFIG = {
         apiKey: window.__FIREBASE_API_KEY__ || 'YOUR_FIREBASE_API_KEY',
         authDomain: (window.__FIREBASE_PROJECT_ID__ || 'your-project-id') + '.firebaseapp.com',
@@ -30,23 +16,16 @@
 
     let analytics = null;
     let isReady = false;
-
-    // ── Session ID (synced with GA4) ────────────────────────
     const sessionId = window.__CDD_SESSION_ID__ || ('fb_sess_' + Date.now());
 
-    // ── Load Firebase SDKs dynamically ──────────────────────
     async function loadFirebase() {
-        // Skip if Firebase is already loaded
         if (window.firebase && window.firebase.analytics) {
             initFirebase();
             return;
         }
-
-        // Load Firebase App SDK
         const appScript = document.createElement('script');
         appScript.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
         appScript.onload = function () {
-            // Load Firebase Analytics SDK
             const analyticsScript = document.createElement('script');
             analyticsScript.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics-compat.js';
             analyticsScript.onload = initFirebase;
@@ -57,93 +36,50 @@
 
     function initFirebase() {
         try {
-            if (!window.firebase) {
-                console.warn('[Firebase Analytics] Firebase SDK not loaded');
-                return;
-            }
-            // Initialize only once
-            if (!window.firebase.apps.length) {
-                window.firebase.initializeApp(FIREBASE_CONFIG);
-            }
+            if (!window.firebase) return;
+            if (!window.firebase.apps.length) window.firebase.initializeApp(FIREBASE_CONFIG);
             analytics = window.firebase.analytics();
             isReady = true;
-            console.log('[Firebase Analytics] Initialized');
-
-            // Set session ID as user property for cross-platform sync
-            try {
-                analytics.setUserProperties({ cdd_session_id: sessionId });
-            } catch (_) { /* ignore */ }
+            try { analytics.setUserProperties({ cdd_session_id: sessionId }); } catch (_) {}
         } catch (err) {
             console.warn('[Firebase Analytics] Init failed:', err.message);
         }
     }
 
-    // ── Public API ──────────────────────────────────────────
-
-    /**
-     * Log a Firebase Analytics event.
-     * @param {string} eventName — event name (snake_case)
-     * @param {Object} [params]  — event parameters
-     */
     window.firebaseTrackEvent = function (eventName, params) {
-        if (!isReady || !analytics) {
-            console.warn('[Firebase Analytics] Not ready, event queued:', eventName);
-            return;
-        }
+        if (!isReady || !analytics) return;
         try {
-            const payload = Object.assign({}, params || {}, { cdd_session_id: sessionId });
-            analytics.logEvent(eventName, payload);
-        } catch (err) {
-            console.warn('[Firebase Analytics] logEvent failed:', err.message);
-        }
+            analytics.logEvent(eventName, Object.assign({}, params || {}, { cdd_session_id: sessionId }));
+        } catch (err) {}
     };
 
-    /**
-     * Log a screen view (for SPA navigation).
-     * @param {string} screenName — screen/page name
-     * @param {string} [screenClass] — optional screen class
-     */
     window.firebaseTrackScreen = function (screenName, screenClass) {
-        if (!isReady || !analytics) {
-            console.warn('[Firebase Analytics] Not ready, screen queued:', screenName);
-            return;
-        }
+        if (!isReady || !analytics) return;
         try {
-            const params = {
-                firebase_screen: screenName,
-                cdd_session_id: sessionId,
-            };
+            const params = { firebase_screen: screenName, cdd_session_id: sessionId };
             if (screenClass) params.firebase_screen_class = screenClass;
             analytics.logEvent('screen_view', params);
-        } catch (err) {
-            console.warn('[Firebase Analytics] screen_view failed:', err.message);
-        }
+        } catch (err) {}
     };
 
-    /**
-     * Set user properties for segmentation.
-     * @param {Object} properties — key/value pairs
-     */
     window.firebaseSetUserProperties = function (properties) {
-        if (!isReady || !analytics) {
-            console.warn('[Firebase Analytics] Not ready, properties queued');
-            return;
-        }
-        try {
-            analytics.setUserProperties(properties);
-        } catch (err) {
-            console.warn('[Firebase Analytics] setUserProperties failed:', err.message);
-        }
+        if (!isReady || !analytics) return;
+        try { analytics.setUserProperties(properties); } catch (err) {}
     };
 
-    // ── Initialize ──────────────────────────────────────────
+    function loadOrderBoot() {
+        if (!document.getElementById('orderForm')) return;
+        if (document.querySelector('script[src$="order-boot.js"]')) return;
+        const boot = document.createElement('script');
+        boot.src = '../js/order-boot.js';
+        document.head.appendChild(boot);
+    }
+
     function init() {
         loadFirebase();
+        loadOrderBoot();
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
 })();

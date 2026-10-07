@@ -267,12 +267,9 @@
             vehicle_plate: document.getElementById('edit-vehicle-plate').value.trim(),
             insurance_provider: document.getElementById('edit-insurance-provider').value.trim(),
             insurance_policy: document.getElementById('edit-insurance-policy').value.trim(),
-            bank_name: document.getElementById('edit-bank-name').value.trim(),
-            bank_account: document.getElementById('edit-bank-account').value.trim(),
-            bank_routing: document.getElementById('edit-bank-routing').value.trim(),
         };
         try {
-            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), payload);
+            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), { ...payload, email: session.email });
             Object.assign(session.data, payload);
             saveSession();
             renderProfile(session.data);

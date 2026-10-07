@@ -191,9 +191,9 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 JWT_EXPIRES=24h
 
-# Admin Credentials (change these!)
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=coyotedune2024
+# Admin Credentials (pick your own; there is no default)
+ADMIN_USERNAME=your-admin-username
+ADMIN_PASSWORD=your-strong-admin-password
 
 # Stripe (for payment processing — required for checkout)
 STRIPE_SECRET_KEY=sk_test_...
@@ -380,14 +380,7 @@ After the backend is live:
 
 ## 🔐 Admin Login Credentials
 
-### Default Credentials (Development)
-
-| Field | Value |
-|-------|-------|
-| Username | `admin` |
-| Password | `coyotedune2024` |
-
-> ⚠️ **Change these immediately** in production by setting `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables.
+There are no default credentials. Admin login is disabled until `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `JWT_SECRET` are set as environment variables. Admin-only functions reject requests without a valid admin JWT.
 
 ### How Admin Login Works
 
@@ -416,7 +409,7 @@ The app integrates **Stripe** for secure customer payments. Here's how it works:
 
 1. Go to [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks)
 2. Click "Add endpoint"
-3. Enter your endpoint URL: `https://coyotes-dune-delivery.netlify.app/api/payment-webhook`
+3. Enter your endpoint URL: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`
 4. Select these events to listen for:
    - `payment_intent.succeeded`
    - `payment_intent.payment_failed`
@@ -465,11 +458,9 @@ Use any future expiry date, any 3-digit CVC, and any ZIP code.
 | `POST` | `/api/create-order` | Create a new customer order | Order details JSON |
 | `POST` | `/api/submit-order` | Submit customer order (legacy) | Order details JSON |
 | `GET` | `/api/get-orders` | Get orders by number or phone | `order_number` or `phone` query |
-| `PATCH` | `/api/update-order` | Update order status | `{ id, status, driver_id }` |
 | `POST` | `/api/create-payment-intent` | Create Stripe PaymentIntent | `{ order_id, amount, customer_email }` |
-| `POST` | `/api/payment-webhook` | Stripe webhook receiver | Raw Stripe event body |
-| `POST` | `/api/send-sms` | Send a single SMS | `{ to_phone, message_body, order_id }` |
-| `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `{ message, driver_portal_url, order_id }` |
+| `POST` | `/api/payment-webhook` | Stripe webhook receiver (Stripe signature verified) | Raw Stripe event body |
+| `PUT` | `/api/update-application?applicantId=XXX` | Driver updates own profile | `{ email, phone, vehicle_*, insurance_* }` (email must match the application) |
 | `POST` | `/api/log-analytics-event` | Log an analytics event server-side | `{ event_name, category, user_id, session_id, metadata }` |
 
 ### Admin Endpoints (JWT Bearer Token Required)
@@ -480,7 +471,10 @@ Use any future expiry date, any 3-digit CVC, and any ZIP code.
 | `GET` | `/api/get-applications` | List all applications | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?status=pending` | Filter by status | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?search=john` | Search by name/email/ID | `Authorization: Bearer <token>` |
-| `PUT` | `/api/update-application` | Update application status | `Authorization: Bearer <token>` |
+| `PATCH` | `/api/update-order` | Update order status | `Authorization: Bearer <token>` |
+| `POST` | `/api/send-sms` | Send a single SMS | `Authorization: Bearer <token>` |
+| `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `Authorization: Bearer <token>` |
+| `POST` | `/api/checkr-initiate` | Start a Checkr background check | `Authorization: Bearer <token>` |
 
 ### Example: Create Payment Intent
 
@@ -534,7 +528,7 @@ curl -X POST https://your-site.netlify.app/api/submit-application \
 ```bash
 curl -X POST https://your-site.netlify.app/api/login-admin \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "coyotedune2024"}'
+  -d '{"username": "YOUR_ADMIN_USERNAME", "password": "YOUR_ADMIN_PASSWORD"}'
 ```
 
 ### Example: Get Applications (Admin)
@@ -572,7 +566,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
-    "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
+    "message": "New order available! Log in to accept: https://coyote-dune-delivery.netlify.app/driver/",
     "order_id": "your-order-uuid"
   }'
 ```
@@ -843,7 +837,7 @@ curl -X POST https://your-site.netlify.app/api/driver-sms-alert \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
-    "message": "New order available! Log in to accept: https://coyotes-dune-delivery.netlify.app/driver/",
+    "message": "New order available! Log in to accept: https://coyote-dune-delivery.netlify.app/driver/",
     "order_id": "optional-order-uuid"
   }'
 ```
@@ -930,7 +924,7 @@ The Netlify functions include CORS headers. If you're seeing CORS errors, ensure
 
 ### Issue: Payment form not showing
 
-1. Check that `STRIPE_PUBLISHABLE_KEY` is set in the frontend. You can set it inline in `frontend/order/index.html` or via a Netlify environment variable injected at build time.
+1. Check that `STRIPE_PUBLISHABLE_KEY` is set in Netlify env. The order page loads it from `GET /api/public-config` (or override `window.STRIPE_PUBLISHABLE_KEY` inline). Webhook URL: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`.
 2. Check the browser console for JavaScript errors
 3. Ensure Stripe.js is loading from `https://js.stripe.com/v3/`
 

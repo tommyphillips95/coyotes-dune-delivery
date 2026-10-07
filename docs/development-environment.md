@@ -21,19 +21,19 @@ require linking to a production Netlify site. Do not link this development
 checkout to production: linked Netlify projects may inject remote credentials.
 
 `npm run check` validates JavaScript syntax without calling external services.
-It is not an integration test suite. `npm test` remains the existing placeholder.
+`npm test` runs the unit tests (quote parity + mocked payment/auth hardening).
 
 ## Codex cloud configuration
 
 Create a cloud environment for `tommyphillips95/coyotes-dune-delivery`:
 
 - Name: Coyote Dune Delivery
-- Default branch: main after this PR is merged; use this PR branch for validation.
+- Work branch: `agent/grok/cdd-launch-v1` (never push to `main`).
 - Node version: 22 (at least 22.13).
 - Setup script: `bash scripts/setup-environment.sh`
 - Maintenance script: `bash scripts/setup-environment.sh`
 - Run command: `npm run dev`
-- Validation command: `npm run check`
+- Validation command: `npm test && npm run check`
 - No secrets needed for installation, syntax checks, or static previews.
 
 The setup phase needs npm registry access. Agent-phase internet access can stay
@@ -55,6 +55,5 @@ before submitting orders, applications, payments, or sending notifications.
 The environment setup does not provision a database, import `schema.sql`,
 create paid cloud resources, or enable production transactions.
 
-Follow `AGENTS.md`: branch `agent/codex/<slug>` and open a PR to main.
-The referenced `coyote-war-room` instruction files were unavailable during setup;
-retrieve them before changing application behavior.
+Follow `AGENTS.md`: branch `agent/codex/<slug>` and open a PR into
+`agent/grok/cdd-launch-v1`. The work desk is this repo's `agent-task` issues.
