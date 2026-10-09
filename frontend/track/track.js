@@ -35,6 +35,8 @@
       map = L.map(mapEl).setView(center, 13);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
     }
+    if (pickupMarker) { map.removeLayer(pickupMarker); pickupMarker = null; }
+    if (dropoffMarker) { map.removeLayer(dropoffMarker); dropoffMarker = null; }
     if (order.pickup_lat && order.pickup_lng) pickupMarker = L.marker([parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)]).addTo(map).bindPopup("Pickup");
     if (order.dropoff_lat && order.dropoff_lng) dropoffMarker = L.marker([parseFloat(order.dropoff_lat), parseFloat(order.dropoff_lng)]).addTo(map).bindPopup("Dropoff");
     fitLeaflet();
@@ -83,7 +85,8 @@
       if (driverId) params.set("driver_id", driverId);
       else if (orderId) params.set("order_id", orderId);
       else return;
-      const res = await fetch(API_BASE + "/get-driver-location?" + params.toString());
+      const res = await fetch(API_BASE + "/get-driver-location?" + params.toString(),
+        currentToken ? { headers: { Authorization: "Bearer " + currentToken } } : undefined);
       const json = await res.json();
       if (json.success && json.data && json.data.location) {
         updateDriverMarker(json.data.location.lat, json.data.location.lng);
@@ -95,52 +98,115 @@
       }
     } catch (err) { console.error(err); }
   }
+  // ── Order loading (customer tracking JWT; see netlify/functions/get-orders.js) ──
+  let currentToken = null;
+  let polling = false;
+  const C = window.CoyoteCoastal || null;
+
+  async function mintToken(orderNumber, phone) {
+    const res = await fetch(API_BASE + "/get-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_number: orderNumber, phone: phone }),
+    });
+    const json = await res.json().catch(function () { return {}; });
+    if (!res.ok || !json.token) return null;
+    if (C) C.saveTrackingToken(json.orderNumber || orderNumber, json.token);
+    return json.token;
+  }
+
+  // Returns { order } | { expired: true } | { error }
+  async function fetchOrder(token) {
+    const res = await fetch(API_BASE + "/get-orders", { headers: { Authorization: "Bearer " + token } });
+    if (res.status === 401 || res.status === 403) return { expired: true };
+    const json = await res.json().catch(function () { return {}; });
+    if (!res.ok) return { error: json.error || "Lookup failed" };
+    const payload = json.data || json;
+    const rows = Array.isArray(payload) ? payload : payload ? [payload] : [];
+    return rows[0] ? { order: rows[0] } : { error: "Order not found" };
+  }
+
+  function renderOrder(order) {
+    currentOrder = order;
+    currentDriverId = order.driver_id || null;
+    showCard("etaCard"); showCard("driverCard"); showCard("orderCard"); showCard("timelineCard");
+    document.getElementById("detailOrderNum").textContent = order.order_number;
+    document.getElementById("detailService").textContent = formatServiceType(order.service_type);
+    document.getElementById("detailPickup").textContent = order.pickup_address || "--";
+    document.getElementById("detailDropoff").textContent = order.dropoff_address || "--";
+    document.getElementById("detailStatus").textContent = formatStatus(order.status);
+    updateTimeline(order);
+  }
+
+  function isTerminal(status) {
+    return C ? C.isTerminalStatus(status) : (status === "completed" || status === "cancelled");
+  }
+
+  async function tick() {
+    if (polling || !currentToken) return; // never overlap requests
+    polling = true;
+    try {
+      const r = await fetchOrder(currentToken);
+      if (r.expired) {
+        stopPolling();
+        if (C && currentOrder) C.clearTrackingToken(currentOrder.order_number);
+        currentToken = null;
+        alert("Your tracking session expired. Enter your order number and phone to keep tracking.");
+        return;
+      }
+      if (r.order) {
+        renderOrder(r.order);
+        if (isTerminal(r.order.status)) { stopPolling(); return; }
+      }
+      await fetchDriverLocation(currentDriverId, currentOrder && currentOrder.id);
+    } catch (err) {
+      console.error(err); // keep polling; transient network errors are common on the beach
+    } finally {
+      polling = false;
+    }
+  }
+
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(function () {
-      fetchDriverLocation(currentDriverId, currentOrder && currentOrder.id);
-    }, POLL_INTERVAL_MS);
+    pollTimer = setInterval(tick, POLL_INTERVAL_MS);
   }
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  async function trackWithToken(token) {
+    currentToken = token;
+    const r = await fetchOrder(token);
+    if (r.expired) return { expired: true };
+    if (!r.order) return { error: r.error };
+    renderOrder(r.order);
+    readyMap(r.order);
+    await fetchDriverLocation(currentDriverId, r.order.id);
+    if (!isTerminal(r.order.status)) startPolling(); else stopPolling();
+    return { ok: true };
+  }
+
   async function lookupOrder(orderNumber, phone) {
     lookupBtn.disabled = true;
     lookupBtn.textContent = "Tracking...";
     try {
-      if (!orderNumber || !phone) {
-        alert("Please enter both order number and phone number.");
-        return;
+      orderNumber = (orderNumber || "").toUpperCase();
+      let token = C ? C.getTrackingToken(orderNumber) : null;
+      if (!token) {
+        if (!orderNumber || !phone) { alert("Please enter both order number and phone number."); return; }
+        token = await mintToken(orderNumber, phone);
       }
-      // Mint a short-lived customer tracking JWT (order_number + phone possession).
-      const authRes = await fetch(API_BASE + "/get-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_number: orderNumber, phone: phone }),
-      });
-      const authJson = await authRes.json();
-      if (!authRes.ok || !authJson.token) {
+      if (!token) { alert("Order not found. Please check your order number and phone number."); return; }
+      let r = await trackWithToken(token);
+      if (r.expired && phone) {
+        if (C) C.clearTrackingToken(orderNumber);
+        token = await mintToken(orderNumber, phone);
+        r = token ? await trackWithToken(token) : { error: "Order not found" };
+      }
+      if (r.expired) {
+        if (C) C.clearTrackingToken(orderNumber);
+        alert("Your tracking link expired. Enter your phone number to continue.");
+      } else if (!r.ok) {
         alert("Order not found. Please check your order number and phone number.");
-        return;
       }
-      const res = await fetch(API_BASE + "/get-orders", {
-        headers: { Authorization: "Bearer " + authJson.token },
-      });
-      const json = await res.json();
-      const payload = json.data || json;
-      const rows = Array.isArray(payload) ? payload : payload && payload.data ? payload.data : payload ? [payload] : [];
-      const order = rows[0];
-      if (!order) { alert("Order not found. Please check your order number and phone number."); return; }
-      currentOrder = order;
-      currentDriverId = order.driver_id || null;
-      showCard("etaCard"); showCard("driverCard"); showCard("orderCard"); showCard("timelineCard");
-      document.getElementById("detailOrderNum").textContent = order.order_number;
-      document.getElementById("detailService").textContent = formatServiceType(order.service_type);
-      document.getElementById("detailPickup").textContent = order.pickup_address || "--";
-      document.getElementById("detailDropoff").textContent = order.dropoff_address || "--";
-      document.getElementById("detailStatus").textContent = formatStatus(order.status);
-      updateTimeline(order);
-      readyMap(order);
-      await fetchDriverLocation(currentDriverId, order.id);
-      if (order.status !== "completed" && order.status !== "cancelled") startPolling();
     } catch (err) {
       console.error(err);
       alert("Something went wrong. Please try again.");
@@ -149,9 +215,19 @@
       lookupBtn.textContent = "Track Order";
     }
   }
+
   lookupForm.addEventListener("submit", function (e) {
     e.preventDefault();
     lookupOrder(document.getElementById("lookupOrderNum").value.trim(), document.getElementById("lookupPhone").value.trim());
   });
+
+  // Deep link from the order confirmation: /track/?order=CDD-...
+  (function autoTrack() {
+    const params = C ? C.parseOrderParams(window.location.search) : {};
+    if (!params.track) return;
+    document.getElementById("lookupOrderNum").value = params.track;
+    if (C && C.getTrackingToken(params.track)) lookupOrder(params.track, "");
+  })();
+
   window.addEventListener("beforeunload", stopPolling);
 })();

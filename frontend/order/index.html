@@ -7,8 +7,9 @@
     <meta name="description" content="Book a ride or schedule a delivery with Coyote's Dune Delivery. Serving Port Aransas, Padre Island, and the Texas Gulf Coast.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
     <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
     <script src="../js/analytics.js"></script>
@@ -398,15 +399,16 @@
                     <path d="M2 17l10 5 10-5"/>
                     <path d="M2 12l10 5 10-5"/>
                 </svg>
-                <span class="logo-text">Coyote's Dune Delivery</span>
+                <span class="logo-text">Coyote's Dune Delivery<span class="logo-sub">Texas Gulf Coast</span></span>
             </a>
             <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
                 <span class="hamburger"></span>
             </button>
             <ul class="nav-menu" id="navMenu">
                 <li><a href="/">Home</a></li>
-                <li><a href="/apply/">Become a Driver</a></li>
-                <li><a href="/driver/">Driver Portal</a></li>
+                <li><a href="/#planner">Pricing</a></li>
+                <li><a href="/track/">Track</a></li>
+                <li><a href="/apply/" class="btn btn-outline">Become a Driver</a></li>
             </ul>
         </div>
     </nav>
@@ -437,6 +439,12 @@
                     <div class="progress-step" data-step="5">
                         <span class="progress-label">Review</span>
                     </div>
+                </div>
+
+                <div class="cc-prefill-note" id="ccPrefillNote" hidden></div>
+                <div class="cc-live-quote" id="ccLiveQuote" hidden aria-live="polite">
+                    <span id="ccLiveQuoteText">Estimated total</span>
+                    <strong id="ccLiveQuoteTotal">$0.00</strong>
                 </div>
 
                 <!-- Form Steps -->
@@ -521,6 +529,7 @@
                                         <select id="pickupCity" name="pickupCity" required>
                                             <option value="">Select city</option>
                                             <option value="Port Aransas">Port Aransas</option>
+                                            <option value="Mustang Island">Mustang Island</option>
                                             <option value="Padre Island">Padre Island</option>
                                             <option value="Corpus Christi">Corpus Christi</option>
                                             <option value="Rockport">Rockport</option>
@@ -568,6 +577,7 @@
                                         <select id="dropoffCity" name="dropoffCity" required>
                                             <option value="">Select city</option>
                                             <option value="Port Aransas">Port Aransas</option>
+                                            <option value="Mustang Island">Mustang Island</option>
                                             <option value="Padre Island">Padre Island</option>
                                             <option value="Corpus Christi">Corpus Christi</option>
                                             <option value="Rockport">Rockport</option>
@@ -766,6 +776,7 @@
                     <p>Thank you for booking with Coyote's Dune Delivery.</p>
                     <p>Your driver will be assigned shortly. You will receive a confirmation text and email with driver details.</p>
                     <div class="order-id" id="orderIdDisplay"></div>
+                    <p><a href="/track/" class="btn btn-primary cc-track-link" id="ccTrackLink">Track this order</a></p>
                     <p style="margin-top: 8px;"><a href="/" class="btn btn-secondary">Back to Home</a></p>
                     <p style="margin-top: 16px;"><a href="/order/">Book Another</a></p>
                 </div>
@@ -872,6 +883,8 @@
       // Optional override; leave empty to load from Netlify via /api/public-config
       window.STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
     </script>
+    <script src="../js/zones.js"></script>
+    <script src="../js/coastal.js"></script>
     <script src="../js/main.js"></script>
     <script src="../js/order.js"></script>
     <script src="../js/stripe-payment.js"></script>

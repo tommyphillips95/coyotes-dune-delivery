@@ -4,38 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Track Your Driver — Coyote's Dune Delivery</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/coastal.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <style>
-        body { font-family: Inter, system-ui, sans-serif; background: #FAF8F5; color: #2C2C2C; margin: 0; }
-        .navbar { background: #fff; border-bottom: 1px solid #E5E0D8; }
-        .nav-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 64px; }
-        .logo { color: #1A2F4B; font-weight: 700; text-decoration: none; }
-        .track-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        body { margin: 0; }
+        .track-page { max-width: 1200px; margin: 0 auto; padding: 100px 24px 24px; }
         .track-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; min-height: 600px; }
         @media (max-width: 900px) { .track-layout { grid-template-columns: 1fr; } }
-        .track-card { background: #fff; border: 1px solid #E5E0D8; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+        .track-card { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
         .lookup-form { display: flex; flex-direction: column; gap: 10px; }
         .lookup-form input, .lookup-form button { padding: 12px; border-radius: 6px; font-size: 0.95rem; }
-        .lookup-form input { border: 1.5px solid #E5E0D8; }
-        .lookup-form button { border: none; background: #1A2F4B; color: #fff; font-weight: 600; cursor: pointer; }
-        .eta-box { background: #1A2F4B; color: #fff; border-radius: 14px; padding: 20px; text-align: center; }
+        .lookup-form input { border: 1.5px solid #EADFCC; }
+        .lookup-form button { border: none; background: #FF6B4A; color: #fff; font-weight: 600; cursor: pointer; }
+        .eta-box { background: #10202E; color: #fff; border-radius: 14px; padding: 20px; text-align: center; }
         .eta-value { font-size: 1.8rem; font-weight: 700; }
-        .map-container { background: #fff; border: 1px solid #E5E0D8; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; }
+        .map-container { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; }
         #map { width: 100%; height: 100%; min-height: 500px; }
         .hidden { display: none !important; }
-        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #4C8C64; display: inline-block; }
-        .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #E5E0D8; font-size: 0.88rem; }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3FB8A6; display: inline-block; }
+        .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EADFCC; font-size: 0.88rem; }
     </style>
 </head>
 <body>
-    <nav class="navbar"><div class="nav-container">
-        <a href="/" class="logo">Coyote's Dune Delivery</a>
-        <div><a href="/order/">Book</a> · <a href="/driver/">Driver</a></div>
+    <nav class="navbar"><div class="container nav-container">
+        <a href="/" class="logo">
+            <svg class="logo-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span class="logo-text">Coyote's Dune Delivery<span class="logo-sub">Texas Gulf Coast</span></span>
+        </a>
+        <ul class="nav-menu">
+            <li><a href="/">Home</a></li>
+            <li><a href="/#planner">Pricing</a></li>
+            <li><a href="/order/" class="btn btn-primary">Order Now</a></li>
+        </ul>
     </div></nav>
     <main class="track-page">
-        <h1>Track Your Delivery</h1>
-        <p>Live driver marker every 15 seconds.</p>
+        <h1 style="font-family: var(--font-display);">Track Your Delivery</h1>
+        <p>Live driver location and order status refresh every 15 seconds.</p>
         <div class="track-layout">
             <aside>
                 <div class="track-card">
@@ -80,6 +86,7 @@
         </div>
     </main>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="../js/coastal.js"></script>
     <script src="track.js"></script>
 </body>
 </html>

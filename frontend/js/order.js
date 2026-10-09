@@ -211,10 +211,14 @@
         return div.innerHTML;
     }
 
+    let submitting = false;
+
     async function submitOrder(e) {
         e.preventDefault();
+        if (submitting) return; // guard double clicks / Enter-key resubmits
         const terms = document.getElementById('termsAgree');
         if (!terms.checked) { terms.focus(); return; }
+        submitting = true;
         submitBtn.disabled = true;
         const originalText = submitBtn.textContent;
         submitBtn.innerHTML = '<span class="spinner"></span> Placing Order...';
@@ -246,14 +250,27 @@
         try {
             const result = await CoyoteAPI.post('/api/create-order', orderData);
             if (result.ok) {
-                document.getElementById('orderIdDisplay').textContent = result.data.orderNumber;
-                form.style.display = 'none';
-                progressBar.style.display = 'none';
-                orderSuccess.classList.add('active');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                const ctx = {
+                    orderId: result.data.orderId,
+                    orderNumber: result.data.orderNumber,
+                    amount: Number(result.data.estimatedPrice) || 0,
+                    trackingToken: result.data.trackingToken || null,
+                    email: orderData.email,
+                };
+                if (ctx.trackingToken && window.CoyoteCoastal) {
+                    window.CoyoteCoastal.saveTrackingToken(ctx.orderNumber, ctx.trackingToken);
+                }
+                // Card checkout (stripe-payment.js) takes over when available;
+                // otherwise show the confirmation (pay driver).
+                const checkout = window.CoyoteCheckout;
+                let handled = false;
+                if (checkout && typeof checkout.afterOrderCreated === 'function') {
+                    try { handled = await checkout.afterOrderCreated(ctx); } catch (err) { console.error(err); handled = false; }
+                }
+                if (!handled) showSuccess(ctx);
                 try {
                     const orders = JSON.parse(localStorage.getItem('cdd_orders') || '[]');
-                    orders.push({ orderNumber: result.data.orderNumber, orderId: result.data.orderId, trackingToken: result.data.trackingToken || null, createdAt: new Date().toISOString(), serviceType: orderData.service_type });
+                    orders.push({ orderNumber: result.data.orderNumber, orderId: result.data.orderId, createdAt: new Date().toISOString(), serviceType: orderData.service_type });
                     localStorage.setItem('cdd_orders', JSON.stringify(orders));
                 } catch (_) {}
                 const estimatedTotal = calculateEstimate();
@@ -265,12 +282,14 @@
                 alert('Failed to place order: ' + (result.error || result.data?.message || 'Unknown error'));
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
+                submitting = false;
             }
         } catch (err) {
             console.error('Order submission failed:', err);
             alert('Something went wrong. Please try again or call (361) 555-1234.');
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
+            submitting = false;
         }
     }
 
@@ -328,12 +347,67 @@
     }
 
     function initFromUrl() {
-        const params = new URLSearchParams(window.location.search);
-        const trackNum = params.get('track');
-        if (trackNum) {
-            document.getElementById('trackOrderNumber').value = trackNum;
+        const C = window.CoyoteCoastal;
+        const params = C ? C.parseOrderParams(window.location.search) : {};
+        if (params.track) {
+            document.getElementById('trackOrderNumber').value = params.track;
             setTimeout(() => document.getElementById('trackingSection').scrollIntoView({ behavior: 'smooth' }), 500);
         }
+        if (params.service) {
+            const radio = document.querySelector(`input[name="serviceType"][value="${params.service}"]`);
+            if (radio) radio.checked = true;
+        }
+        if (params.pickup) document.getElementById('pickupCity').value = params.pickup;
+        if (params.dropoff) document.getElementById('dropoffCity').value = params.dropoff;
+        const cat = params.category && C ? C.categoryById(params.category) : null;
+        const noteParts = [];
+        if (cat && cat.note) noteParts.push(cat.note);
+        if (params.q) noteParts.push(params.q);
+        const item = document.getElementById('itemDescription');
+        if (item && noteParts.length && !item.value) item.value = noteParts.join(': ');
+        const banner = document.getElementById('ccPrefillNote');
+        if (banner && (cat || params.pickup)) {
+            const bits = [];
+            if (cat) bits.push(cat.label);
+            if (params.pickup && params.dropoff) bits.push(`${params.pickup} → ${params.dropoff}`);
+            else if (params.pickup) bits.push(`near ${params.pickup}`);
+            banner.textContent = 'Starting your order: ' + bits.join(' · ');
+            banner.hidden = false;
+        }
+    }
+
+    // Live quote chip: same numbers create-order stores as estimated_price.
+    function updateLiveQuote() {
+        const box = document.getElementById('ccLiveQuote');
+        if (!box) return;
+        const pickupCity = document.getElementById('pickupCity').value;
+        if (!pickupCity || typeof CoyoteZones === 'undefined') { box.hidden = true; return; }
+        const q = currentQuote();
+        const dropoffCity = document.getElementById('dropoffCity').value || pickupCity;
+        document.getElementById('ccLiveQuoteText').textContent =
+            `${pickupCity} → ${dropoffCity} · ${q.miles} mi${q.beach ? ' · 4x4 beach access' : ''}`;
+        document.getElementById('ccLiveQuoteTotal').textContent = `$${q.total.toFixed(2)}`;
+        box.hidden = false;
+    }
+
+    // Success screen shared by cash and card flows (stripe-payment.js calls this too).
+    function showSuccess(ctx) {
+        const c = ctx || {};
+        if (form) form.style.display = 'none';
+        if (progressBar) progressBar.style.display = 'none';
+        const quoteBox = document.getElementById('ccLiveQuote');
+        if (quoteBox) quoteBox.hidden = true;
+        const note = document.getElementById('ccPrefillNote');
+        if (note) note.hidden = true;
+        if (c.orderNumber) document.getElementById('orderIdDisplay').textContent = c.orderNumber;
+        const trackLink = document.getElementById('ccTrackLink');
+        if (trackLink && c.orderNumber && window.CoyoteCoastal) {
+            trackLink.href = window.CoyoteCoastal.buildTrackUrl(c.orderNumber);
+        }
+        if (c.title) { const h = orderSuccess.querySelector('h2'); if (h) h.textContent = c.title; }
+        if (c.message) { const ps = orderSuccess.querySelectorAll('p'); if (ps[1]) ps[1].textContent = c.message; }
+        orderSuccess.classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function init() {
@@ -351,7 +425,15 @@
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => showError(el, false));
         });
+        ['pickupCity', 'dropoffCity'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', updateLiveQuote);
+        });
+        document.querySelectorAll('input[name="serviceType"], input[name="passengers"], input[name="packageSize"]').forEach(r => r.addEventListener('change', updateLiveQuote));
+        document.querySelectorAll('#rideDetails .detail-card, #deliveryDetails .detail-card').forEach(c => c.addEventListener('click', updateLiveQuote));
+        updateLiveQuote();
         form.addEventListener('submit', submitOrder);
+        window.CoyoteOrder = { showSuccess: showSuccess, goToStep: goToStep, currentQuote: currentQuote };
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
