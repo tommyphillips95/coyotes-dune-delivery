@@ -1,0 +1,278 @@
+/* =============================================
+   Coastal Coyote design system (July reference)
+   Cream / coral / seafoam on deep-tide ink.
+   Loaded LAST on every page; remaps the older
+   tokens so customer, driver, dispatch and
+   tracking screens share one look.
+   ============================================= */
+:root {
+    --cc-cream: #FFF8EE;
+    --cc-cream-2: #FBEFDD;
+    --cc-sand: #F3E3C7;
+    --cc-coral: #FF6B4A;
+    --cc-coral-dark: #E8552F;
+    --cc-coral-soft: #FFE3DA;
+    --cc-seafoam: #3FB8A6;
+    --cc-seafoam-dark: #2A9585;
+    --cc-seafoam-soft: #D6F2EC;
+    --cc-ink: #10202E;
+    --cc-ink-2: #1B3142;
+    --cc-text: #24313D;
+    --cc-muted: #6B7782;
+    --cc-line: #EADBC4;
+    --cc-radius: 14px;
+    --cc-shadow: 0 10px 30px rgba(16, 32, 46, 0.10);
+
+    /* Remap main stylesheet tokens */
+    --navy: var(--cc-ink);
+    --navy-light: var(--cc-ink-2);
+    --navy-soft: #2C4558;
+    --sand: var(--cc-coral);
+    --sand-light: #FFB59F;
+    --sand-muted: var(--cc-coral-soft);
+    --warm-white: var(--cc-cream);
+    --charcoal: var(--cc-text);
+    --slate: #46535F;
+    --muted: var(--cc-muted);
+    --border: var(--cc-line);
+    --font-display: 'DM Sans', 'Inter', -apple-system, sans-serif;
+
+    /* Remap driver.css / admin.css tokens */
+    --bg: var(--cc-cream);
+    --content-bg: var(--cc-cream);
+    --text: var(--cc-text);
+    --content-text: var(--cc-text);
+    --primary: var(--cc-coral);
+    --primary-hover: var(--cc-coral-dark);
+    --info: var(--cc-seafoam);
+    --success: var(--cc-seafoam-dark);
+    --sidebar-bg: var(--cc-ink);
+    --sidebar-active: var(--cc-ink-2);
+}
+
+body { background: var(--cc-cream); color: var(--cc-text); }
+a:hover { color: var(--cc-coral-dark); }
+
+/* Buttons */
+.btn-primary, .btn.btn-primary {
+    background: var(--cc-coral);
+    border-color: var(--cc-coral);
+    color: #fff;
+    border-radius: 999px;
+}
+.btn-primary:hover, .btn.btn-primary:hover {
+    background: var(--cc-coral-dark);
+    border-color: var(--cc-coral-dark);
+    color: #fff;
+}
+.btn-outline { border-radius: 999px; }
+.btn-seafoam {
+    background: var(--cc-seafoam-soft);
+    color: var(--cc-ink);
+    border: 1px solid var(--cc-seafoam);
+    border-radius: 999px;
+}
+.btn-seafoam:hover { background: var(--cc-seafoam); color: #fff; }
+
+/* Navbar */
+.navbar { background: rgba(16, 32, 46, 0.96); border-bottom-color: rgba(255,255,255,0.06); }
+.navbar .logo, .navbar .logo-text { color: #fff; }
+.navbar .logo-icon { color: var(--cc-coral); }
+.navbar .nav-menu a { color: rgba(255,255,255,0.82); }
+.navbar .nav-menu a:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.navbar .nav-menu a.btn-outline { border-color: rgba(255,255,255,0.35); color: #fff; }
+.navbar .nav-menu a.btn-primary { color: #fff; }
+.navbar .hamburger, .navbar .hamburger::before, .navbar .hamburger::after { background: #fff; }
+.logo-sub {
+    display: block;
+    font-family: var(--font-body);
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cc-seafoam);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+/* ── Home hero (July layout) ───────────────── */
+.cc-hero {
+    position: relative;
+    background:
+        radial-gradient(1200px 500px at 85% 20%, rgba(63,184,166,0.22), transparent 60%),
+        radial-gradient(900px 500px at 10% 100%, rgba(255,107,74,0.18), transparent 60%),
+        linear-gradient(160deg, #0E1C29 0%, #15293A 55%, #1C3447 100%);
+    color: #fff;
+    padding: 140px 0 96px;
+    overflow: hidden;
+}
+.cc-hero .container { position: relative; z-index: 1; }
+.cc-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px;
+    border: 1px solid rgba(63,184,166,0.45);
+    background: rgba(63,184,166,0.12);
+    color: var(--cc-seafoam-soft);
+    font-size: 0.85rem; font-weight: 600;
+}
+.cc-hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.3rem, 5.4vw, 4rem);
+    line-height: 1.05; font-weight: 700; letter-spacing: -0.02em;
+    margin: 22px 0 18px; max-width: 760px; color: #fff;
+}
+.cc-hero h1 em { font-style: normal; color: var(--cc-coral); }
+.cc-hero p.cc-lede { font-size: 1.15rem; color: rgba(255,255,255,0.86); max-width: 620px; }
+.cc-search {
+    margin-top: 30px; max-width: 640px;
+    display: flex; gap: 8px; align-items: center;
+    background: #fff; border-radius: 16px; padding: 8px 8px 8px 18px;
+    box-shadow: var(--cc-shadow);
+}
+.cc-search input {
+    flex: 1; border: 0; outline: 0; font-size: 1rem; color: var(--cc-text); background: transparent; min-width: 0;
+}
+.cc-search .btn { padding: 12px 22px; }
+.cc-location {
+    margin-top: 12px; max-width: 640px;
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 16px; padding: 8px 8px 8px 18px;
+}
+.cc-location select {
+    flex: 1; background: transparent; border: 0; color: #fff; font-size: 1rem; outline: 0; min-width: 0;
+}
+.cc-location select option { color: var(--cc-text); }
+.cc-hero-cta { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; }
+.cc-hero-cta .btn-outline { color: #fff; border-color: rgba(255,255,255,0.4); }
+.cc-hero-cta .btn-outline:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.cc-hero-meta { margin-top: 18px; font-size: 0.9rem; color: rgba(255,255,255,0.65); }
+
+/* ── Category entry points ─────────────────── */
+.cc-section { padding: 72px 0; }
+.cc-section.alt { background: var(--cc-cream-2); }
+.cc-eyebrow {
+    display: inline-block; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--cc-seafoam-dark); font-weight: 700; margin-bottom: 8px;
+}
+.cc-section h2 { font-family: var(--font-display); font-size: clamp(1.7rem, 3vw, 2.3rem); color: var(--cc-ink); letter-spacing: -0.01em; }
+.cc-section .cc-sub { color: var(--cc-muted); margin-top: 6px; max-width: 640px; }
+.cc-categories {
+    margin-top: 28px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px;
+}
+.cc-cat {
+    display: flex; flex-direction: column; gap: 6px;
+    background: #fff; border: 1px solid var(--cc-line); border-radius: var(--cc-radius);
+    padding: 18px; color: var(--cc-text); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.cc-cat:hover { transform: translateY(-2px); box-shadow: var(--cc-shadow); border-color: var(--cc-coral); color: var(--cc-text); }
+.cc-cat .cc-cat-icon {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: var(--cc-coral-soft); color: var(--cc-coral-dark);
+}
+.cc-cat:nth-child(even) .cc-cat-icon { background: var(--cc-seafoam-soft); color: var(--cc-seafoam-dark); }
+.cc-cat strong { font-size: 1rem; color: var(--cc-ink); }
+.cc-cat span { font-size: 0.86rem; color: var(--cc-muted); }
+
+/* ── Route planner ─────────────────────────── */
+.cc-planner {
+    margin-top: 28px;
+    display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px;
+}
+.cc-card {
+    background: #fff; border: 1px solid var(--cc-line); border-radius: 18px; padding: 24px;
+    box-shadow: 0 2px 10px rgba(16,32,46,0.04);
+}
+.cc-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.cc-field label { font-size: 0.82rem; font-weight: 600; color: var(--cc-ink-2); }
+.cc-field select, .cc-field input {
+    border: 1px solid var(--cc-line); border-radius: 12px; padding: 12px 14px;
+    font-size: 0.98rem; background: var(--cc-cream); color: var(--cc-text);
+}
+.cc-field select:focus, .cc-field input:focus { outline: 2px solid var(--cc-seafoam); border-color: var(--cc-seafoam); }
+.cc-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }
+.cc-swap {
+    height: 46px; width: 46px; border-radius: 12px; border: 1px solid var(--cc-line);
+    background: var(--cc-seafoam-soft); color: var(--cc-seafoam-dark); cursor: pointer; margin-bottom: 14px;
+}
+.cc-quote { display: flex; flex-direction: column; gap: 10px; }
+.cc-quote .cc-total { font-size: 2.4rem; font-weight: 700; color: var(--cc-ink); letter-spacing: -0.02em; }
+.cc-quote .cc-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.cc-tag {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+    font-size: 0.8rem; font-weight: 600; background: var(--cc-seafoam-soft); color: var(--cc-seafoam-dark);
+}
+.cc-tag.coral { background: var(--cc-coral-soft); color: var(--cc-coral-dark); }
+.cc-breakdown { width: 100%; font-size: 0.9rem; color: var(--cc-muted); border-collapse: collapse; }
+.cc-breakdown td { padding: 4px 0; }
+.cc-breakdown td:last-child { text-align: right; color: var(--cc-text); }
+.cc-empty { color: var(--cc-muted); font-size: 0.95rem; }
+.cc-fine { font-size: 0.8rem; color: var(--cc-muted); }
+
+/* Live quote chip on /order/ */
+.cc-live-quote {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--cc-seafoam-soft); border: 1px solid var(--cc-seafoam);
+    color: var(--cc-ink); border-radius: 14px; padding: 12px 16px; margin: 0 0 18px;
+    font-size: 0.95rem;
+}
+.cc-live-quote strong { font-size: 1.2rem; }
+.cc-live-quote[hidden] { display: none; }
+.cc-prefill-note {
+    background: var(--cc-coral-soft); color: var(--cc-coral-dark); border-radius: 12px;
+    padding: 10px 14px; font-size: 0.9rem; margin-bottom: 16px; font-weight: 600;
+}
+
+/* Order + tracking surfaces */
+.form-container, .order-success, .tracking-section, .tracking-result, .order-card, .zone-card, .step-card, .partner-card {
+    border-radius: 18px;
+}
+.progress-step.active .step-number, .progress-step.active .progress-dot { background: var(--cc-coral); border-color: var(--cc-coral); color: #fff; }
+.progress-step.completed .step-number, .progress-step.completed .progress-dot { background: var(--cc-seafoam); border-color: var(--cc-seafoam); color: #fff; }
+.service-option.selected, .detail-card.selected { border-color: var(--cc-coral); background: var(--cc-coral-soft); }
+.cc-track-link {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
+}
+
+/* Footer */
+.footer { background: var(--cc-ink); }
+.footer a:hover { color: var(--cc-coral); }
+
+/* Driver + dispatch headers pick up the ink/coral brand */
+.driver-header, .portal-header, .admin-header, .top-bar { background: var(--cc-ink); color: #fff; }
+.sidebar .logo, .sidebar-logo { color: #fff; }
+
+@media (max-width: 860px) {
+    .cc-planner { grid-template-columns: 1fr; }
+    .cc-hero { padding: 120px 0 72px; }
+}
+@media (max-width: 560px) {
+    .cc-row { grid-template-columns: 1fr; }
+    .cc-swap { width: 100%; }
+    .cc-search { flex-wrap: wrap; }
+    .cc-search .btn { width: 100%; }
+}
+
+/* Tracking page sits under the fixed navbar */
+.track-page { padding-top: 100px; }
+.track-card { border-radius: 18px; border-color: var(--cc-line); }
+.lookup-form button, #lookupBtn { background: var(--cc-coral); border-color: var(--cc-coral); color: #fff; border-radius: 999px; }
+.live-dot { background: var(--cc-seafoam); }
+
+/* Driver portal + dispatch (admin) */
+.login-screen {
+    background:
+        radial-gradient(700px 400px at 85% 10%, rgba(63,184,166,0.25), transparent 60%),
+        radial-gradient(600px 400px at 0% 100%, rgba(255,107,74,0.22), transparent 60%),
+        linear-gradient(160deg, #0E1C29 0%, #1C3447 100%);
+}
+.login-card { border-radius: 20px; }
+.login-brand h1 { font-family: var(--font-display); color: var(--cc-ink); }
+.portal-header { background: var(--cc-ink); border-bottom: 3px solid var(--cc-coral); }
+.sidebar { background: var(--cc-ink); }
+.sidebar-brand { border-bottom-color: rgba(63,184,166,0.25); }
+.sidebar-nav a.active, .sidebar-nav .nav-item.active { background: var(--cc-ink-2); box-shadow: inset 3px 0 0 var(--cc-coral); color: #fff; }
+.content-header { border-bottom: 1px solid var(--cc-line); }
+.status-badge.pending, .badge-pending { background: var(--cc-coral-soft); color: var(--cc-coral-dark); }
+.status-badge.approved, .badge-approved { background: var(--cc-seafoam-soft); color: var(--cc-seafoam-dark); }
