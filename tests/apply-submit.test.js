@@ -88,11 +88,15 @@ test("apply page has the alert slot and loads the helper first", () => {
   assert.ok(h > -1 && a > h);
 });
 
-test("no plain-text SSN/bank storage was added server side", () => {
-  // The form still posts to the documented gap (/api/applications); it was
-  // NOT pointed at submit-application, which stores ssn/bank columns as text.
+test("apply posts to submit-application and never collects SSN/bank", () => {
   const src = read("frontend/js/apply.js");
-  assert.ok(!/submit-application/.test(src));
+  const html = read("frontend/apply/index.html");
+  const server = read("netlify/functions/submit-application.js");
+  assert.ok(/submit-application/.test(src), "apply posts to submit-application");
+  assert.ok(!/id="ssn"/.test(html) && !/id="routingNumber"/.test(html) && !/id="accountNumber"/.test(html));
+  assert.ok(!/ssn:/.test(server) && !/bank_account_number:/.test(server));
+  assert.ok(/Do not send SSN or bank details/.test(server));
+  assert.ok(/TOTAL_STEPS = 5/.test(src));
 });
 
 (async () => {

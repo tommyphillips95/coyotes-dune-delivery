@@ -8,7 +8,7 @@
 
     // ── State ───────────────────────────────────────────────
     const STORAGE_KEY = 'coyote_driver_apply_form';
-    const TOTAL_STEPS = 6;
+    const TOTAL_STEPS = 5;
     let currentStep = 1;
     let uploadedFiles = {}; // { insuranceCard: File|null }
     let isSubmitting = false;
@@ -88,7 +88,6 @@
             const age = now.getFullYear() - birth.getFullYear();
             return age >= 18 && age <= 100 && birth < now;
         },
-        ssn: (v) => /^\d{3}-?\d{2}-?\d{4}$/.test(v),
         address: (v) => v.trim().length >= 3,
         city: (v) => v.trim().length >= 1,
         state: (v) => !!v,
@@ -120,13 +119,6 @@
         bgConsent: (v) => v === true || v === 'on',
         bgDisclosureRead: (v) => v === true || v === 'on',
         esignature: (v) => v === true || v === 'on',
-        routingNumber: (v) => /^\d{9}$/.test(v),
-        accountNumber: (v) => v.trim().length >= 4,
-        confirmAccountNumber: (v) => {
-            const account = document.getElementById('accountNumber');
-            return v === (account ? account.value : '');
-        },
-        accountType: (v) => !!v,
         termsAgree: (v) => v === true || v === 'on',
     };
 
@@ -306,13 +298,12 @@
     // ── Summary Generation ──────────────────────────────────
     const LABEL_MAP = {
         firstName: 'First Name', lastName: 'Last Name', email: 'Email', phone: 'Phone',
-        dob: 'Date of Birth', ssn: 'SSN', address: 'Address', city: 'City',
+        dob: 'Date of Birth', address: 'Address', city: 'City',
         state: 'State', zip: 'ZIP', emergencyName: 'Emergency Contact', emergencyPhone: 'Emergency Phone',
         licenseNumber: 'License Number', licenseState: 'License State', licenseExpiry: 'License Expiry',
         vehicleMake: 'Vehicle Make', vehicleModel: 'Vehicle Model', vehicleYear: 'Year',
         vehicleColor: 'Color', licensePlate: 'License Plate',
         insuranceProvider: 'Insurance Provider', policyNumber: 'Policy Number', policyExpiry: 'Policy Expiry',
-        routingNumber: 'Routing Number', accountNumber: 'Account Number', accountType: 'Account Type',
     };
 
     function buildSummary() {
@@ -322,7 +313,6 @@
             { title: 'Personal Info', fields: ['firstName', 'lastName', 'email', 'phone', 'dob', 'address', 'city', 'state', 'zip', 'emergencyName', 'emergencyPhone'] },
             { title: 'Vehicle & License', fields: ['licenseNumber', 'licenseState', 'licenseExpiry', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehicleColor', 'licensePlate'] },
             { title: 'Insurance', fields: ['insuranceProvider', 'policyNumber', 'policyExpiry'] },
-            { title: 'Banking', fields: ['routingNumber', 'accountNumber', 'accountType'] },
         ];
 
         sections.forEach(section => {
@@ -331,9 +321,6 @@
                 const input = document.querySelector('[name="' + field + '"]');
                 if (!input) return;
                 let value = input.value;
-                if (field === 'ssn') value = '•••-••-' + value.slice(-4);
-                if (field === 'routingNumber') value = '•••••' + value.slice(-4);
-                if (field === 'accountNumber') value = '••••••' + value.slice(-4);
                 html += '<tr><td>' + (LABEL_MAP[field] || field) + '</td><td>' + (value || '—') + '</td></tr>';
             });
         });
@@ -393,7 +380,7 @@
         hideSubmitError();
         try {
             const result = S
-                ? await S.sendApplication(fetch.bind(window), '/api/applications', { method: 'POST', headers: headers, body: payload })
+                ? await S.sendApplication(fetch.bind(window), '/api/submit-application', { method: 'POST', headers: headers, body: payload })
                 : { ok: false, reason: 'helper_missing' };
 
             if (!result.ok) {
@@ -456,51 +443,6 @@
         document.getElementById('appIdDisplay').textContent = appId;
     }
 
-    // ── SSN Formatting (with proper backspace support) ──────
-    function bindSSNFormatting() {
-        const ssn = document.getElementById('ssn');
-        if (!ssn) return;
-
-        // Handle backspace to skip over separator characters
-        ssn.addEventListener('keydown', function(e) {
-            if (e.key !== 'Backspace') return;
-            const cursor = this.selectionStart;
-            const val = this.value;
-            // If cursor is right after a dash, move cursor back one more char
-            // so backspace deletes the digit before the dash, not the dash itself
-            if (cursor > 0 && (val[cursor - 1] === '-')) {
-                e.preventDefault();
-                const newVal = val.slice(0, cursor - 2) + val.slice(cursor);
-                const digitsOnly = newVal.replace(/\D/g, '').slice(0, 9);
-                this.value = formatSSN(digitsOnly);
-                // Place cursor where it should be
-                const newCursor = Math.max(0, cursor - 2);
-                this.setSelectionRange(newCursor, newCursor);
-            }
-        });
-
-        ssn.addEventListener('input', function(e) {
-            const cursor = this.selectionStart;
-            const prevLen = this.value.length;
-            let val = this.value.replace(/\D/g, '').slice(0, 9);
-            this.value = formatSSN(val);
-            // Adjust cursor position for added separators
-            const newLen = this.value.length;
-            const added = newLen - prevLen;
-            if (added > 0 && cursor < newLen) {
-                this.setSelectionRange(cursor + added, cursor + added);
-            }
-        });
-    }
-
-    function formatSSN(digits) {
-        if (digits.length >= 5) {
-            return digits.slice(0, 3) + '-' + digits.slice(3, 5) + '-' + digits.slice(5);
-        } else if (digits.length >= 3) {
-            return digits.slice(0, 3) + '-' + digits.slice(3);
-        }
-        return digits;
-    }
 
     // ── Phone Formatting (with proper backspace support) ────
     function bindPhoneFormatting() {
@@ -557,7 +499,6 @@
         bindNavButtons();
         bindInputValidation();
         bindFileUpload();
-        bindSSNFormatting();
         bindPhoneFormatting();
         loadFormData();
         if (form) form.addEventListener('submit', submitApplication);

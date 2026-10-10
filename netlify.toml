@@ -19,6 +19,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/applications"
+  to = "/.netlify/functions/submit-application"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
