@@ -17,10 +17,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
 
       - name: Install dependencies
         run: |
@@ -36,7 +36,4 @@ jobs:
       - name: Syntax check Netlify functions
         run: |
           set -e
-          for f in netlify/functions/*.js; do
-            echo "node --check $f"
-            node --check "$f"
-          done
+          npm run check

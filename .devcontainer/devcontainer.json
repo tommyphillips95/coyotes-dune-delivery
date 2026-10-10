@@ -1,0 +1,13 @@
+{
+  "name": "Coyote Dune Delivery",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "postCreateCommand": "bash scripts/setup-environment.sh",
+  "forwardPorts": [8888],
+  "portsAttributes": {
+    "8888": {
+      "label": "Coyote Dune Delivery",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteUser": "node"
+}

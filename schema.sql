@@ -1,6 +1,8 @@
 -- =============================================
 -- Coyote's Dune Delivery — Supabase Database Schema
--- Run this in the Supabase SQL Editor
+-- Run this in the Supabase SQL Editor for a fresh project.
+-- Existing DBs: also run schema/launch_2026_09_22.sql to drop legacy
+-- SSN/bank columns and the placeholder admin row.
 -- =============================================
 
 -- Enable UUID extension
@@ -16,7 +18,7 @@ CREATE TABLE IF NOT EXISTS applications (
     email TEXT NOT NULL,
     phone TEXT,
     date_of_birth DATE,
-    ssn TEXT, -- encrypted at application level
+    -- No SSN or bank columns: Checkr + Stripe Connect hold that data.
     address TEXT,
     city TEXT,
     state TEXT,
@@ -31,18 +33,16 @@ CREATE TABLE IF NOT EXISTS applications (
     vehicle_model TEXT,
     vehicle_color TEXT,
     license_plate TEXT,
+    vehicle_class TEXT DEFAULT '2wd', -- 2wd, 4x4, utv, awd
     insurance_provider TEXT,
     insurance_policy_number TEXT,
     insurance_expiry DATE,
-    bank_name TEXT,
-    bank_account_name TEXT,
-    bank_account_number TEXT,
-    bank_routing_number TEXT,
     background_check_consent BOOLEAN DEFAULT FALSE,
     background_check_status TEXT DEFAULT 'pending', -- pending, in_progress, clear, consider, suspended
     background_check_report_id TEXT,
     background_check_completed_at TIMESTAMPTZ,
     status TEXT DEFAULT 'pending', -- pending, background_check, approved, rejected, on_hold
+    online BOOLEAN DEFAULT FALSE, -- driver available for dispatch
     fcm_token TEXT, -- Firebase Cloud Messaging token for push notifications
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -80,12 +80,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Insert default admin (change password in production!)
--- Password is 'coyote2024' - change this immediately after setup
-INSERT INTO admin_users (username, password_hash) 
-VALUES ('admin', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi')
-ON CONFLICT (username) DO NOTHING;
--- Note: Above hash is for 'password' placeholder. You'll set the real password via the app.
+-- No default admin row. Auth is ADMIN_USERNAME / ADMIN_PASSWORD in Netlify env only.
 
 -- =============================================
 -- Background Check Log Table (Audit trail)
@@ -130,6 +125,8 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     service_type TEXT NOT NULL, -- ride, package_delivery, grocery_run, group_transport
     status TEXT DEFAULT 'pending', -- pending, assigned, in_progress, completed, cancelled
+    required_vehicle_class TEXT, -- set by create-order for beach routes
+    weather_hold BOOLEAN DEFAULT FALSE,
 
     -- Stripe Payment Fields
     stripe_payment_intent_id TEXT, -- Stripe PaymentIntent ID
@@ -307,107 +304,125 @@ CREATE INDEX IF NOT EXISTS idx_driver_locations_order_id ON driver_locations(ord
 -- =============================================
 -- Row Level Security (RLS) Policies
 -- =============================================
+-- Netlify Functions use SUPABASE_SERVICE_KEY, which bypasses RLS.
+-- Deny-by-default policies below stop anon/authenticated keys from
+-- reading or writing if a key ever leaks to the browser.
 
 -- Enable RLS on applications
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 
--- Policy: admins can see all applications
-CREATE POLICY "Admins can view all applications" 
-ON applications FOR SELECT 
-USING (true); -- We'll handle auth in the Netlify function
+DROP POLICY IF EXISTS "Admins can view all applications" ON applications;
+CREATE POLICY "Service role only for applications select"
+ON applications FOR SELECT
+USING (false);
 
--- Policy: drivers can only see their own application
-CREATE POLICY "Drivers can view own application" 
-ON applications FOR SELECT 
+DROP POLICY IF EXISTS "Drivers can view own application" ON applications;
+CREATE POLICY "Drivers can view own application"
+ON applications FOR SELECT
 USING (id::text = current_setting('app.current_user_id', true));
 
 -- Enable RLS on documents
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Drivers can view own documents" 
-ON documents FOR SELECT 
+DROP POLICY IF EXISTS "Drivers can view own documents" ON documents;
+CREATE POLICY "Drivers can view own documents"
+ON documents FOR SELECT
 USING (application_id::text = current_setting('app.current_user_id', true));
 
 -- Enable RLS on customers
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public can create customers" 
-ON customers FOR INSERT 
-WITH CHECK (true);
+DROP POLICY IF EXISTS "Public can create customers" ON customers;
+CREATE POLICY "Service role only for customers insert"
+ON customers FOR INSERT
+WITH CHECK (false);
 
-CREATE POLICY "Customers can view own record by phone" 
-ON customers FOR SELECT 
-USING (true); -- Simplified; phone lookup is handled in function
+DROP POLICY IF EXISTS "Customers can view own record by phone" ON customers;
+CREATE POLICY "Service role only for customers select"
+ON customers FOR SELECT
+USING (false);
 
 -- Enable RLS on orders
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public can create orders" 
-ON orders FOR INSERT 
-WITH CHECK (true);
+DROP POLICY IF EXISTS "Public can create orders" ON orders;
+CREATE POLICY "Service role only for orders insert"
+ON orders FOR INSERT
+WITH CHECK (false);
 
-CREATE POLICY "Public can view orders by order_number" 
-ON orders FOR SELECT 
-USING (true);
+DROP POLICY IF EXISTS "Public can view orders by order_number" ON orders;
+CREATE POLICY "Service role only for orders select"
+ON orders FOR SELECT
+USING (false);
 
 -- Enable RLS on order_items
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public can manage order_items" 
-ON order_items FOR ALL 
-USING (true)
-WITH CHECK (true);
+DROP POLICY IF EXISTS "Public can manage order_items" ON order_items;
+CREATE POLICY "Service role only for order_items"
+ON order_items FOR ALL
+USING (false)
+WITH CHECK (false);
 
 -- Enable RLS on order_status_logs
 ALTER TABLE order_status_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public can view status logs" 
-ON order_status_logs FOR SELECT 
-USING (true);
+DROP POLICY IF EXISTS "Public can view status logs" ON order_status_logs;
+CREATE POLICY "Service role only for order_status_logs select"
+ON order_status_logs FOR SELECT
+USING (false);
 
 -- Enable RLS on sms_logs
 ALTER TABLE sms_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Admins can view all sms_logs" 
-ON sms_logs FOR SELECT 
-USING (true); -- Auth handled in Netlify function
+DROP POLICY IF EXISTS "Admins can view all sms_logs" ON sms_logs;
+CREATE POLICY "Service role only for sms_logs select"
+ON sms_logs FOR SELECT
+USING (false);
 
 -- Enable RLS on analytics_events
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Admins can view analytics events" 
-ON analytics_events FOR SELECT 
-USING (true);
+DROP POLICY IF EXISTS "Admins can view analytics events" ON analytics_events;
+CREATE POLICY "Service role only for analytics select"
+ON analytics_events FOR SELECT
+USING (false);
 
-CREATE POLICY "Public can create analytics events" 
-ON analytics_events FOR INSERT 
-WITH CHECK (true);
+DROP POLICY IF EXISTS "Public can create analytics events" ON analytics_events;
+CREATE POLICY "Service role only for analytics insert"
+ON analytics_events FOR INSERT
+WITH CHECK (false);
 
 -- Enable RLS on fcm_tokens
 ALTER TABLE fcm_tokens ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can manage own fcm_tokens" 
-ON fcm_tokens FOR ALL 
+DROP POLICY IF EXISTS "Users can manage own fcm_tokens" ON fcm_tokens;
+CREATE POLICY "Users can manage own fcm_tokens"
+ON fcm_tokens FOR ALL
 USING (user_id::text = current_setting('app.current_user_id', true))
 WITH CHECK (user_id::text = current_setting('app.current_user_id', true));
 
 -- Enable RLS on push_notification_logs
 ALTER TABLE push_notification_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Admins can view all push_notification_logs" 
-ON push_notification_logs FOR SELECT 
-USING (true); -- Auth handled in Netlify function
+DROP POLICY IF EXISTS "Admins can view all push_notification_logs" ON push_notification_logs;
+CREATE POLICY "Service role only for push_notification_logs select"
+ON push_notification_logs FOR SELECT
+USING (false);
 
 -- Enable RLS on driver_locations
 ALTER TABLE driver_locations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public can view driver locations" 
-ON driver_locations FOR SELECT 
-USING (true);
-
-CREATE POLICY "Public can insert driver locations" 
-ON driver_locations FOR INSERT 
-WITH CHECK (true);
+DROP POLICY IF EXISTS "Public can view driver locations" ON driver_locations;
+DROP POLICY IF EXISTS "Public can insert driver locations" ON driver_locations;
+DROP POLICY IF EXISTS "Public can view latest driver locations" ON driver_locations;
+DROP POLICY IF EXISTS "Service role inserts driver locations" ON driver_locations;
+CREATE POLICY "Service role only for driver_locations select"
+ON driver_locations FOR SELECT
+USING (false);
+CREATE POLICY "Service role only for driver_locations insert"
+ON driver_locations FOR INSERT
+WITH CHECK (false);
 
 -- =============================================
 -- Updated At Trigger
