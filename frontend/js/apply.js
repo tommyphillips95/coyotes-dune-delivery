@@ -258,7 +258,9 @@
         data._currentStep = currentStep;
         data._insuranceFileName = uploadedFiles.insuranceCard ? uploadedFiles.insuranceCard.name : null;
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            // SSN and bank numbers never go into localStorage.
+            const safe = window.CoyoteApplySubmit ? window.CoyoteApplySubmit.stripSensitive(data) : {};
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
         } catch (e) {
             // Storage may be full or disabled
         }
@@ -268,7 +270,15 @@
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (!raw) return;
-            const data = JSON.parse(raw);
+            let data = JSON.parse(raw);
+            // Drop sensitive values saved by older versions of this page.
+            if (window.CoyoteApplySubmit) {
+                const cleaned = window.CoyoteApplySubmit.stripSensitive(data);
+                if (Object.keys(cleaned).length !== Object.keys(data).length) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+                }
+                data = cleaned;
+            }
             Object.keys(data).forEach(key => {
                 if (key.startsWith('_')) return;
                 const input = document.querySelector('[name="' + key + '"], #' + key);
@@ -379,20 +389,24 @@
             headers['Content-Type'] = 'application/json';
         }
 
+        const S = window.CoyoteApplySubmit;
+        hideSubmitError();
         try {
-            const response = await fetch('/api/applications', {
-                method: 'POST',
-                headers: headers,
-                body: payload,
-            });
+            const result = S
+                ? await S.sendApplication(fetch.bind(window), '/api/applications', { method: 'POST', headers: headers, body: payload })
+                : { ok: false, reason: 'helper_missing' };
 
-            if (!response.ok) {
-                throw new Error('Server returned ' + response.status);
+            if (!result.ok) {
+                // Honest failure: keep the form and everything typed, no fake ID.
+                console.error('Application not submitted:', result.reason);
+                showSubmitError();
+                if (typeof logAnalyticsEvent === 'function') {
+                    logAnalyticsEvent('application_submit_failed', { category: 'application', reason: result.reason });
+                }
+                return;
             }
 
-            const result = await response.json();
-            const appId = result.applicationId || generateAppId();
-
+            const appId = result.applicationId;
             showSuccess(appId);
             clearSavedData();
 
@@ -409,13 +423,9 @@
             if (typeof logAnalyticsEvent === 'function') {
                 logAnalyticsEvent('application_submitted', { category: 'application', application_id: appId });
             }
-
         } catch (err) {
             console.error('Submission error:', err);
-            // Fallback: show success with generated ID anyway
-            const appId = generateAppId();
-            showSuccess(appId);
-            clearSavedData();
+            showSubmitError();
         } finally {
             isSubmitting = false;
             submitBtn.disabled = false;
@@ -423,11 +433,20 @@
         }
     }
 
-    function generateAppId() {
-        const prefix = 'CDD';
-        const timestamp = Date.now().toString(36).toUpperCase();
-        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-        return prefix + '-' + timestamp + '-' + random;
+    const SUBMIT_ERROR_FALLBACK = "We couldn't submit your application right now. Please try again later or contact us.";
+
+    function showSubmitError() {
+        const el = document.getElementById('submitError');
+        const msg = (window.CoyoteApplySubmit && window.CoyoteApplySubmit.SUBMIT_ERROR_MESSAGE) || SUBMIT_ERROR_FALLBACK;
+        if (!el) { alert(msg); return; }
+        el.textContent = msg;
+        el.hidden = false;
+        if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function hideSubmitError() {
+        const el = document.getElementById('submitError');
+        if (el) { el.hidden = true; el.textContent = ''; }
     }
 
     function showSuccess(appId) {

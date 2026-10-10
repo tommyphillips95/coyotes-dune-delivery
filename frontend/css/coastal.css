@@ -276,3 +276,15 @@ a:hover { color: var(--cc-coral-dark); }
 .content-header { border-bottom: 1px solid var(--cc-line); }
 .status-badge.pending, .badge-pending { background: var(--cc-coral-soft); color: var(--cc-coral-dark); }
 .status-badge.approved, .badge-approved { background: var(--cc-seafoam-soft); color: var(--cc-seafoam-dark); }
+
+/* Apply: honest submit failure */
+.form-alert {
+    margin: 16px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--cc-coral-soft);
+    border: 1px solid var(--cc-coral);
+    color: var(--cc-ink);
+    font-weight: 600;
+}
+.form-alert[hidden] { display: none; }
