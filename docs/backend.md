@@ -42,7 +42,7 @@ this list from growing.
 
 | Frontend | Calls | Closest function | What's needed |
 |---|---|---|---|
-| `/apply/` (`js/apply.js`) | `POST /api/applications` (multipart when an insurance card is attached) | `submit-application` (JSON only) | File storage for the insurance card (e.g. a Supabase Storage bucket), and a decision on SSN/bank fields, which `submit-application` would store as plain text. Since the apply-honest-errors fix, the page only shows "submitted" after a confirmed save (2xx + `applicationId`); until this route exists applicants see "We couldn't submit your application right now. Please try again later or contact us." with their answers kept (SSN/bank numbers are never written to localStorage). |
+| `/apply/` (`js/apply.js`) | `POST /api/submit-application` (also `/api/applications` redirect) | `submit-application` | Live. Form no longer collects SSN or bank details (Checkr + Stripe Connect later). Insurance card file upload to Supabase Storage is still a follow-up if multipart is needed; JSON submit works today. Honest-errors: success only after 2xx + `applicationId`. |
 | `/admin/` (`admin/admin.js`) and `/admin/checkr.html` login | `/api/admin/login`, `/api/admin/applications`, `/api/admin/applications/:id`, `/api/admin/applications/bulk` | `login-admin`, `get-applications`, `update-application` | Port the dashboard to the function contracts (paths, query params, response shapes), or add a small `admin` router function. Delete/bulk have no function at all. |
 | `/driver/` documents | `POST /api/update-application/:id/documents` (multipart) | `update-application` (JSON `PUT`) | Same storage decision as the insurance card. |
 
