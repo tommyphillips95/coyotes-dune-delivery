@@ -74,4 +74,4 @@ npm test && npm run check
 | Branch `agent/codex/<slug>` | Push to `main` |
 | PR into `agent/grok/cdd-launch-v1` | Merge to `main` without Tommy |
 | Link `Closes #N` for `agent-task` issues | Invent API keys |
-| Keep PRs small; CI green | Grow Express `backend/` unless asked |
+| Keep PRs small; CI green | Touch `legacy/express-backend/` (quarantined) |

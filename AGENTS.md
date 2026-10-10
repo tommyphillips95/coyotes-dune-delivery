@@ -39,5 +39,5 @@ Live site: `https://coyote-dune-delivery.netlify.app`. Stripe webhook URL: `http
 - Incremental PRs. Do not rewrite this into Next.js/RN as the first move.
 - Branch `agent/<grok|claude|codex>/<slug>`
 - Treat SSN/bank columns and README default passwords as security findings, not examples to copy.
-- Prefer one backend (Netlify + Supabase). `backend/server.js` is missing; do not grow the Express leftover unless Tommy asks.
+- One backend: Netlify Functions + Supabase (`docs/backend.md`). The Express leftover is quarantined in `legacy/express-backend/`; do not add to it or deploy it. One order contract: `create-order` (`/api/submit-order` is a `netlify.toml` alias).
 - Small PRs into the integration branch. CI (`.github/workflows/ci.yml`: `npm test` + `node --check` on netlify/functions) must pass before merge.

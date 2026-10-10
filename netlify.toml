@@ -10,6 +10,14 @@
   to = "/.netlify/functions/checkr/:splat"
   status = 200
 
+# One order contract: legacy /api/submit-order callers hit create-order
+# (server-priced, same response). There is no separate submit-order function.
+[[redirects]]
+  from = "/api/submit-order"
+  to = "/.netlify/functions/create-order"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
