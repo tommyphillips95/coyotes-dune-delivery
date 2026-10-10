@@ -1,7 +1,7 @@
 # Coyote Dune Delivery development environment
 
 This repository runs a static frontend and Netlify Functions. Use the root package;
-`backend/` is a legacy Express scaffold with a missing server entry point.
+`legacy/express-backend/` is a quarantined Express scaffold (not deployed, missing its entry point). Netlify Functions are the only backend; see `docs/backend.md`.
 
 ## Local development or GitHub Codespaces
 

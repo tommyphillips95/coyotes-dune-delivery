@@ -14,7 +14,7 @@ Snapshot: 2026-09-22
 - Zone table drives server estimate in `create-order.js`
 - Beach destinations require 4x4 class + $8 sand surcharge
 - Track page polls GPS every 15s; Leaflet map (no Google key required)
-- `submit-order` aliases `create-order`
+- `/api/submit-order` is routed to `create-order` in `netlify.toml` (one function, one contract)
 - CORS helper + `schema/launch_2026_09_22.sql` to drop SSN/bank and default admin row
 
 Frontend `order.js` still has a leftover mile table until the next commit wires `CoyoteZones.quote`. Paid price is the server number.
@@ -25,7 +25,7 @@ Frontend `order.js` still has a leftover mile table until the next commit wires 
 - SITE_ORIGIN, Stripe live, Twilio A2P, Checkr live
 - Auto-offer nearest online 4x4 after payment
 - Live NWS/tide API
-- Express `backend/` leftover — ignore; prod is Netlify
+- Express leftover quarantined in `legacy/express-backend/`; prod is Netlify (`docs/backend.md`)
 - README default admin password is a finding
 
 ## Reviewer order

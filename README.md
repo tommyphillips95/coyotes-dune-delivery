@@ -129,14 +129,11 @@ CREATE TABLE analytics_events (
 - **Stripe.js** for secure card payment processing
 - **Responsive design** — mobile-first, works on all devices
 
-### Backend (Local Development)
-- **Node.js** v20+ runtime
-- **Express.js** web framework
-- **better-sqlite3** lightweight, synchronous SQLite driver
-- **jsonwebtoken** for JWT authentication
-- **cors** for cross-origin handling
+### Backend (the only backend — Netlify Functions)
+Production and local dev both run Netlify Functions + Supabase. The old Express
+scaffold is quarantined in `legacy/express-backend/` (not deployed, cannot run).
+See `docs/backend.md`.
 
-### Backend (Serverless Deployment — Netlify Functions)
 - **Netlify Functions** (AWS Lambda-compatible)
 - **Supabase** (PostgreSQL) for persistent data storage
 - **jsonwebtoken** for JWT authentication
@@ -144,8 +141,7 @@ CREATE TABLE analytics_events (
 - **Twilio** for SMS notifications
 
 ### Deployment Targets
-- **Netlify** — static site + serverless functions (recommended for frontend + API)
-- **Render / Railway** — traditional Node.js backend hosting (alternative)
+- **Netlify** — static site + serverless functions (the only supported target)
 
 ---
 
@@ -161,15 +157,8 @@ CREATE TABLE analytics_events (
 npm install
 ```
 
-This installs:
-- `express`
-- `better-sqlite3`
-- `jsonwebtoken`
-- `cors`
-- `dotenv`
-- `nodemon` (dev dependency)
-- `stripe` (for payment processing)
-- `twilio` (for SMS notifications)
+This installs the function dependencies (`@supabase/supabase-js`, `jsonwebtoken`,
+`stripe`, `twilio`, `firebase-admin`) and the pinned `netlify-cli` for local dev.
 
 ### 2. Environment Variables
 
@@ -213,34 +202,25 @@ FIREBASE_PROJECT_ID=your-firebase-project-id
 
 > ⚠️ **Security:** Never commit `.env` files to version control. Use different credentials in production.
 
-### 3. Initialize the Database
-
-The database is auto-created on first run. Just start the server:
+### 3. Run Locally
 
 ```bash
-npm run dev
+npm run dev   # Netlify Dev, offline, http://localhost:8888
 ```
 
-Or using the local Express server directly:
-
-```bash
-node backend/server.js
-```
-
-The SQLite database file will be created at the path specified in `DATABASE_PATH`.
+Data lives in Supabase; there is no local SQLite database.
 
 ### 4. Access the Application
 
 | Page | URL |
 |------|-----|
-| Homepage | `http://localhost:3000` |
-| Driver Application | `http://localhost:3000/apply` |
-| Status Checker | `http://localhost:3000/status` |
-| Admin Login | `http://localhost:3000/admin` |
-| Admin Dashboard | `http://localhost:3000/admin/dashboard.html` |
-| Book a Ride | `http://localhost:3000/order` |
-| Driver Portal | `http://localhost:3000/driver` |
-| Analytics Dashboard | `http://localhost:3000/admin/analytics.html` |
+| Homepage | `http://localhost:8888` |
+| Driver Application | `http://localhost:8888/apply` |
+| Status Checker | `http://localhost:8888/status` |
+| Admin Login | `http://localhost:8888/admin` |
+| Book a Ride | `http://localhost:8888/order` |
+| Driver Portal | `http://localhost:8888/driver` |
+| Analytics Dashboard | `http://localhost:8888/admin/analytics.html` |
 
 ---
 
@@ -325,7 +305,6 @@ Or connect your GitHub repo to Netlify for **automatic deploys on every push**.
 │  │  - login-admin.js         ← /api/login-admin       │
 │  │  - get-status.js          ← /api/get-status        │
 │  │  - create-order.js        ← /api/create-order      │
-│  │  - submit-order.js        ← /api/submit-order      │
 │  │  - get-orders.js          ← /api/get-orders        │
 │  │  - update-order.js        ← /api/update-order      │
 │  │  - create-payment-intent.js ← /api/create-payment-intent │
@@ -338,43 +317,15 @@ Or connect your GitHub repo to Netlify for **automatic deploys on every push**.
 └─────────────────────────────────────┘
 ```
 
-> ⚠️ **Production Note:** The app uses **Supabase** (PostgreSQL) for persistent data storage. SQLite in `/tmp` is **ephemeral** on Netlify Functions — data resets on every cold start. Supabase provides persistent, scalable data storage in serverless environments.
+> ⚠️ **Production Note:** All data lives in **Supabase** (PostgreSQL). There is no SQLite or local database in production.
 
 ---
 
-### Option B: Render or Railway (Traditional Node Backend)
+### Option B: Render or Railway — removed
 
-Use this if you prefer a persistent traditional backend with a separate frontend deployment.
-
-#### Deploy Backend to Render
-
-1. Go to [render.com](https://render.com) and create a new **Web Service**
-2. Connect your GitHub repo
-3. Configure:
-   - **Build Command:** `npm install`
-   - **Start Command:** `node backend/server.js`
-   - **Environment:** Node
-4. Add environment variables in the Render Dashboard (same as `.env` above)
-5. Deploy — Render provides a persistent disk, so SQLite data persists
-
-#### Deploy Backend to Railway
-
-1. Go to [railway.app](https://railway.app) and create a new project
-2. Connect your GitHub repo or deploy from CLI:
-   ```bash
-   npm install -g @railway/cli
-   railway login
-   railway init
-   railway up
-   ```
-3. Add environment variables in the Railway Dashboard
-4. Railway provides persistent storage for SQLite
-
-#### Deploy Frontend Separately
-
-After the backend is live:
-1. Update the frontend JavaScript `API_BASE_URL` to point to your Render/Railway backend URL
-2. Deploy the `frontend/` folder to **Netlify** (static only), **Vercel**, or **GitHub Pages**
+There is no traditional Node server to host. The Express scaffold that Option B
+described is quarantined in `legacy/express-backend/` and never had a committed
+`server.js`. Deploy with Option A.
 
 ---
 
@@ -456,7 +407,7 @@ Use any future expiry date, any 3-digit CVC, and any ZIP code.
 | `POST` | `/api/submit-application` | Submit a new driver application | Full application JSON object |
 | `GET` | `/api/get-status?applicantId=XXX` | Check application status | `applicantId` query param |
 | `POST` | `/api/create-order` | Create a new customer order | Order details JSON |
-| `POST` | `/api/submit-order` | Submit customer order (legacy) | Order details JSON |
+| `POST` | `/api/submit-order` | Legacy alias, routed to `create-order` by `netlify.toml` (same contract) | Order details JSON |
 | `GET` | `/api/get-orders` | Get orders by number or phone | `order_number` or `phone` query |
 | `POST` | `/api/create-payment-intent` | Create Stripe PaymentIntent | `{ order_id, amount, customer_email }` |
 | `POST` | `/api/payment-webhook` | Stripe webhook receiver (Stripe signature verified) | Raw Stripe event body |
@@ -705,8 +656,7 @@ curl -X POST https://your-site.netlify.app/api/log-analytics-event \
 
 ```
 coyotes-dune-delivery/
-├── backend/
-│   └── server.js              # Express server (local dev only)
+├── legacy/express-backend/    # QUARANTINED Express scaffold, not deployed
 ├── frontend/
 │   ├── index.html             # Public homepage
 │   ├── apply/
@@ -740,7 +690,6 @@ coyotes-dune-delivery/
 │       ├── login-admin.js
 │       ├── get-status.js
 │       ├── create-order.js
-│       ├── submit-order.js
 │       ├── get-orders.js
 │       ├── update-order.js
 │       ├── create-payment-intent.js
@@ -749,8 +698,6 @@ coyotes-dune-delivery/
 │       ├── driver-sms-alert.js
 │       ├── checkr*.js
 │       └── log-analytics-event.js
-├── database/                  # SQLite database (local dev)
-│   └── coyote-dune-delivery.db
 ├── netlify.toml               # Netlify deployment config
 ├── schema.sql                 # Supabase database schema
 ├── .env                       # Environment variables (NOT in git)
@@ -801,7 +748,7 @@ The app automatically sends SMS notifications to customers at key points in the 
 
 | Event | Trigger | Message |
 |-------|---------|---------|
-| **Order Created** | `create-order.js` or `submit-order.js` | "Your order [ORDER-123] has been received. We'll assign a driver shortly." |
+| **Order Created** | `create-order.js` | "Your order [ORDER-123] has been received. We'll assign a driver shortly." |
 | **Driver Assigned** | `update-order.js` (status → `assigned`) | "Your driver [Name] is on the way! Track: [URL]" |
 | **Order Completed** | `update-order.js` (status → `completed`) | "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!" |
 | **Driver Alert** | `driver-sms-alert.js` (manual/admin) | "New order available! Log in to accept: [driver portal URL]" |
