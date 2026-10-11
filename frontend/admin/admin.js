@@ -299,7 +299,6 @@
                     <div class="detail-field"><label>Email</label><span>${esc(app.email)}</span></div>
                     <div class="detail-field"><label>Phone</label><span>${esc(app.phone || '—')}</span></div>
                     <div class="detail-field"><label>Date of Birth</label><span>${esc(app.dob || '—')}</span></div>
-                    <div class="detail-field"><label>SSN (Last 4)</label><span>${esc(app.ssn_last4 || '—')}</span></div>
                 </div>
             </div>
             <div class="detail-section">
@@ -321,13 +320,10 @@
                 </div>
             </div>
             <div class="detail-section">
-                <h4>Insurance & Bank</h4>
+                <h4>Insurance</h4>
                 <div class="detail-grid">
                     <div class="detail-field"><label>Insurance Provider</label><span>${esc(app.insurance_provider || '—')}</span></div>
                     <div class="detail-field"><label>Policy Number</label><span>${esc(app.insurance_policy || '—')}</span></div>
-                    <div class="detail-field"><label>Bank Name</label><span>${esc(app.bank_name || '—')}</span></div>
-                    <div class="detail-field"><label>Account Number</label><span>${esc(app.bank_account || '—')}</span></div>
-                    <div class="detail-field"><label>Routing Number</label><span>${esc(app.bank_routing || '—')}</span></div>
                 </div>
             </div>
             <div class="detail-section">
