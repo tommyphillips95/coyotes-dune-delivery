@@ -40,7 +40,7 @@ Customer order, driver apply/portal, admin dispatch, GPS ping tables.
 
 Also set `NODE_VERSION=22` for builds (Netlify build/runtime). Template: root `.env.example`.
 
-**Live Netlify check (2026-10-09):** production context on `coyote-dune-delivery` only has `SITE_ORIGIN` and `NODE_VERSION`. Payments, auth, and DB-backed booking stay dark until the required rows above are filled.
+**Live Netlify check (2026-10-11 CT):** production context on `coyote-dune-delivery` still only has `SITE_ORIGIN` and `NODE_VERSION`. Payments, auth, and DB-backed booking stay dark until the required rows above are filled. Code-side security pass (#12 PRs #27–#29) is merged on this branch; remaining Tommy gate is issue #9 (rotate `ADMIN_PASSWORD` / `JWT_SECRET`, set Supabase + Stripe, add `ANTHROPIC_API_KEY` Actions secret).
 
 Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`.
 
@@ -48,7 +48,7 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 
 ### Run order
 1. `schema.sql` (base tables, indexes, RLS policies, triggers)
-2. `schema/launch_2026_09_22.sql` (drop SSN/bank columns, add vehicle/weather fields, delete placeholder admin, tighten driver_locations policies)
+2. `schema/launch_2026_09_22.sql` (drop legacy SSN/bank if present, add vehicle/weather fields, delete placeholder admin, tighten driver_locations policies)
 3. `schema/dispatch_offers.sql` (auto-offer table + service-role-only RLS)
 
 ### Idempotency
@@ -67,17 +67,18 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 - `dispatch_offers` RLS allows no public access (`USING (false)` / `WITH CHECK (false)`); Netlify functions use the service key.
 
 ### SSN / bank
-- `schema.sql` still *creates* SSN/bank columns for brand-new DBs.
-- `launch_2026_09_22.sql` drops them immediately after. After the full three-file run, those columns are gone (verified on scratch Postgres).
+- `schema.sql` does **not** create SSN/bank columns (PR #28). Fresh DBs never get them.
+- `launch_2026_09_22.sql` still drops legacy `ssn` / `bank_*` if an older DB has them, and removes the placeholder admin row.
+- Admin/driver UI no longer shows or edits those fields (PR #29). Apply flow rejects them (PR #27).
 
 ### Rollback note
-- Restore from a Supabase backup taken before step 2 if you need SSN/bank columns or the old `admin` row back.
+- Restore from a Supabase backup taken before step 2 if you need legacy SSN/bank columns or the old `admin` row back.
 - To undo `dispatch_offers` only: `DROP TABLE IF EXISTS dispatch_offers CASCADE;`.
 - Policy-only rollback: re-apply the prior `driver_locations` policies from `schema.sql` after dropping the launch replacements.
 
-### Dry run (scratch Postgres 17, 2026-10-09 CT)
+### Dry run (scratch Postgres 17, 2026-10-09 CT; reconfirmed against post-#28 schema on 2026-10-11)
 - Fresh DB `coyote_scratch`: ran `schema.sql` → `launch_2026_09_22.sql` → `dispatch_offers.sql` — **all succeeded**.
-- After launch migration: `applications` has **zero** `ssn` / `bank_*` columns.
+- Fresh `schema.sql`: `applications` has **zero** `ssn` / `bank_*` columns (no create, no drop needed).
 - Re-running the full trio on the same DB: **fails** at first `CREATE POLICY` in `schema.sql` (expected; see idempotency gap). Launch + dispatch files alone re-run cleanly.
 
 ## PR #2 merge gate (Tommy)
