@@ -96,6 +96,7 @@
             method,
             headers: { 'Content-Type': 'application/json' }
         };
+        if (session && session.token) opts.headers['Authorization'] = 'Bearer ' + session.token;
         if (body) opts.body = JSON.stringify(body);
         return fetch(API_BASE + endpoint, opts).then(async r => {
             const data = await r.json().catch(() => ({}));
@@ -115,7 +116,7 @@
         if (!applicantId || !email) { loginError.textContent = 'Please fill in both fields.'; return; }
         try {
             const data = await api('POST', '/get-status', { applicantId, email });
-            session = { applicantId, email, data };
+            session = { applicantId, email, data, token: data.token || null };
             saveSession();
             showPortal();
             renderStatus(data);
@@ -492,11 +493,12 @@
         if (!lastPosition || !session || !session.applicantId) return;
 
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session.token) headers['Authorization'] = 'Bearer ' + session.token;
             const res = await fetch(`${API_BASE}/update-driver-location`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
-                    driver_id: session.applicantId,
                     lat: lastPosition.lat,
                     lng: lastPosition.lng,
                     accuracy: lastPosition.accuracy,

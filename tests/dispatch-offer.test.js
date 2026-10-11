@@ -202,9 +202,22 @@ test("expireStale: only offers past expires_at expire", async () => {
 });
 
 // ── respond-offer handler ──
-async function respond(fake, body) {
+const jwt = require("jsonwebtoken");
+process.env.JWT_SECRET = process.env.JWT_SECRET || "dispatch-offer-test-secret-32chars";
+
+function driverAuthHeaders(driverId) {
+  const token = jwt.sign({ role: "driver", driver_id: driverId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  return { authorization: "Bearer " + token };
+}
+
+async function respond(fake, body, driverId) {
   currentFake = fake;
-  const res = await respondOffer.handler({ httpMethod: "POST", headers: {}, body: JSON.stringify(body) });
+  const id = driverId || body.driver_id;
+  const headers = id ? driverAuthHeaders(id) : {};
+  // Body no longer needs driver_id for drivers; keep it only when testing admin paths.
+  const payload = Object.assign({}, body);
+  if (id && payload.driver_id === id) delete payload.driver_id;
+  const res = await respondOffer.handler({ httpMethod: "POST", headers, body: JSON.stringify(payload) });
   return { status: res.statusCode, body: JSON.parse(res.body || "{}") };
 }
 function offerSeed(over, extra) {
@@ -221,6 +234,7 @@ test("respond-offer: method and input validation", async () => {
   currentFake = createFakeSupabase({});
   assert.strictEqual((await respondOffer.handler({ httpMethod: "GET", headers: {} })).statusCode, 405);
   assert.strictEqual((await respondOffer.handler({ httpMethod: "OPTIONS", headers: {} })).statusCode, 204);
+  assert.strictEqual((await respondOffer.handler({ httpMethod: "POST", headers: {}, body: "{}" })).statusCode, 401);
   assert.strictEqual((await respond(createFakeSupabase({}), { offer_id: "of1", driver_id: "d1", action: "maybe" })).status, 400);
   assert.strictEqual((await respond(createFakeSupabase({}), { offer_id: "nope", driver_id: "d1", action: "accept" })).status, 404);
 });

@@ -48,3 +48,17 @@ this list from growing.
 
 When one of these is ported, remove it from `KNOWN_GAPS` in the test and from
 this table. Once all are gone, delete `legacy/express-backend/`.
+
+## Driver JWT (#6)
+
+Driver portal login (`POST /api/get-status` with `applicantId` + `email`) returns a `token` JWT: `{ role: "driver", driver_id }`, signed with `JWT_SECRET` (7d). The portal stores it on `driver_session.token` and sends `Authorization: Bearer …` to:
+
+- `GET /api/pending-offer`
+- `POST /api/respond-offer` (`driver_id` comes from the token, not the body)
+- `POST /api/update-driver-location`
+
+`GET /api/get-driver-location` accepts admin JWT, the assigned driver JWT, or a customer tracking token scoped to that order (same mint path as `/api/get-orders`).
+
+`POST /api/offer-next` and `/api/expire-offers` require admin JWT, header `x-internal-secret` matching env `INTERNAL_FUNCTION_SECRET`, or a Netlify schedule invocation (`x-netlify-event: schedule`). In-process callers still `require("./dispatch")` and skip HTTP auth.
+
+Fails closed when `JWT_SECRET` is unset.
