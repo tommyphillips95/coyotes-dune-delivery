@@ -300,7 +300,6 @@
                     <div class="detail-field"><label>Email</label><span>${esc(candidate.email)}</span></div>
                     <div class="detail-field"><label>Phone</label><span>${esc(candidate.phone || '—')}</span></div>
                     <div class="detail-field"><label>Date of Birth</label><span>${esc(candidate.dob || '—')}</span></div>
-                    <div class="detail-field"><label>SSN</label><span>${esc(candidate.ssn || '—')}</span></div>
                     <div class="detail-field"><label>Address</label><span>${esc([candidate.address, candidate.city, candidate.state, candidate.zip].filter(Boolean).join(', ') || '—')}</span></div>
                 </div>
             </div>

@@ -218,9 +218,7 @@
             ['License Plate', data.vehicle_plate],
             ['Insurance', data.insurance_provider],
             ['Policy Number', data.insurance_policy],
-            ['Bank', data.bank_name],
-            ['Account Number', data.bank_account],
-            ['Routing Number', data.bank_routing],
+            ['Payouts', 'Stripe Connect (bank details are not stored here)'],
         ];
         profileGrid.innerHTML = fields.map(([label, value]) => `
             <div class="info-field">
@@ -237,9 +235,6 @@
         document.getElementById('edit-vehicle-plate').value = data.vehicle_plate || '';
         document.getElementById('edit-insurance-provider').value = data.insurance_provider || '';
         document.getElementById('edit-insurance-policy').value = data.insurance_policy || '';
-        document.getElementById('edit-bank-name').value = data.bank_name || '';
-        document.getElementById('edit-bank-account').value = data.bank_account || '';
-        document.getElementById('edit-bank-routing').value = data.bank_routing || '';
     }
 
     /* ===== Edit Profile ===== */

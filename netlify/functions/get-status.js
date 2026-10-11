@@ -46,24 +46,16 @@ exports.handler = async (event) => {
       return { statusCode: 404, headers, body: JSON.stringify({ error: "Application not found" }) };
     }
 
-    // Do not return bank PII over the wire.
-    const {
-      bank_account_number,
-      bank_routing_number,
-      ssn,
-      ...safe
-    } = data;
-
+    // Bank/SSN columns are dropped; never map them onto the driver portal.
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        ...safe,
+        ...data,
         name: `${data.first_name} ${data.last_name}`,
         dob: data.date_of_birth,
         vehicle_plate: data.license_plate,
         insurance_policy: data.insurance_policy_number,
-        // Explicitly omit bank_account / bank_routing / ssn
       }),
     };
   } catch (err) {
