@@ -82,11 +82,19 @@
     if (left <= 0) poll();
   }
 
+  function driverToken() {
+    const s = session();
+    return s && s.token ? s.token : null;
+  }
+
   async function poll() {
     const id = driverId();
-    if (!id) return;
+    const token = driverToken();
+    if (!id || !token) return;
     try {
-      const res = await fetch("/api/pending-offer?" + new URLSearchParams({ driver_id: id }));
+      const res = await fetch("/api/pending-offer", {
+        headers: { Authorization: "Bearer " + token }
+      });
       const data = await res.json().catch(function () { return {}; });
       if (!res.ok || !data.offer) { hideCard(); return; }
       render(data.offer);
@@ -103,10 +111,12 @@
     if (acceptBtn) acceptBtn.disabled = true;
     if (declineBtn) declineBtn.disabled = true;
     try {
+      const token = driverToken();
+      if (!token) throw new Error("Not signed in");
       const res = await fetch("/api/respond-offer", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offer_id: current.id, driver_id: id, action: action })
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ offer_id: current.id, action: action })
       });
       const data = await res.json().catch(function () { return {}; });
       if (!res.ok) throw new Error(data.error || data.message || "respond failed");

@@ -2,13 +2,13 @@
  * Netlify Function: Get Application Status (Driver Portal)
  * POST /api/get-status
  *
- * Possession check: applicantId + email (product intent for drivers who are
- * not yet JWT-authenticated — see #6 for driver JWT work). CORS locked via _cors.
- * Bank fields are redacted (Stripe Connect owns payouts).
+ * Possession check: applicantId + email. On success, issues a driver JWT
+ * ({ role: 'driver', driver_id }) for offer/GPS endpoints (#6).
  */
 
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
+const { issueDriverToken } = require("./_auth");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -46,7 +46,8 @@ exports.handler = async (event) => {
       return { statusCode: 404, headers, body: JSON.stringify({ error: "Application not found" }) };
     }
 
-    // Bank/SSN columns are dropped; never map them onto the driver portal.
+    const token = issueDriverToken(data.id);
+
     return {
       statusCode: 200,
       headers,
@@ -56,6 +57,7 @@ exports.handler = async (event) => {
         dob: data.date_of_birth,
         vehicle_plate: data.license_plate,
         insurance_policy: data.insurance_policy_number,
+        token,
       }),
     };
   } catch (err) {

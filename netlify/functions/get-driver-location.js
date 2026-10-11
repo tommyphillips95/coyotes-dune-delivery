@@ -1,5 +1,6 @@
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
+const { requireLocationCaller, assertLocationAccess, jsonError } = require("./_auth");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -7,10 +8,21 @@ exports.handler = async (event) => {
   if (event.httpMethod !== "GET") return { statusCode: 405, headers, body: JSON.stringify({ error: "Method not allowed" }) };
 
   try {
+    const auth = requireLocationCaller(event);
     const url = new URL(event.rawUrl || ("http://localhost" + event.path + (event.rawQuery ? "?" + event.rawQuery : "")));
     const qs = event.queryStringParameters || {};
-    const driverId = url.searchParams.get("driver_id") || qs.driver_id;
-    const orderId = url.searchParams.get("order_id") || qs.order_id;
+    let driverId = url.searchParams.get("driver_id") || qs.driver_id;
+    let orderId = url.searchParams.get("order_id") || qs.order_id;
+
+    // Customer tokens are scoped to one order; ignore mismatched query ids.
+    if (auth.kind === "customer") {
+      orderId = auth.decoded.order_id;
+      driverId = null;
+    }
+    if (auth.kind === "driver" && !driverId && !orderId) {
+      driverId = auth.decoded.driver_id;
+    }
+
     if (!driverId && !orderId) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Please provide driver_id or order_id parameter" }) };
     }
@@ -27,6 +39,8 @@ exports.handler = async (event) => {
     }
 
     const location = data[0];
+    assertLocationAccess(auth, location);
+
     let driverInfo = null;
     if (location.driver_id) {
       const { data: driverData, error: driverError } = await supabase
@@ -57,6 +71,7 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
+    if (err.status) return jsonError(headers, err);
     console.error("Error fetching driver location:", err);
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to fetch driver location", message: err.message }) };
   }

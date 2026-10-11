@@ -1,18 +1,24 @@
-/** POST /api/respond-offer { offer_id, driver_id, action } */
+/** POST /api/respond-offer { offer_id, action } — driver_id from JWT */
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
 const { offerNext, sendSMS, logSMS } = require("./dispatch");
+const { requireAdminOrDriver, jsonError } = require("./_auth");
+
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers, body: "" };
   if (event.httpMethod !== "POST") return { statusCode: 405, headers, body: JSON.stringify({ error: "Method not allowed" }) };
   try {
+    const auth = requireAdminOrDriver(event);
     const body = JSON.parse(event.body || "{}");
     const offerId = body.offer_id;
-    const driverId = body.driver_id;
     const action = (body.action || "").toLowerCase();
-    if (!offerId || !driverId || !["accept", "decline"].includes(action)) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "offer_id, driver_id, action=accept|decline required" }) };
+    if (!offerId || !["accept", "decline"].includes(action)) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "offer_id and action=accept|decline required" }) };
+    }
+    const driverId = auth.kind === "admin" ? body.driver_id : auth.decoded.driver_id;
+    if (!driverId) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "driver_id required for admin" }) };
     }
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
     const { data: offer, error } = await supabase.from("dispatch_offers").select("*").eq("id", offerId).maybeSingle();
@@ -42,7 +48,7 @@ exports.handler = async (event) => {
     const { data: customer } = await supabase.from("customers").select("phone").eq("id", order.customer_id).maybeSingle();
     const { data: driver } = await supabase.from("applications").select("first_name, last_name").eq("id", driverId).maybeSingle();
     const name = driver ? (driver.first_name + " " + driver.last_name).trim() : "Your driver";
-    const site = process.env.SITE_ORIGIN || "https://coyotes-dune-delivery.netlify.app";
+    const site = process.env.SITE_ORIGIN || "https://coyote-dune-delivery.netlify.app";
     if (customer && customer.phone) {
       const msg = name + " accepted " + order.order_number + ". Track: " + site + "/track/ — Coyote's Dune Delivery";
       const sent = await sendSMS(customer.phone, msg);
@@ -50,6 +56,7 @@ exports.handler = async (event) => {
     }
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, action: "accepted", orderId: offer.order_id }) };
   } catch (err) {
+    if (err.status) return jsonError(headers, err);
     return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
