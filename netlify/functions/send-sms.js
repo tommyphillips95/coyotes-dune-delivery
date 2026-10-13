@@ -37,6 +37,17 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
+  // Verify admin token
+  try {
+    const jwt = require('jsonwebtoken');
+    const token = (event.headers.authorization || '').replace('Bearer ', '');
+    if (!token || !process.env.JWT_SECRET) throw new Error('Unauthorized');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'admin') throw new Error('Admin access required');
+  } catch (err) {
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
   // Validate Twilio credentials are configured
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
     console.error('Twilio environment variables are not configured');

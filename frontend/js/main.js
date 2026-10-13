@@ -166,20 +166,12 @@
         observer.observe(el);
     });
 
-    // ── Order Form ──────────────────────────────────────────
-    const orderForm = document.getElementById('orderForm');
-    const orderSuccess = document.getElementById('orderSuccess');
-    const orderSubmitBtn = document.getElementById('orderSubmitBtn');
-    const orderBtnText = document.getElementById('orderBtnText');
-    const orderResetBtn = document.getElementById('orderResetBtn');
-    const serviceType = document.getElementById('serviceType');
-    const scheduleFields = document.getElementById('scheduleFields');
-    const passengerField = document.getElementById('passengerField');
-    const packageField = document.getElementById('packageField');
-    const packageSizeField = document.getElementById('packageSizeField');
+    // ── Phone formatting (any page with #customerPhone) ─────
+    // The legacy home-page order form (POST /api/submit-order with a
+    // client-entered price) was removed: it also bound a second submit
+    // handler to /order/'s #orderForm and could create duplicate orders.
+    // All booking now goes through /order/ (order.js → /api/create-order).
     const customerPhone = document.getElementById('customerPhone');
-
-    // Phone formatting
     if (customerPhone) {
         customerPhone.addEventListener('input', function() {
             const digits = this.value.replace(/\D/g, '').slice(0, 10);
@@ -191,127 +183,8 @@
         });
     }
 
-    // Service type toggle
-    function updateServiceFields() {
-        const type = serviceType ? serviceType.value : '';
-
-        // Passenger count for ride & group_transport
-        if (passengerField) {
-            passengerField.style.display = (type === 'ride' || type === 'group_transport') ? '' : 'none';
-        }
-
-        // Package fields for package_delivery & grocery_run
-        const showPackage = type === 'package_delivery' || type === 'grocery_run';
-        if (packageField) packageField.style.display = showPackage ? '' : 'none';
-        if (packageSizeField) packageSizeField.style.display = showPackage ? '' : 'none';
-    }
-
-    if (serviceType) {
-        serviceType.addEventListener('change', updateServiceFields);
-    }
-
-    // Timing toggle
-    const timingRadios = document.querySelectorAll('input[name="timing"]');
-    timingRadios.forEach(radio => {
-        radio.addEventListener('change', function() {
-            if (scheduleFields) {
-                scheduleFields.style.display = this.value === 'scheduled' ? '' : 'none';
-            }
-        });
-    });
-
-    // Form submission
-    if (orderForm) {
-        orderForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-
-            if (!orderSubmitBtn || !orderBtnText) return;
-            orderSubmitBtn.disabled = true;
-            orderBtnText.textContent = 'Submitting...';
-
-            const formData = new FormData(orderForm);
-            const data = Object.fromEntries(formData.entries());
-
-            // Convert timing radio to is_asap boolean
-            data.is_asap = data.timing === 'asap';
-            delete data.timing;
-
-            // Clean phone
-            data.customer_phone = data.customer_phone.replace(/\D/g, '');
-
-            // Parse passenger count
-            data.passenger_count = parseInt(data.passenger_count, 10) || 1;
-
-            // Parse estimated price
-            if (data.estimated_price) {
-                data.estimated_price = parseFloat(data.estimated_price);
-            }
-
-            const result = await CoyoteAPI.post('/api/submit-order', data);
-
-            if (result.ok && result.data.success) {
-                // Show success
-                orderForm.style.display = 'none';
-                orderSuccess.classList.add('active');
-                const orderNumDisplay = document.getElementById('orderNumberDisplay');
-                if (orderNumDisplay) {
-                    orderNumDisplay.textContent = result.data.orderNumber || result.data.orderId;
-                }
-                orderSuccess.style.display = 'block';
-
-                // ── Analytics: Order submitted ─────────────────────
-                if (typeof trackEvent === 'function') {
-                    trackEvent('order', 'submitted', data.service_type, data.estimated_price || 0);
-                }
-                if (typeof firebaseTrackEvent === 'function') {
-                    firebaseTrackEvent('order_submitted', {
-                        service_type: data.service_type,
-                        estimated_price: data.estimated_price || 0,
-                    });
-                }
-                if (typeof trackConversion === 'function') {
-                    trackConversion('generate_lead', {
-                        value: data.estimated_price || 0,
-                        currency: 'USD',
-                    });
-                }
-                if (typeof logAnalyticsEvent === 'function') {
-                    logAnalyticsEvent('order_submitted', {
-                        category: 'order',
-                        service_type: data.service_type,
-                        estimated_price: data.estimated_price || 0,
-                    });
-                }
-            } else {
-                // Show error
-                const errorMsg = (result.data && result.data.message) || result.error || 'Something went wrong. Please try again or call dispatch.';
-                alert('Error: ' + errorMsg);
-                orderSubmitBtn.disabled = false;
-                orderBtnText.textContent = 'Submit Order';
-            }
-        });
-    }
-
-    // Reset form
-    if (orderResetBtn) {
-        orderResetBtn.addEventListener('click', function() {
-            if (orderForm) {
-                orderForm.reset();
-                orderForm.style.display = 'block';
-            }
-            if (orderSuccess) {
-                orderSuccess.classList.remove('active');
-                orderSuccess.style.display = 'none';
-            }
-            if (orderSubmitBtn) orderSubmitBtn.disabled = false;
-            if (orderBtnText) orderBtnText.textContent = 'Submit Order';
-            updateServiceFields();
-            if (scheduleFields) scheduleFields.style.display = 'none';
-        });
-    }
-
     // ── Analytics: Track "Order Now" CTA clicks ─────────────
-    document.querySelectorAll('a[href="#order"]').forEach(link => {
+    document.querySelectorAll('a[href="#order"], a[href="/order/"]').forEach(link => {
         link.addEventListener('click', () => {
             if (typeof trackEvent === 'function') {
                 trackEvent('cta', 'click', 'order_now');

@@ -23,8 +23,17 @@ exports.handler = async (event) => {
   // Verify admin token
   const authHeader = event.headers.authorization || '';
   const token = authHeader.replace('Bearer ', '');
-  if (!token) {
+  if (!token || !process.env.JWT_SECRET) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'admin') {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Admin access required' }) };
+    }
+  } catch (err) {
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid token' }) };
   }
 
   try {

@@ -1,82 +1,80 @@
 /**
- * Netlify Function: Update Driver Location
  * POST /api/update-driver-location
- * 
- * Body: { driver_id, lat, lng, order_id (optional), accuracy (optional) }
- * Stores the driver's current GPS location in the driver_locations table.
+ * Body: { lat, lng, order_id?, accuracy?, online? } — or { online } alone for a GPS-less heartbeat
+ * driver_id comes from the driver JWT (admin may pass driver_id).
  */
 
-const { createClient } = require('@supabase/supabase-js');
+const { createClient } = require("@supabase/supabase-js");
+const { headers: corsHeaders } = require("./_cors");
+const { requireAdminOrDriver, jsonError } = require("./_auth");
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  const headers = corsHeaders(event);
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers, body: '' };
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers, body: "" };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    const auth = requireAdminOrDriver(event);
+    const body = JSON.parse(event.body || "{}");
+    const driverId = auth.kind === "admin" ? body.driver_id : auth.decoded.driver_id;
+    if (!driverId) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "driver_id is required" }) };
+    }
+    if (auth.kind === "driver" && body.driver_id && body.driver_id !== auth.decoded.driver_id) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: "Forbidden" }) };
+    }
 
-    // Validate required fields
-    if (!body.driver_id) {
+    const hasCoords = body.lat !== undefined && body.lng !== undefined;
+    const onlineOnly = body.online !== undefined && !hasCoords;
+
+    // Offline-tolerant heartbeat: drivers can stay online when GPS briefly fails.
+    if (!hasCoords && !onlineOnly) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "lat and lng are required (or send online for a heartbeat)" }) };
+    }
+
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const now = new Date().toISOString();
+    const online = body.online !== false;
+
+    if (onlineOnly) {
+      await supabase.from("applications").update({ online, last_location_at: now }).eq("id", driverId);
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers,
-        body: JSON.stringify({ error: 'driver_id is required' }),
+        body: JSON.stringify({
+          success: true,
+          heartbeat: true,
+          data: { driver_id: driverId, online, timestamp: now },
+        }),
       };
     }
 
-    if (body.lat === undefined || body.lng === undefined) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'lat and lng are required' }),
-      };
-    }
-
-    // Validate lat/lng are valid numbers
     const lat = parseFloat(body.lat);
     const lng = parseFloat(body.lng);
 
     if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Invalid latitude or longitude values' }),
-      };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid latitude or longitude values" }) };
     }
 
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
-
-    // Insert location record
     const locationData = {
-      driver_id: body.driver_id,
+      driver_id: driverId,
       lat: lat,
       lng: lng,
       order_id: body.order_id || null,
       accuracy: body.accuracy ? parseFloat(body.accuracy) : null,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
     };
 
-    const { data, error } = await supabase
-      .from('driver_locations')
-      .insert([locationData])
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from("driver_locations").insert([locationData]).select().single();
     if (error) throw error;
+
+    await supabase.from("applications").update({ online, last_location_at: now }).eq("id", driverId);
 
     return {
       statusCode: 201,
@@ -95,11 +93,12 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Error updating driver location:', err);
+    if (err.status) return jsonError(headers, err);
+    console.error("Error updating driver location:", err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Failed to update driver location', message: err.message }),
+      body: JSON.stringify({ error: "Failed to update driver location", message: err.message }),
     };
   }
 };

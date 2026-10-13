@@ -925,3 +925,11 @@ body {
     .log-item { flex-direction: column; align-items: flex-start; gap: 4px; }
     .log-date { min-width: auto; }
 }
+
+/* Orders + weather hold (#33) */
+.orders-weather { margin-top: 24px; }
+.orders-weather h3 { margin: 0 0 12px; }
+.weather-banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+.weather-banner.weather-on { background: #fde8e8; color: #9b1c1c; border: 1px solid #f8b4b4; }
+.weather-banner.weather-off { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+.beach-permit-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

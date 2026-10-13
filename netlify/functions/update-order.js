@@ -55,7 +55,7 @@ async function logSMS(supabase, { order_id, phone_number, message, status, twili
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'PATCH, OPTIONS',
   };
 
@@ -65,6 +65,17 @@ exports.handler = async (event) => {
 
   if (event.httpMethod !== 'PATCH') {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  // Verify admin token
+  try {
+    const jwt = require('jsonwebtoken');
+    const token = (event.headers.authorization || '').replace('Bearer ', '');
+    if (!token || !process.env.JWT_SECRET) throw new Error('Unauthorized');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'admin') throw new Error('Admin access required');
+  } catch (err) {
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
   try {
