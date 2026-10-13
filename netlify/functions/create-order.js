@@ -7,6 +7,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
 const { priceQuote } = require("./zones");
 const { issueTrackingToken } = require("./_auth");
+const { weatherShutdownActive, weatherShutdownPayload } = require("./_weather");
 
 function generateOrderNumber() {
   const prefix = "CDD";
@@ -61,6 +62,14 @@ exports.handler = async (event) => {
     }
     if (!body.service_type) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Service type is required" }) };
+    }
+
+    if (weatherShutdownActive()) {
+      return {
+        statusCode: 503,
+        headers,
+        body: JSON.stringify(weatherShutdownPayload()),
+      };
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -125,6 +134,8 @@ exports.handler = async (event) => {
       estimated_price: estimatedPrice,
       final_price: null,
       tip_amount: body.tip_amount ? parseFloat(body.tip_amount) : 0,
+      required_vehicle_class: vehicle,
+      weather_hold: false,
     };
 
     const { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single();

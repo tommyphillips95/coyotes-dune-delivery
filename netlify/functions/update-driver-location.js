@@ -1,6 +1,6 @@
 /**
  * POST /api/update-driver-location
- * Body: { lat, lng, order_id?, accuracy?, online? }
+ * Body: { lat, lng, order_id?, accuracy?, online? } — or { online } alone for a GPS-less heartbeat
  * driver_id comes from the driver JWT (admin may pass driver_id).
  */
 
@@ -30,8 +30,29 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: "Forbidden" }) };
     }
 
-    if (body.lat === undefined || body.lng === undefined) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "lat and lng are required" }) };
+    const hasCoords = body.lat !== undefined && body.lng !== undefined;
+    const onlineOnly = body.online !== undefined && !hasCoords;
+
+    // Offline-tolerant heartbeat: drivers can stay online when GPS briefly fails.
+    if (!hasCoords && !onlineOnly) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "lat and lng are required (or send online for a heartbeat)" }) };
+    }
+
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const now = new Date().toISOString();
+    const online = body.online !== false;
+
+    if (onlineOnly) {
+      await supabase.from("applications").update({ online, last_location_at: now }).eq("id", driverId);
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          heartbeat: true,
+          data: { driver_id: driverId, online, timestamp: now },
+        }),
+      };
     }
 
     const lat = parseFloat(body.lat);
@@ -41,22 +62,19 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid latitude or longitude values" }) };
     }
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-
     const locationData = {
       driver_id: driverId,
       lat: lat,
       lng: lng,
       order_id: body.order_id || null,
       accuracy: body.accuracy ? parseFloat(body.accuracy) : null,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
     };
 
     const { data, error } = await supabase.from("driver_locations").insert([locationData]).select().single();
     if (error) throw error;
 
-    const online = body.online !== false;
-    await supabase.from("applications").update({ online }).eq("id", driverId);
+    await supabase.from("applications").update({ online, last_location_at: now }).eq("id", driverId);
 
     return {
       statusCode: 201,

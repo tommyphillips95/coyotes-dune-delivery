@@ -37,6 +37,8 @@ Customer order, driver apply/portal, admin dispatch, GPS ping tables.
 | `CHECKR_WEBHOOK_SECRET` | `checkr-webhook.js` | Optional until Checkr webhooks | Yes |
 | `CHECKR_PACKAGE` | `checkr-initiate.js` | Optional (code has default) | No |
 | `FIREBASE_ADMIN_SDK_JSON` | `send-push-notification.js` | Optional (push only) | Yes |
+| `WEATHER_SHUTDOWN` | `create-order.js`, `dispatch.js` via `_weather.js` | Optional. Set `1`/`true` to pause new orders + offers | No |
+| `WEATHER_SHUTDOWN_REASON` | `_weather.js` | Optional customer message during a hold | No |
 
 Also set `NODE_VERSION=22` for builds (Netlify build/runtime). Template: root `.env.example`.
 
@@ -50,6 +52,7 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 1. `schema.sql` (base tables, indexes, RLS policies, triggers)
 2. `schema/launch_2026_09_22.sql` (drop legacy SSN/bank if present, add vehicle/weather fields, delete placeholder admin, tighten driver_locations policies)
 3. `schema/dispatch_offers.sql` (auto-offer table + service-role-only RLS)
+4. `schema/issue_13_constraints.sql` (beach permit flags + `last_location_at` heartbeat)
 
 ### Idempotency
 - Tables/indexes/extensions: mostly `IF NOT EXISTS` — safe to re-run.
