@@ -13,6 +13,7 @@
     let selectedIds = new Set();
     let currentDetailId = null;
     let deleteTargetId = null;
+    let currentOrders = [];
 
     /* ===== DOM refs ===== */
     const loginScreen = document.getElementById('login-screen');
@@ -50,6 +51,7 @@
         if (token) {
             showDashboard();
             loadApplications();
+            loadOrders();
         } else {
             showLogin();
         }
@@ -78,7 +80,7 @@
             if (r.status === 401) { handleTokenExpired(); }
             const data = await r.json().catch(() => ({}));
             if (!r.ok) {
-                const err = new Error(data.message || `HTTP ${r.status}`);
+                const err = new Error(data.error || data.message || `HTTP ${r.status}`);
                 err.status = r.status;
                 err.data = data;
                 throw err;
@@ -100,6 +102,7 @@
             localStorage.setItem('admin_token', token);
             showDashboard();
             loadApplications();
+            loadOrders();
             showToast('Welcome back!', 'success');
 
             // ── Analytics: Admin login success ───────────────
@@ -206,22 +209,22 @@
         tableBody.innerHTML = '';
         pageItems.forEach(app => {
             const tr = document.createElement('tr');
-            const checked = selectedIds.has(app.id) ? 'checked' : '';
+            const checked = selectedIds.has(String(app.id)) ? 'checked' : '';
             tr.innerHTML = `
-                <td class="col-check"><input type="checkbox" data-id="${app.id}" ${checked}></td>
-                <td class="col-id">#${app.id}</td>
+                <td class="col-check"><input type="checkbox" data-id="${esc(app.id)}" ${checked}></td>
+                <td class="col-id" title="${esc(app.id)}">#${esc(String(app.id).slice(0, 8))}</td>
                 <td class="col-name">${esc(app.name)}</td>
                 <td class="col-email">${esc(app.email)}</td>
                 <td class="col-status"><span class="badge badge-${app.status}">${fmtStatus(app.status)}</span></td>
                 <td class="col-date">${fmtDate(app.submitted || app.created_at)}</td>
                 <td class="col-actions">
                     <div class="actions-cell">
-                        <button class="btn btn-secondary btn-icon" title="View" data-action="view" data-id="${app.id}">👁</button>
-                        <button class="btn btn-success btn-icon" title="Approve" data-action="approve" data-id="${app.id}">✅</button>
-                        <button class="btn btn-danger btn-icon" title="Reject" data-action="reject" data-id="${app.id}">❌</button>
-                        <button class="btn btn-warning btn-icon" title="Background Check" data-action="bg" data-id="${app.id}">🔍</button>
-                        <button class="btn btn-warning btn-icon" title="On Hold" data-action="hold" data-id="${app.id}">🛑</button>
-                        <button class="btn btn-danger btn-icon" title="Delete" data-action="delete" data-id="${app.id}">🗑</button>
+                        <button class="btn btn-secondary btn-icon" title="View" data-action="view" data-id="${esc(app.id)}">👁</button>
+                        <button class="btn btn-success btn-icon" title="Approve" data-action="approve" data-id="${esc(app.id)}">✅</button>
+                        <button class="btn btn-danger btn-icon" title="Reject" data-action="reject" data-id="${esc(app.id)}">❌</button>
+                        <button class="btn btn-warning btn-icon" title="Background Check" data-action="bg" data-id="${esc(app.id)}">🔍</button>
+                        <button class="btn btn-warning btn-icon" title="On Hold" data-action="hold" data-id="${esc(app.id)}">🛑</button>
+                        <button class="btn btn-danger btn-icon" title="Delete" data-action="delete" data-id="${esc(app.id)}">🗑</button>
                     </div>
                 </td>
             `;
@@ -258,7 +261,7 @@
     function onTableClick(e) {
         const checkbox = e.target.closest('input[type="checkbox"][data-id]');
         if (checkbox) {
-            const id = parseInt(checkbox.dataset.id);
+            const id = checkbox.dataset.id;
             if (checkbox.checked) selectedIds.add(id); else selectedIds.delete(id);
             updateBulkUI();
             return;
@@ -266,7 +269,7 @@
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const action = btn.dataset.action;
-        const id = parseInt(btn.dataset.id);
+        const id = btn.dataset.id;
         if (action === 'view') openDetail(id);
         else if (action === 'delete') confirmDelete(id);
         else if (['approve','reject','bg','hold'].includes(action)) {
@@ -278,7 +281,7 @@
     /* ===== Detail Modal ===== */
     async function openDetail(id) {
         currentDetailId = id;
-        const app = currentApps.find(a => a.id === id);
+        const app = currentApps.find(a => String(a.id) === id);
         if (!app) return;
         modalStatus.value = app.status || 'pending';
         modalBody.innerHTML = buildDetailHTML(app);
@@ -335,6 +338,11 @@
                 <div class="documents-list">${docList}</div>
             </div>
             <div class="detail-section">
+                <h4>Beach / Dune Access</h4>
+                <label class="beach-permit-toggle"><input type="checkbox" id="beach-permit-ok" ${app.beach_permit_ok ? 'checked' : ''}> Current beach / dune access permit on file</label>
+                <textarea id="beach-access-notes" class="admin-notes" placeholder="Permit number, expiry, which beaches...">${esc(app.beach_access_notes || '')}</textarea>
+            </div>
+            <div class="detail-section">
                 <h4>Admin Notes</h4>
                 <textarea id="admin-notes" class="admin-notes" placeholder="Add internal notes...">${esc(app.admin_notes || '')}</textarea>
             </div>
@@ -351,10 +359,19 @@
         const notesEl = document.getElementById('admin-notes');
         const notes = notesEl ? notesEl.value : '';
         const status = modalStatus.value;
+        const permitEl = document.getElementById('beach-permit-ok');
+        const beachNotesEl = document.getElementById('beach-access-notes');
+        const beach_permit_ok = permitEl ? permitEl.checked : undefined;
+        const beach_access_notes = beachNotesEl ? beachNotesEl.value : undefined;
         try {
-            await api('PUT', `/applications/${currentDetailId}`, { status, admin_notes: notes });
-            const app = currentApps.find(a => a.id === currentDetailId);
-            if (app) { app.status = status; app.admin_notes = notes; }
+            await api('PUT', `/applications/${currentDetailId}`, { status, admin_notes: notes, beach_permit_ok, beach_access_notes });
+            const app = currentApps.find(a => String(a.id) === currentDetailId);
+            if (app) {
+                app.status = status;
+                app.admin_notes = notes;
+                if (beach_permit_ok !== undefined) app.beach_permit_ok = beach_permit_ok;
+                if (beach_access_notes !== undefined) app.beach_access_notes = beach_access_notes;
+            }
             applyFiltersAndSort();
             updateStats();
             closeDetail();
@@ -382,7 +399,7 @@
     /* ===== Delete ===== */
     function confirmDelete(id) {
         deleteTargetId = id;
-        const app = currentApps.find(a => a.id === id);
+        const app = currentApps.find(a => String(a.id) === id);
         deleteTargetName.textContent = app ? esc(app.name) : '';
         deleteModal.style.display = '';
     }
@@ -396,7 +413,7 @@
         if (!deleteTargetId) return;
         try {
             await api('DELETE', `/applications/${deleteTargetId}`);
-            currentApps = currentApps.filter(a => a.id !== deleteTargetId);
+            currentApps = currentApps.filter(a => String(a.id) !== deleteTargetId);
             selectedIds.delete(deleteTargetId);
             applyFiltersAndSort();
             updateStats();
@@ -418,7 +435,7 @@
     function onSelectAll(e) {
         const checkboxes = tableBody.querySelectorAll('input[type="checkbox"][data-id]');
         checkboxes.forEach(cb => {
-            const id = parseInt(cb.dataset.id);
+            const id = cb.dataset.id;
             if (e.target.checked) selectedIds.add(id); else selectedIds.delete(id);
             cb.checked = e.target.checked;
         });
@@ -433,7 +450,7 @@
         if (!ids.length) return;
         try {
             await api('POST', '/applications/bulk', { ids, status });
-            currentApps.forEach(a => { if (selectedIds.has(a.id)) a.status = status; });
+            currentApps.forEach(a => { if (selectedIds.has(String(a.id))) a.status = status; });
             selectedIds.clear();
             applyFiltersAndSort();
             updateStats();
@@ -461,7 +478,7 @@
     async function updateStatus(id, status) {
         try {
             await api('PUT', `/applications/${id}`, { status });
-            const app = currentApps.find(a => a.id === id);
+            const app = currentApps.find(a => String(a.id) === id);
             if (app) app.status = status;
             applyFiltersAndSort();
             updateStats();
@@ -499,6 +516,69 @@
             }
         } catch (err) {
             showToast(err.message || 'Status update failed', 'error');
+        }
+    }
+
+    /* ===== Orders + weather hold (#33) ===== */
+    const ordersBody = document.getElementById('orders-table-body');
+    const weatherBanner = document.getElementById('weather-banner');
+
+    function renderWeather(w) {
+        if (!weatherBanner) return;
+        if (w && w.active) {
+            weatherBanner.className = 'weather-banner weather-on';
+            weatherBanner.textContent = `Global weather shutdown is ON (Netlify env WEATHER_SHUTDOWN). New orders and offers are paused. ${w.reason || ''}`;
+        } else {
+            weatherBanner.className = 'weather-banner weather-off';
+            weatherBanner.textContent = 'Global weather shutdown is off. Use the per-order hold below to pause a single delivery.';
+        }
+    }
+
+    function renderOrders(orders) {
+        if (!ordersBody) return;
+        if (!orders.length) {
+            ordersBody.innerHTML = '<tr><td colspan="6">No orders yet.</td></tr>';
+            return;
+        }
+        ordersBody.innerHTML = orders.map(o => `
+            <tr>
+                <td>${esc(o.order_number || String(o.id).slice(0, 8))}</td>
+                <td>${esc(o.pickup_city || '—')} to ${esc(o.dropoff_city || o.pickup_city || '—')}</td>
+                <td>${esc(o.required_vehicle_class || '—')}</td>
+                <td><span class="badge badge-${esc(o.status)}">${fmtStatus(o.status || 'pending')}</span></td>
+                <td>${o.weather_hold ? '<span class="badge badge-on_hold">on hold</span>' : 'none'}</td>
+                <td><button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></td>
+            </tr>`).join('');
+    }
+
+    async function loadOrders() {
+        if (!ordersBody) return;
+        try {
+            const data = await api('GET', '/orders');
+            currentOrders = data.orders || [];
+            renderOrders(currentOrders);
+            renderWeather(data.weather);
+        } catch (err) {
+            console.error(err);
+            ordersBody.innerHTML = '<tr><td colspan="6">Could not load orders.</td></tr>';
+        }
+    }
+
+    async function onOrdersClick(e) {
+        const btn = e.target.closest('button[data-hold-id]');
+        if (!btn) return;
+        const id = btn.dataset.holdId;
+        const hold = btn.dataset.holdNext === 'true';
+        btn.disabled = true;
+        try {
+            await api('PUT', `/orders/${id}/weather-hold`, { weather_hold: hold });
+            const o = currentOrders.find(x => String(x.id) === id);
+            if (o) o.weather_hold = hold;
+            renderOrders(currentOrders);
+            showToast(hold ? 'Weather hold set' : 'Weather hold cleared', 'success');
+        } catch (err) {
+            btn.disabled = false;
+            showToast(err.message || 'Could not update weather hold', 'error');
         }
     }
 
@@ -542,7 +622,8 @@
     function bindEvents() {
         loginForm.addEventListener('submit', onLogin);
         logoutBtn.addEventListener('click', onLogout);
-        refreshBtn.addEventListener('click', loadApplications);
+        refreshBtn.addEventListener('click', () => { loadApplications(); loadOrders(); });
+        if (ordersBody) ordersBody.addEventListener('click', onOrdersClick);
         searchInput.addEventListener('input', debounce(applyFiltersAndSort, 250));
         statusFilter.addEventListener('change', applyFiltersAndSort);
         selectAll.addEventListener('change', onSelectAll);

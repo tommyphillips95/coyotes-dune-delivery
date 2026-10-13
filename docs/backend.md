@@ -43,11 +43,26 @@ this list from growing.
 | Frontend | Calls | Closest function | What's needed |
 |---|---|---|---|
 | `/apply/` (`js/apply.js`) | `POST /api/submit-application` (also `/api/applications` redirect) | `submit-application` | Live. Form no longer collects SSN or bank details (Checkr + Stripe Connect later). Insurance card file upload to Supabase Storage is still a follow-up if multipart is needed; JSON submit works today. Honest-errors: success only after 2xx + `applicationId`. |
-| `/admin/` (`admin/admin.js`) and `/admin/checkr.html` login | `/api/admin/login`, `/api/admin/applications`, `/api/admin/applications/:id`, `/api/admin/applications/bulk` | `login-admin`, `get-applications`, `update-application` | Port the dashboard to the function contracts (paths, query params, response shapes), or add a small `admin` router function. Delete/bulk have no function at all. |
 | `/driver/` documents | `POST /api/update-application/:id/documents` (multipart) | `update-application` (JSON `PUT`) | Same storage decision as the insurance card. |
 
 When one of these is ported, remove it from `KNOWN_GAPS` in the test and from
 this table. Once all are gone, delete `legacy/express-backend/`.
+
+## Admin router (#33)
+
+`netlify/functions/admin.js` serves the dashboard contract under `/api/admin/*`
+(via the `/api/*` catch-all). Every route except `login` requires an admin JWT.
+
+| Route | Does |
+|---|---|
+| `POST /api/admin/login` | delegates to `login-admin` (Netlify `ADMIN_*` env) |
+| `GET /api/admin/applications` | list, shaped for the dashboard (`name`, `admin_notes` = `notes`, beach fields) |
+| `PUT /api/admin/applications/:id` | whitelist: `status`, `admin_notes`, `beach_permit_ok`, `beach_access_notes` |
+| `POST /api/admin/applications/bulk` | `{ ids, status }` |
+| `DELETE /api/admin/applications/:id` | refused (405); set status to `rejected` instead |
+| `GET /api/admin/orders` | last 50 orders with `weather_hold` + global weather state |
+| `PUT /api/admin/orders/:id/weather-hold` | `{ weather_hold: true\|false }`, logged to `order_status_logs` |
+| `GET /api/admin/weather` | read-only `WEATHER_SHUTDOWN` state (the global gate stays Netlify env only) |
 
 ## Driver JWT (#6)
 
