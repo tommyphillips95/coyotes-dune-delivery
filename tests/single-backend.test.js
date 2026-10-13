@@ -53,7 +53,7 @@ function resolveApi(apiPath) {
 
 // Express-era call sites with no matching function yet. Documented in
 // docs/backend.md; each needs a decision from Tommy before porting.
-const KNOWN_GAPS = new Set(["/api/admin", "/api/admin/login", "/api/admin/applications", "/api/admin/applications/bulk"]);
+const KNOWN_GAPS = new Set([]); // /api/admin/* now served by netlify/functions/admin.js (#33)
 
 /** Collect every /api path the frontend calls (literals + API_BASE helpers). */
 function frontendApiCalls() {
