@@ -1,6 +1,7 @@
 /** Shared auto-offer: paid order → nearest eligible online driver → timeout → next. */
 
 const { requiredClass, isBeachCity } = require("./zones");
+const { weatherShutdownActive } = require("./_weather");
 
 const OFFER_SECONDS = 90;
 const BEACH_CLASSES = new Set(["4x4", "utv", "awd"]);
@@ -69,7 +70,7 @@ async function offerNext(supabase, orderId) {
 
   const { data: order, error: orderErr } = await supabase
     .from("orders")
-    .select("id, order_number, pickup_city, dropoff_city, pickup_lat, pickup_lng, pickup_address, dropoff_address, status, payment_status, customer_id, driver_id")
+    .select("id, order_number, pickup_city, dropoff_city, pickup_lat, pickup_lng, pickup_address, dropoff_address, status, payment_status, customer_id, driver_id, required_vehicle_class, weather_hold")
     .eq("id", orderId)
     .maybeSingle();
   if (orderErr) throw orderErr;
@@ -78,8 +79,11 @@ async function offerNext(supabase, orderId) {
   if (order.status === "cancelled" || order.status === "completed") {
     return { offered: false, reason: "order_closed" };
   }
+  if (weatherShutdownActive() || order.weather_hold) {
+    return { offered: false, reason: "weather_hold", requiredClass: requiredClass(order.pickup_city, order.dropoff_city || order.pickup_city) };
+  }
 
-  const need = requiredClass(order.pickup_city, order.dropoff_city || order.pickup_city);
+  const need = order.required_vehicle_class || requiredClass(order.pickup_city, order.dropoff_city || order.pickup_city);
 
   const { data: open } = await supabase
     .from("dispatch_offers")

@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS applications (
     background_check_completed_at TIMESTAMPTZ,
     status TEXT DEFAULT 'pending', -- pending, background_check, approved, rejected, on_hold
     online BOOLEAN DEFAULT FALSE, -- driver available for dispatch
+    beach_permit_ok BOOLEAN DEFAULT FALSE, -- current beach/dune access permit
+    beach_access_notes TEXT, -- admin notes on permit / beach access
+    last_location_at TIMESTAMPTZ, -- last GPS or online heartbeat
     fcm_token TEXT, -- Firebase Cloud Messaging token for push notifications
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
