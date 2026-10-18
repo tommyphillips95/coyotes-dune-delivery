@@ -37,6 +37,40 @@ function chicagoWallClock(now) {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
 
+// ISO 8601 with an explicit offset (or Z), e.g. "2026-10-18T21:30:00-05:00".
+const ISO_OFFSET_RE = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d{1,3})?)?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+
+/**
+ * Resolve the requested schedule.
+ *   { asap: true }                      -> ASAP (no schedule, or "later" missing date/time)
+ *   { date, time }                      -> Central wall-clock date/time to store
+ *   { error }                           -> 400 message
+ * scheduled_at (explicit offset) wins over scheduled_date/time, so a phone set
+ * to another zone can't be misread as Central. Without it, date/time are
+ * taken as Central wall clock (the order form's convention).
+ */
+function resolveSchedule(body, now) {
+  if (!body || body.schedule !== "later") return { asap: true };
+  const at = body.scheduled_at == null ? "" : String(body.scheduled_at).trim();
+  if (at) {
+    const m = ISO_OFFSET_RE.exec(at);
+    const instant = m ? new Date(at) : null;
+    if (!m || Number.isNaN(instant.getTime())) return { error: "Please choose a valid date and time." };
+    // Reject impossible calendar dates (Date() would roll 2026-02-30 to March).
+    const check = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (check.getUTCMonth() !== +m[2] - 1 || check.getUTCDate() !== +m[3]) return { error: "Please choose a valid date and time." };
+    if (instant.getTime() < Math.floor((now || new Date()).getTime() / 60000) * 60000) {
+      return { error: "That pickup time has already passed. Please choose a future time." };
+    }
+    const [date, time] = chicagoWallClock(instant).split("T");
+    return { date, time };
+  }
+  if (!body.scheduled_date || !body.scheduled_time) return { asap: true };
+  const bad = scheduleError(body.scheduled_date, body.scheduled_time, now);
+  if (bad) return { error: bad };
+  return { date: String(body.scheduled_date).trim(), time: String(body.scheduled_time).trim() };
+}
+
 /** Returns an error string for a bad scheduled date/time, or null if OK. */
 function scheduleError(date, time, now) {
   const d = String(date || "").trim();
@@ -194,11 +228,9 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers, body: JSON.stringify({ error: `Please enter a 5-digit ZIP code for ${label}.` }) };
       }
     }
-    // Same condition the scheduling branch below uses; date without time still falls back to ASAP.
-    if (body.schedule === "later" && body.scheduled_date && body.scheduled_time) {
-      const bad = scheduleError(body.scheduled_date, body.scheduled_time);
-      if (bad) return { statusCode: 400, headers, body: JSON.stringify({ error: bad }) };
-    }
+    // scheduled_at (explicit offset) first, else Central date/time; "later" without them is ASAP.
+    const schedule = resolveSchedule(body);
+    if (schedule.error) return { statusCode: 400, headers, body: JSON.stringify({ error: schedule.error }) };
 
     let idempotencyKey = null;
     if (body.idempotency_key != null && body.idempotency_key !== "") {
@@ -249,10 +281,10 @@ exports.handler = async (event) => {
     let isAsap = true;
     let scheduledDate = null;
     let scheduledTime = null;
-    if (body.schedule === "later" && body.scheduled_date && body.scheduled_time) {
+    if (!schedule.asap) {
       isAsap = false;
-      scheduledDate = body.scheduled_date;
-      scheduledTime = body.scheduled_time;
+      scheduledDate = schedule.date;
+      scheduledTime = schedule.time;
     }
 
     const pickupCity = body.pickup_city.trim();
@@ -356,4 +388,4 @@ exports.handler = async (event) => {
 };
 
 // Exposed for unit tests.
-exports._validation = { isValidZip, chicagoWallClock, scheduleError, isMissingIdempotencyColumn, IDEMPOTENCY_KEY_RE, orderPayloadHash };
+exports._validation = { isValidZip, chicagoWallClock, scheduleError, resolveSchedule, isMissingIdempotencyColumn, IDEMPOTENCY_KEY_RE, orderPayloadHash };

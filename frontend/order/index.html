@@ -490,10 +490,11 @@
                                     <input type="date" id="serviceDate" name="serviceDate" required>
                                 </div>
                                 <div>
-                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time</label>
+                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time (Central)</label>
                                     <input type="time" id="serviceTime" name="serviceTime" required>
                                 </div>
                             </div>
+                            <span class="hint" id="serviceTzHint">Times are Central Time (Port Aransas), even if your phone is set to another time zone.</span>
                             <span class="error-message" id="dateTimeError">Please select a valid future date and time.</span>
                         </div>
 

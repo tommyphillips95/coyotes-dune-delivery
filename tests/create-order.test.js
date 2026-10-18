@@ -139,6 +139,44 @@ test("400 when a scheduled pickup is in the past (Chicago time); nothing written
   assert.strictEqual(currentFake.db.customers.length, 0);
 });
 
+// ── Explicit time zone: scheduled_at carries its offset ──
+test("resolveSchedule: scheduled_at offsets are honored (phone on Pacific is not 'already passed')", () => {
+  const now = new Date("2026-10-19T01:00:00Z"); // 8:00 PM CDT = 6:00 PM PDT
+  const R = (b) => V.resolveSchedule(Object.assign({ schedule: "later" }, b), now);
+  // What the fixed form sends: the Central wall time with the Central offset.
+  assert.deepStrictEqual(R({ scheduled_at: "2026-10-18T21:30:00-05:00" }), { date: "2026-10-18", time: "21:30" });
+  // A Pacific-offset 7:45 PM is 9:45 PM Central: in the future, stored as Central.
+  assert.deepStrictEqual(R({ scheduled_at: "2026-10-18T19:45:00-07:00", scheduled_date: "2026-10-18", scheduled_time: "19:45" }), { date: "2026-10-18", time: "21:45" });
+  // The old bug: the same 19:45 with no zone is read as Central and is in the past.
+  assert.match(R({ scheduled_date: "2026-10-18", scheduled_time: "19:45" }).error, /already passed/);
+  // Z and CST (December) offsets
+  assert.deepStrictEqual(R({ scheduled_at: "2026-10-19T03:00:00Z" }), { date: "2026-10-18", time: "22:00" });
+  assert.deepStrictEqual(R({ scheduled_at: "2026-12-01T09:00:00-06:00" }), { date: "2026-12-01", time: "09:00" });
+  // Really in the past even with the offset
+  assert.match(R({ scheduled_at: "2026-10-18T17:59:00-07:00" }).error, /already passed/);
+  assert.strictEqual(R({ scheduled_at: "2026-10-18T18:00:00-07:00" }).error, undefined, "now is ok");
+  // No offset / garbage / impossible date
+  for (const bad of ["2026-10-18T21:30:00", "2026-10-18 21:30-05:00", "tomorrow", "2026-02-30T09:00:00-06:00", "2026-10-18T24:00:00-05:00"]) {
+    assert.match(R({ scheduled_at: bad }).error, /valid date and time/, bad);
+  }
+  assert.deepStrictEqual(V.resolveSchedule({ schedule: "asap", scheduled_at: "2026-10-18T21:30:00-05:00" }, now), { asap: true });
+  assert.deepStrictEqual(R({ scheduled_date: "2026-10-19" }), { asap: true }, "date without time still ASAP");
+});
+
+test("create-order stores scheduled_at as Central date/time", async () => {
+  const at = new Date(Date.now() + 26 * 3600 * 1000);
+  const [d, t] = chicago(at.getTime());
+  // Send it with a Pacific offset to prove the server converts.
+  const pac = new Date(at.getTime() - 7 * 3600 * 1000).toISOString().slice(0, 16) + ":00-07:00";
+  currentFake = freshDb();
+  const res = await post(Object.assign(base(), { schedule: "later", scheduled_at: pac, scheduled_date: "1999-01-01", scheduled_time: "00:00" }));
+  assert.strictEqual(res.statusCode, 201, res.body);
+  const row = currentFake.db.orders[0];
+  assert.strictEqual(row.is_asap, false);
+  assert.strictEqual(row.scheduled_date, d);
+  assert.strictEqual(row.scheduled_time, t);
+});
+
 test("400 on a malformed ZIP; ZIP+4 and missing optional ZIPs are fine", async () => {
   for (const [field, zip] of [["pickup_zip", "7837"], ["dropoff_zip", "abcde"], ["pickup_zip", "78373 "+"x"]]) {
     currentFake = freshDb();

@@ -74,6 +74,20 @@
         return phone.replace(/\D/g, '').length >= 10;
     }
 
+    // Date/time inputs are Central (Port Aransas) wall-clock, whatever zone the
+    // phone is in. Falls back to device-local parsing if coastal.js is missing.
+    function serviceInstant(date, time) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.centralInstant === 'function') return C.centralInstant(date, time);
+        return new Date(`${date}T${time}`);
+    }
+
+    function serviceIso(date, time) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.centralIso === 'function') return C.centralIso(date, time);
+        return null;
+    }
+
     function validateStep(step) {
         let valid = true;
         if (step === 1) {
@@ -84,8 +98,8 @@
                 if (dateTimeError) dateTimeError.classList.add('visible');
                 valid = false;
             } else {
-                const selected = new Date(`${date.value}T${time.value}`);
-                if (selected <= new Date()) {
+                const selected = serviceInstant(date.value, time.value);
+                if (!selected || selected <= new Date()) {
                     if (dateTimeError) dateTimeError.classList.add('visible');
                     valid = false;
                 } else if (dateTimeError) {
@@ -178,11 +192,11 @@
         const time = document.getElementById('serviceTime').value;
         const pickup = `${document.getElementById('pickupAddress').value}, ${document.getElementById('pickupCity').value} ${document.getElementById('pickupZip').value}`;
         const dropoff = `${document.getElementById('dropoffAddress').value}, ${document.getElementById('dropoffCity').value} ${document.getElementById('dropoffZip').value}`;
-        const dateObj = new Date(`${date}T${time}`);
-        const dateTimeStr = dateObj.toLocaleString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric',
-            hour: 'numeric', minute: '2-digit'
-        });
+        const dateObj = serviceInstant(date, time);
+        const C = window.CoyoteCoastal;
+        const dateTimeStr = !dateObj ? '--' : (C && typeof C.formatCentral === 'function')
+            ? C.formatCentral(dateObj)
+            : dateObj.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
         let details = '';
         if (serviceType === 'ride') {
             const passengers = document.querySelector('input[name="passengers"]:checked').value;
@@ -269,7 +283,8 @@
         const dateVal = document.getElementById('serviceDate').value;
         const timeVal = document.getElementById('serviceTime').value;
         const now = new Date();
-        const isAsap = new Date(`${dateVal}T${timeVal}`) <= new Date(now.getTime() + 60 * 60 * 1000);
+        const chosen = serviceInstant(dateVal, timeVal);
+        const isAsap = !chosen || chosen <= new Date(now.getTime() + 60 * 60 * 1000);
         const orderData = {
             first_name: document.getElementById('customerFirstName').value.trim(),
             last_name: document.getElementById('customerLastName').value.trim(),
@@ -285,6 +300,8 @@
             schedule: isAsap ? 'asap' : 'later',
             scheduled_date: isAsap ? null : dateVal,
             scheduled_time: isAsap ? null : timeVal,
+            // Explicit offset so the server never guesses the zone (e.g. "2026-10-18T21:30:00-05:00").
+            scheduled_at: isAsap ? null : serviceIso(dateVal, timeVal),
             passenger_count: serviceType === 'ride' ? parseInt(document.querySelector('input[name="passengers"]:checked').value) : null,
             package_size: serviceType === 'package_delivery' ? document.querySelector('input[name="packageSize"]:checked').value : null,
             package_description: document.getElementById('itemDescription')?.value.trim() || null,
@@ -384,7 +401,7 @@
         statusEl.textContent = order.status.replace('_', ' ');
         statusEl.className = 'status-badge-track ' + order.status;
         document.getElementById('trackingService').textContent = serviceLabels[order.service_type] || order.service_type;
-        document.getElementById('trackingScheduled').textContent = order.is_asap ? 'ASAP' : `${order.scheduled_date} at ${order.scheduled_time}`;
+        document.getElementById('trackingScheduled').textContent = order.is_asap ? 'ASAP' : `${order.scheduled_date} at ${String(order.scheduled_time || '').slice(0, 5)} Central`;
         document.getElementById('trackingPickup').textContent = `${order.pickup_address}, ${order.pickup_city}`;
         document.getElementById('trackingDropoff').textContent = order.dropoff_address ? `${order.dropoff_address}, ${order.dropoff_city || order.pickup_city}` : 'Same as pickup';
         document.getElementById('trackingPrice').textContent = order.estimated_price ? `$${parseFloat(order.estimated_price).toFixed(2)}` : '—';
