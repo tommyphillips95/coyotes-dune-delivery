@@ -377,7 +377,8 @@
     function showPaymentSuccess() {
         finish({
             title: 'Payment Successful!',
-            message: 'Your driver will be assigned shortly. You will receive a confirmation text and email with driver details.',
+            message: 'Your driver will be assigned shortly.',
+            paid: true,
         });
         const successPs = orderSuccess.querySelectorAll('p');
         if (successPs[0]) {
@@ -420,6 +421,7 @@
         if (panel) panel.remove();
         finish({
             title: title || 'Already Paid',
+            paid: true,
             message: "This order is already paid, so you won't be charged again. Your driver will be assigned shortly.",
         });
         const ps = orderSuccess.querySelectorAll('p');

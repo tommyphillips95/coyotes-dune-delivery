@@ -212,6 +212,49 @@
     s.setItem(TOKEN_KEY, JSON.stringify(all));
   }
 
+  // ── Order confirmation copy (#confirmation clarity) ──
+  // Only claim a text was sent when create-order says it was (smsSent).
+  // No order-confirmation email exists, so never promise one.
+  function maskPhone(phone) {
+    var d = String(phone || "").replace(/\D/g, "");
+    return d.length >= 4 ? "(•••) •••-" + d.slice(-4) : "";
+  }
+  function confirmationNextSteps(o) {
+    var v = o || {};
+    var masked = maskPhone(v.phone);
+    var first = v.smsSent && masked
+      ? "We texted a confirmation to " + masked + "."
+      : "Save your order number above \u2014 you'll need it and your phone number to track this order.";
+    return first + " Tap \u201cTrack this order\u201d to see when a driver is assigned and follow them live.";
+  }
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // "2026-10-18", "18:30" -> "Sun, Oct 18 at 6:30 PM CT" (pure string math; no device time zone).
+  function formatServiceSlot(dateStr, timeStr) {
+    var dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ""));
+    var tm = /^(\d{2}):(\d{2})/.exec(String(timeStr || ""));
+    if (!dm || !tm) return "";
+    var y = +dm[1], mo = +dm[2], d = +dm[3], h = +tm[1], mi = tm[2];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23) return "";
+    var dow = DAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    return dow + ", " + MONTHS[mo - 1] + " " + d + " at " + h12 + ":" + mi + " " + (h < 12 ? "AM" : "PM") + " CT";
+  }
+  // Rows for the confirmation summary: [[label, value], ...]; values are plain text.
+  function confirmationSummary(o) {
+    var v = o || {};
+    var rows = [];
+    rows.push(["When", v.asap ? "As soon as possible" : (formatServiceSlot(v.date, v.time) || "Scheduled")]);
+    var from = [v.pickupAddress, v.pickupCity].filter(Boolean).join(", ");
+    var to = [v.dropoffAddress, v.dropoffCity].filter(Boolean).join(", ");
+    if (from) rows.push(["Pickup", from]);
+    if (to) rows.push(["Drop-off", to]);
+    var amt = Number(v.amount);
+    // Card payments already show a "Paid $X" badge; pay-later orders need the amount here.
+    if (amt > 0 && !v.paid) rows.push(["Estimated total", "$" + amt.toFixed(2) + " (pay your driver)"]);
+    return rows;
+  }
+
   function buildTrackUrl(orderNumber) {
     return "/track/?order=" + encodeURIComponent(String(orderNumber || "").toUpperCase());
   }
@@ -386,6 +429,10 @@
     getTrackingToken: getTrackingToken,
     clearTrackingToken: clearTrackingToken,
     buildTrackUrl: buildTrackUrl,
+    maskPhone: maskPhone,
+    confirmationNextSteps: confirmationNextSteps,
+    formatServiceSlot: formatServiceSlot,
+    confirmationSummary: confirmationSummary,
     isTerminalStatus: isTerminalStatus,
     localDateInputValue: localDateInputValue,
     localTimeInputValue: localTimeInputValue,

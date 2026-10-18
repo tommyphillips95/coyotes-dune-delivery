@@ -372,6 +372,13 @@
             if (result.ok) {
                 checkoutKey = null;
                 checkoutPayload = null;
+                lastBooking = {
+                    asap: isAsap, date: dateVal, time: timeVal,
+                    pickupAddress: orderData.pickup_address, pickupCity: orderData.pickup_city,
+                    dropoffAddress: orderData.dropoff_address, dropoffCity: orderData.dropoff_city,
+                    amount: Number(result.data.estimatedPrice) || 0,
+                    phone: orderData.phone, smsSent: result.data.smsSent === true,
+                };
                 const ctx = {
                     orderId: result.data.orderId,
                     orderNumber: result.data.orderNumber,
@@ -552,8 +559,28 @@
     }
 
     // Success screen shared by cash and card flows (stripe-payment.js calls this too).
+    let lastBooking = null;
+    // Booking summary + accurate "what happens next" (textContent only).
+    function renderConfirmationDetails(paid) {
+        const C = window.CoyoteCoastal;
+        if (!C || !lastBooking) return;
+        const dl = document.getElementById('ccConfirmSummary');
+        if (dl) {
+            dl.textContent = '';
+            C.confirmationSummary(Object.assign({}, lastBooking, { paid: !!paid })).forEach(([label, value]) => {
+                const dt = document.createElement('dt'); dt.textContent = label;
+                const dd = document.createElement('dd'); dd.textContent = value;
+                dl.appendChild(dt); dl.appendChild(dd);
+            });
+            dl.hidden = !dl.children.length;
+        }
+        const next = document.getElementById('ccNextSteps');
+        if (next) { next.textContent = C.confirmationNextSteps(lastBooking); next.hidden = false; }
+    }
+
     function showSuccess(ctx) {
         const c = ctx || {};
+        renderConfirmationDetails(c.paid);
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
         const quoteBox = document.getElementById('ccLiveQuote');
