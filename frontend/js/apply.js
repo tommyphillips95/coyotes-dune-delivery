@@ -159,6 +159,7 @@
         // Special: file upload on step 3
         if (stepNum === 3) {
             if (!uploadedFiles.insuranceCard) {
+                insuranceError.textContent = INSURANCE_REQUIRED_MSG;
                 insuranceError.classList.add('visible');
                 allValid = false;
             } else {
@@ -214,6 +215,16 @@
         insuranceInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
+                const problem = window.CoyoteApplySubmit ? window.CoyoteApplySubmit.checkInsuranceFile(file) : null;
+                if (problem) {
+                    uploadedFiles.insuranceCard = null;
+                    insuranceInput.value = '';
+                    insurancePreview.style.display = 'none';
+                    insuranceError.textContent = problem;
+                    insuranceError.classList.add('visible');
+                    return;
+                }
+                insuranceError.textContent = INSURANCE_REQUIRED_MSG;
                 uploadedFiles.insuranceCard = file;
                 insuranceFileName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
                 insurancePreview.style.display = 'flex';
@@ -231,6 +242,8 @@
             });
         }
     }
+
+    const INSURANCE_REQUIRED_MSG = 'Please upload your insurance card.';
 
     function formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -388,7 +401,7 @@
             if (!result.ok) {
                 // Honest failure: keep the form and everything typed, no fake ID.
                 console.error('Application not submitted:', result.reason);
-                showSubmitError();
+                showSubmitError(result.message);
                 if (typeof logAnalyticsEvent === 'function') {
                     logAnalyticsEvent('application_submit_failed', { category: 'application', reason: result.reason });
                 }
@@ -424,9 +437,10 @@
 
     const SUBMIT_ERROR_FALLBACK = "We couldn't submit your application right now. Please try again later or contact us.";
 
-    function showSubmitError() {
+    // serverMessage: a 4xx reason from submit-application (e.g. file too large).
+    function showSubmitError(serverMessage) {
         const el = document.getElementById('submitError');
-        const msg = (window.CoyoteApplySubmit && window.CoyoteApplySubmit.SUBMIT_ERROR_MESSAGE) || SUBMIT_ERROR_FALLBACK;
+        const msg = serverMessage || (window.CoyoteApplySubmit && window.CoyoteApplySubmit.SUBMIT_ERROR_MESSAGE) || SUBMIT_ERROR_FALLBACK;
         if (!el) { alert(msg); return; }
         el.textContent = msg;
         el.hidden = false;

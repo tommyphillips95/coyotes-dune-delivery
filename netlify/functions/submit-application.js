@@ -4,12 +4,56 @@
  *
  * Does not accept or store SSN or bank account fields. Those go through
  * Checkr and Stripe Connect after approval.
+ *
+ * Body: the apply page sends multipart/form-data (browser FormData with the
+ * required insurance card file, field "insuranceCard"; Netlify passes it
+ * base64-encoded). JSON bodies (no file) are still accepted for other callers.
+ * File rules and storage: _insurance-card.js.
  */
 
 const { createClient } = require('@supabase/supabase-js');
 const { serverError } = require('./_errors');
 const cors = require('./_cors');
 const vehicle = require('./_vehicle');
+const multipart = require('./_multipart');
+const card = require('./_insurance-card');
+
+// Whole request cap (file + text fields), checked before parsing.
+const MAX_BODY_BYTES = card.MAX_BYTES + 512 * 1024;
+
+function toBool(v) {
+  if (v === true) return true;
+  return typeof v === 'string' && ['true', 'on', '1', 'yes'].includes(v.trim().toLowerCase());
+}
+
+/** { body, file } from a multipart or JSON request, or { error: response }. */
+function readRequest(event, headers) {
+  const fail = (statusCode, error, field) => ({ error: { statusCode, headers, body: JSON.stringify(field ? { error, field } : { error }) } });
+  if (multipart.isMultipart(event)) {
+    const raw = multipart.eventBody(event);
+    if (raw.length > MAX_BODY_BYTES) {
+      return fail(413, 'Your application upload is too large. The insurance card file can be up to ' + (card.MAX_BYTES / (1024 * 1024)) + ' MB.', card.FIELD);
+    }
+    let parsed;
+    try {
+      parsed = multipart.parseMultipart(raw, multipart.header(event, 'content-type'));
+    } catch (err) {
+      return fail(err.status || 400, err.message);
+    }
+    const part = parsed.files.find((f) => f.field === card.FIELD && (f.filename || f.data.length));
+    const checked = card.check(part);
+    if (!checked.ok) return fail(checked.status, checked.error, card.FIELD);
+    return { body: parsed.fields, file: checked.file };
+  }
+  const text = multipart.eventBody(event).toString('utf8');
+  try {
+    const body = JSON.parse(text || '{}');
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('not an object');
+    return { body, file: null };
+  } catch (err) {
+    return fail(400, 'The application could not be read. Please try again.');
+  }
+}
 
 exports.handler = async (event) => {
   const headers = cors.headers(event, { 'Content-Type': 'application/json' });
@@ -23,7 +67,9 @@ exports.handler = async (event) => {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    const req = readRequest(event, headers);
+    if (req.error) return req.error;
+    const body = req.body;
 
     // Reject accidental PII in the payload (do not persist).
     const forbidden = ['ssn', 'bank_account_number', 'bank_routing_number', 'accountNumber', 'routingNumber', 'confirmAccountNumber'];
@@ -74,7 +120,7 @@ exports.handler = async (event) => {
       insurance_provider: body.insurance_provider || body.insuranceProvider,
       insurance_policy_number: body.insurance_policy_number || body.policyNumber,
       insurance_expiry: body.insurance_expiry || body.policyExpiry,
-      background_check_consent: body.background_check_consent || body.bgConsent || false,
+      background_check_consent: toBool(body.background_check_consent) || toBool(body.bgConsent),
       status: 'pending',
     };
 
@@ -96,10 +142,29 @@ exports.handler = async (event) => {
 
     if (error) throw error;
 
+    // The application is saved. Keep the insurance card in Storage; if that
+    // fails (e.g. the driver-documents bucket isn't created yet) the applicant
+    // still gets their confirmation and admin sees a note to ask for the card.
+    let insuranceCardStored = null;
+    if (req.file) {
+      const saved = await card.store(supabase, data.id, req.file);
+      insuranceCardStored = !!saved.stored;
+      if (!saved.stored || saved.documentRow === false) {
+        const note = saved.stored
+          ? 'Insurance card saved to storage (' + saved.path + ') but the documents row failed.'
+          : 'Insurance card upload failed (' + saved.reason + '). Ask the driver to send it again.';
+        try {
+          await supabase.from('applications').update({ notes: note }).eq('id', data.id);
+        } catch (e) {
+          console.error('[submit-application] could not add upload note:', e && e.message);
+        }
+      }
+    }
+
     return {
       statusCode: 201,
       headers,
-      body: JSON.stringify({ success: true, applicationId: data.id }),
+      body: JSON.stringify(Object.assign({ success: true, applicationId: data.id }, req.file ? { insuranceCardStored } : {})),
     };
   } catch (err) {
     return serverError(headers, err, 'Failed to submit application', 'submit-application');
