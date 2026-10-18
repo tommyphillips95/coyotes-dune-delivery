@@ -270,11 +270,44 @@
 
     let submitting = false;
 
+    function orderErrorMessage(result) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.orderErrorMessage === 'function') return C.orderErrorMessage(result);
+        return 'Something went wrong placing your order. Please try again or call (361) 555-1234.';
+    }
+
+    // Inline, screen-reader-announced errors instead of alert() popups.
+    function showSubmitError(message) {
+        const box = document.getElementById('orderSubmitError');
+        if (!box) { alert(message); return; }
+        box.textContent = message;
+        box.hidden = false;
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function clearSubmitError() {
+        const box = document.getElementById('orderSubmitError');
+        if (box) { box.textContent = ''; box.hidden = true; }
+    }
+
+    function setTermsError(show) {
+        const terms = document.getElementById('termsAgree');
+        const msg = document.getElementById('termsError');
+        if (msg) msg.hidden = !show;
+        if (terms) terms.setAttribute('aria-invalid', show ? 'true' : 'false');
+    }
+
     async function submitOrder(e) {
         e.preventDefault();
         if (submitting) return; // guard double clicks / Enter-key resubmits
         const terms = document.getElementById('termsAgree');
-        if (!terms.checked) { terms.focus(); return; }
+        clearSubmitError();
+        if (!terms.checked) {
+            setTermsError(true);
+            terms.focus();
+            return;
+        }
+        setTermsError(false);
         submitting = true;
         submitBtn.disabled = true;
         const originalText = submitBtn.textContent;
@@ -342,14 +375,14 @@
                 if (typeof trackConversion === 'function') trackConversion('purchase', { value: estimatedTotal, currency: 'USD', service_type: serviceType });
                 if (typeof logAnalyticsEvent === 'function') logAnalyticsEvent('order_submitted', { category: 'order', service_type: serviceType, estimated_price: estimatedTotal, order_number: result.data.orderNumber });
             } else {
-                alert('Failed to place order: ' + (result.error || result.data?.message || 'Unknown error'));
+                showSubmitError(orderErrorMessage(result));
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
                 submitting = false;
             }
         } catch (err) {
             console.error('Order submission failed:', err);
-            alert('Something went wrong. Please try again or call (361) 555-1234.');
+            showSubmitError(orderErrorMessage({ ok: false, status: 500 }));
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
             submitting = false;
@@ -500,6 +533,8 @@
         document.querySelectorAll('input[name="serviceType"], input[name="passengers"], input[name="packageSize"]').forEach(r => r.addEventListener('change', updateLiveQuote));
         document.querySelectorAll('#rideDetails .detail-card, #deliveryDetails .detail-card').forEach(c => c.addEventListener('click', updateLiveQuote));
         updateLiveQuote();
+        const termsBox = document.getElementById('termsAgree');
+        if (termsBox) termsBox.addEventListener('change', () => { if (termsBox.checked) setTermsError(false); });
         form.addEventListener('submit', submitOrder);
         window.CoyoteOrder = { showSuccess: showSuccess, goToStep: goToStep, currentQuote: currentQuote };
     }

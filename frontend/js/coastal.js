@@ -179,6 +179,29 @@
     return "/track/?order=" + encodeURIComponent(String(orderNumber || "").toUpperCase());
   }
 
+  // Customer-facing message for a failed /api/create-order call.
+  // result is CoyoteAPI's { ok:false, error, status }. 4xx/503 messages come
+  // from our own validation / weather hold and are safe to show; 5xx bodies can
+  // carry internal error text, so those get a generic line instead.
+  var SUPPORT_PHONE = "(361) 555-1234";
+  function orderErrorMessage(result) {
+    var generic = "Something went wrong placing your order. Please try again or call " + SUPPORT_PHONE + ".";
+    if (!result) return generic;
+    var r = result;
+    var status = Number(r.status) || 0;
+    var msg = String(r.error || "").trim();
+    if (status === 0) {
+      return "We couldn't reach Coyote's servers. Check your signal and tap Place Order again. Nothing was charged.";
+    }
+    if (status === 503) {
+      return msg || "Deliveries are paused right now. Please try again later.";
+    }
+    if (status >= 400 && status < 500 && msg && msg !== "Request failed") {
+      return msg;
+    }
+    return generic;
+  }
+
   var TERMINAL = ["completed", "cancelled", "delivered"];
   function isTerminalStatus(status) {
     return TERMINAL.indexOf(String(status || "").toLowerCase()) !== -1;
@@ -291,6 +314,7 @@
     formatCentral: formatCentral
   };
 
+  api.orderErrorMessage = orderErrorMessage;
   root.CoyoteCoastal = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

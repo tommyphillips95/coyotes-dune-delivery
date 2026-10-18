@@ -141,10 +141,66 @@ test("tracking refreshes status, guards overlap, and sends the token", () => {
   assert.ok(html.indexOf("js/coastal.js") < html.indexOf("track.js"));
 });
 
+test("CoyoteAPI surfaces a 4xx body's error text so validation messages reach the page", () => {
+  const main = read("frontend/js/main.js");
+  assert.ok(/new Error\(\(data && \(data\.message \|\| data\.error\)\) \|\| 'Request failed'\)/.test(main));
+  // create-order 400s use { error: "..." }; orderErrorMessage passes 4xx text through.
+  assert.strictEqual(C.orderErrorMessage({ ok: false, status: 400, error: "Please enter a 5-digit ZIP code for pickup." }), "Please enter a 5-digit ZIP code for pickup.");
+});
+
 test("every page loads the coastal design system", () => {
   for (const p of ["index.html", "order/index.html", "track/index.html", "driver/index.html", "admin/index.html", "apply/index.html"]) {
     assert.ok(read("frontend/" + p).includes("css/coastal.css"), p);
   }
+});
+
+// ── Checkout error states (/order/): inline, announced, no leaked 5xx text ──
+const { weatherShutdownPayload } = require(path.join(ROOT, "netlify/functions/_weather.js"));
+
+test("network failure (status 0) tells the customer to retry, nothing charged", () => {
+  const m = C.orderErrorMessage({ ok: false, error: "Failed to fetch", status: 0 });
+  assert.ok(/signal/i.test(m) && /Nothing was charged/.test(m), m);
+});
+
+test("weather hold 503 shows the hold reason create-order sends", () => {
+  // CoyoteAPI surfaces body.message as result.error.
+  const payload = weatherShutdownPayload({ WEATHER_SHUTDOWN: "1", WEATHER_SHUTDOWN_REASON: "Tropical storm hold until Tuesday." });
+  const m = C.orderErrorMessage({ ok: false, error: payload.message, status: 503 });
+  assert.strictEqual(m, "Tropical storm hold until Tuesday.");
+  assert.ok(/paused/i.test(C.orderErrorMessage({ ok: false, status: 503 })));
+});
+
+test("400 validation messages pass through", () => {
+  const m = C.orderErrorMessage({ ok: false, error: "Pickup address and city are required", status: 400 });
+  assert.strictEqual(m, "Pickup address and city are required");
+});
+
+test("500 never leaks internal error text", () => {
+  const m = C.orderErrorMessage({ ok: false, error: 'duplicate key value violates unique constraint "customers_phone_key"', status: 500 });
+  assert.ok(!/duplicate key|constraint/.test(m), m);
+  assert.ok(/\(361\) 555-1234/.test(m));
+});
+
+test("missing / generic result falls back to the support line", () => {
+  assert.ok(/try again/i.test(C.orderErrorMessage()));
+  assert.ok(/try again/i.test(C.orderErrorMessage({ ok: false, error: "Request failed", status: 404 })));
+});
+
+test("order page has inline terms + submit error regions", () => {
+  const html = read("frontend/order/index.html");
+  assert.ok(/id="termsError"[^>]*hidden/.test(html), "termsError starts hidden");
+  assert.ok(/id="termsAgree"[^>]*aria-describedby="termsError"/.test(html));
+  assert.ok(/id="orderSubmitError"[^>]*role="alert"/.test(html), "submit error is announced");
+});
+
+test("order.js uses the inline errors, not alert(), on checkout failure", () => {
+  const src = read("frontend/js/order.js");
+  const submit = src.slice(src.indexOf("async function submitOrder"), src.indexOf("const trackBtn"));
+  assert.ok(submit.length > 0);
+  assert.ok(!/alert\(/.test(submit), "submitOrder must not alert()");
+  assert.ok(/setTermsError\(true\)/.test(submit), "unchecked terms shows a message");
+  assert.ok(/showSubmitError\(orderErrorMessage\(result\)\)/.test(submit));
+  assert.ok(/submitting = false/.test(submit), "failure re-enables the button");
 });
 
 console.log(`coastal: ${passed} passed`);

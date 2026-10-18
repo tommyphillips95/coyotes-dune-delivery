@@ -374,6 +374,23 @@
         .payment-status-badge.failed { background: rgba(196, 90, 62, 0.1); color: #C45A3E; }
         .payment-status-badge.refunded { background: rgba(100, 100, 100, 0.1); color: #666; }
 
+        .order-inline-error {
+            color: #C45A3E;
+            font-size: 0.85rem;
+            margin: 8px 0 0;
+        }
+
+        .order-submit-error {
+            margin-top: 16px;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(196, 90, 62, 0.08);
+            border: 1px solid rgba(196, 90, 62, 0.35);
+            color: #9E3F27;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
         @media (max-width: 768px) {
             .service-selector { grid-template-columns: 1fr; }
             .location-group { flex-direction: column; gap: 0; }
@@ -752,9 +769,12 @@
                         </div>
 
                         <div class="checkbox-group order-terms">
-                            <input type="checkbox" id="termsAgree" name="termsAgree" required>
+                            <input type="checkbox" id="termsAgree" name="termsAgree" required aria-describedby="termsError">
                             <label for="termsAgree">I confirm that all information provided is accurate. I agree to the <a href="#">Terms of Service</a> and understand that cancellation within 15 minutes of pickup may incur a fee. <span class="required">*</span></label>
                         </div>
+                        <p class="order-inline-error" id="termsError" hidden>Please check the box above to agree before placing your order.</p>
+
+                        <div class="order-submit-error" id="orderSubmitError" role="alert" aria-live="assertive" hidden></div>
 
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="4">Back</button>
