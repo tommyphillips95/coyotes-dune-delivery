@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
     <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
     <script src="../js/analytics.js"></script>
@@ -56,9 +58,6 @@
                         <span class="progress-label">Background</span>
                     </div>
                     <div class="progress-step" data-step="5">
-                        <span class="progress-label">Banking</span>
-                    </div>
-                    <div class="progress-step" data-step="6">
                         <span class="progress-label">Review</span>
                     </div>
                 </div>
@@ -94,17 +93,10 @@
                                 <span class="error-message">Please enter a valid phone number.</span>
                             </div>
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="dob">Date of Birth <span class="required">*</span></label>
-                                <input type="date" id="dob" name="dob" required>
-                                <span class="error-message">You must be at least 18 years old.</span>
-                            </div>
-                            <div class="form-group">
-                                <label for="ssn">Social Security Number <span class="required">*</span></label>
-                                <input type="password" id="ssn" name="ssn" required placeholder="XXX-XX-XXXX" maxlength="11">
-                                <span class="error-message">Please enter a valid SSN.</span>
-                            </div>
+                        <div class="form-group">
+                            <label for="dob">Date of Birth <span class="required">*</span></label>
+                            <input type="date" id="dob" name="dob" required>
+                            <span class="error-message">You must be at least 18 years old.</span>
                         </div>
                         <div class="form-group">
                             <label for="address">Street Address <span class="required">*</span></label>
@@ -261,6 +253,8 @@
                     <!-- Step 4: Background Check -->
                     <div class="form-step" data-step="4">
                         <h2>Background Check Consent</h2>
+                        <p class="hint">Background checks run through Checkr after submit. Payouts use Stripe Connect later — we never store SSN or bank account numbers here.</p>
+
                         <p>Required for all driver applicants.</p>
                         <div class="consent-text">
                             <h4>Background Check Disclosure</h4>
@@ -289,50 +283,8 @@
                         </div>
                     </div>
 
-                    <!-- Step 5: Banking -->
+                    <!-- Step 5: Review & Submit -->
                     <div class="form-step" data-step="5">
-                        <h2>Banking Information</h2>
-                        <p>Where we send your weekly payouts.</p>
-                        <div class="secure-note">
-                            <span>🔒</span>
-                            <span>This information is encrypted and stored securely. We never share your banking details with third parties.</span>
-                        </div>
-                        <div class="form-group secure-field">
-                            <label for="routingNumber">Routing Number <span class="required">*</span></label>
-                            <input type="text" id="routingNumber" name="routingNumber" required placeholder="123456789" maxlength="9" inputmode="numeric">
-                            <span class="error-message">Please enter a valid 9-digit routing number.</span>
-                            <p class="hint">Found at the bottom of your check. 9 digits.</p>
-                        </div>
-                        <div class="form-group secure-field">
-                            <label for="accountNumber">Account Number <span class="required">*</span></label>
-                            <input type="text" id="accountNumber" name="accountNumber" required placeholder="9876543210">
-                            <span class="error-message">Please enter your account number.</span>
-                            <p class="hint">Found next to your routing number on your check.</p>
-                        </div>
-                        <div class="form-group secure-field">
-                            <label for="confirmAccountNumber">Confirm Account Number <span class="required">*</span></label>
-                            <input type="text" id="confirmAccountNumber" name="confirmAccountNumber" required placeholder="Re-enter account number">
-                            <span class="error-message">Account numbers must match.</span>
-                        </div>
-                        <div class="form-group">
-                            <label for="accountType">Account Type <span class="required">*</span></label>
-                            <select id="accountType" name="accountType" required>
-                                <option value="" disabled selected>Select type</option>
-                                <option value="checking">Checking</option>
-                                <option value="savings">Savings</option>
-                            </select>
-                            <span class="error-message">Please select an account type.</span>
-                        </div>
-                        <div class="form-nav">
-                            <button type="button" class="btn btn-ghost prev-step" data-prev="4">← Back</button>
-                            <div class="form-nav-right">
-                                <button type="button" class="btn btn-secondary next-step" data-next="6">Next →</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 6: Review & Submit -->
-                    <div class="form-step" data-step="6">
                         <h2>Review & Submit</h2>
                         <p>Please review your information before submitting.</p>
                         <div id="summaryContainer">
@@ -344,8 +296,9 @@
                             <input type="checkbox" id="termsAgree" name="termsAgree" required>
                             <label for="termsAgree">I confirm that all information provided is accurate and complete. I agree to the <a href="#" target="_blank">Terms of Service</a> and <a href="#" target="_blank">Driver Agreement</a>. <span class="required">*</span></label>
                         </div>
+                        <div class="form-alert" id="submitError" role="alert" aria-live="assertive" hidden></div>
                         <div class="form-nav">
-                            <button type="button" class="btn btn-ghost prev-step" data-prev="5">← Back</button>
+                            <button type="button" class="btn btn-ghost prev-step" data-prev="4">← Back</button>
                             <div class="form-nav-right">
                                 <button type="submit" class="btn btn-primary btn-large" id="submitBtn">Submit Application</button>
                             </div>
@@ -367,6 +320,7 @@
         </div>
     </main>
 
+    <script src="../js/apply-submit.js"></script>
     <script src="../js/apply.js"></script>
     <script src="../js/main.js"></script>
 </body>

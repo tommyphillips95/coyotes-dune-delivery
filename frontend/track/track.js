@@ -1,430 +1,233 @@
 /**
- * Coyote's Dune Delivery — Customer Tracking Page JavaScript
- * Handles order lookup, Google Maps display, real-time driver tracking,
- * ETA calculation, and status timeline updates.
+ * Customer tracking — polls /api/get-orders + /api/get-driver-location every 15s.
+ * Leaflet/OSM by default so launch works without a Maps billing key.
  */
-
 (function () {
-  'use strict';
-
-  // ─── Config ───
-  const API_BASE = '/api';
-  const POLL_INTERVAL_MS = 10000; // 10 seconds
-  const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY'; // Replace with env var in production
-
-  // ─── State ───
-  let map = null;
-  let driverMarker = null;
-  let pickupMarker = null;
-  let dropoffMarker = null;
-  let routePolyline = null;
-  let pollTimer = null;
-  let currentOrder = null;
-  let currentDriverId = null;
-
-  // ─── DOM refs ───
-  const lookupForm = document.getElementById('lookupForm');
-  const lookupBtn = document.getElementById('lookupBtn');
-  const mapEl = document.getElementById('map');
-  const mapLoading = document.getElementById('mapLoading');
-  const mapError = document.getElementById('mapError');
-
-  // ─── Google Maps init (global callback) ───
-  window.initMap = function () {
-    // Map will be initialized when user looks up an order
-    console.log('Google Maps API loaded');
-  };
-
-  // ─── Helpers ───
+  "use strict";
+  const API_BASE = "/api";
+  const POLL_INTERVAL_MS = 15000;
+  let map = null, driverMarker = null, pickupMarker = null, dropoffMarker = null;
+  let pollTimer = null, currentOrder = null, currentDriverId = null;
+  const lookupForm = document.getElementById("lookupForm");
+  const lookupBtn = document.getElementById("lookupBtn");
+  const mapEl = document.getElementById("map");
+  const mapLoading = document.getElementById("mapLoading");
+  const mapError = document.getElementById("mapError");
+  window.initMap = function () {};
   function formatStatus(status) {
-    const map = {
-      pending: 'Pending',
-      assigned: 'Assigned',
-      in_progress: 'On the Way',
-      completed: 'Completed',
-      cancelled: 'Cancelled',
-    };
-    return map[status] || status;
+    return ({ pending: "Pending", assigned: "Assigned", in_progress: "On the Way", completed: "Completed", cancelled: "Cancelled" })[status] || status;
   }
-
   function formatServiceType(type) {
-    const map = {
-      ride: 'On-Demand Ride',
-      package_delivery: 'Package Delivery',
-      grocery_run: 'Grocery Run',
-      group_transport: 'Group Transport',
-    };
-    return map[type] || type;
+    return ({ ride: "On-Demand Ride", package_delivery: "Package Delivery", grocery_run: "Grocery Run", group_transport: "Group Transport" })[type] || type;
   }
-
-  function formatTime(iso) {
-    if (!iso) return '--';
-    const d = new Date(iso);
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  function showCard(id) { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); }
+  function defaultCenter(order) {
+    if (order && order.pickup_lat && order.pickup_lng) return [parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)];
+    return [27.8339, -97.0611];
   }
-
-  function showCard(id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('hidden');
-  }
-
-  function hideCard(id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.add('hidden');
-  }
-
-  // ─── Initialize Map ───
-  function initOrderMap(order, driverLocation) {
-    if (typeof google === 'undefined' || !google.maps) {
-      mapLoading.classList.add('hidden');
-      mapError.classList.remove('hidden');
-      return;
+  function readyMap(order) {
+    mapLoading.classList.add("hidden");
+    mapError.classList.add("hidden");
+    mapEl.classList.remove("hidden");
+    const center = defaultCenter(order);
+    if (typeof L === "undefined") { mapError.classList.remove("hidden"); return; }
+    if (!map) {
+      map = L.map(mapEl).setView(center, 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
     }
-
-    mapLoading.classList.add('hidden');
-    mapError.classList.add('hidden');
-    mapEl.classList.remove('hidden');
-
-    // Default center: Port Aransas, TX
-    const defaultCenter = { lat: 27.8339, lng: -97.0661 };
-    const center = order.pickup_lat && order.pickup_lng
-      ? { lat: parseFloat(order.pickup_lat), lng: parseFloat(order.pickup_lng) }
-      : defaultCenter;
-
-    map = new google.maps.Map(mapEl, {
-      center: center,
-      zoom: 13,
-      mapTypeId: 'roadmap',
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: true,
-    });
-
-    // Pickup marker
-    if (order.pickup_lat && order.pickup_lng) {
-      pickupMarker = new google.maps.Marker({
-        position: { lat: parseFloat(order.pickup_lat), lng: parseFloat(order.pickup_lng) },
-        map: map,
-        title: 'Pickup: ' + order.pickup_address,
-        icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#C9A87C" stroke="#1A2F4B" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="#1A2F4B"/></svg>'
-          ),
-          scaledSize: new google.maps.Size(32, 32),
-          anchor: new google.maps.Point(16, 16),
-        },
-      });
-    }
-
-    // Dropoff marker
-    if (order.dropoff_lat && order.dropoff_lng) {
-      dropoffMarker = new google.maps.Marker({
-        position: { lat: parseFloat(order.dropoff_lat), lng: parseFloat(order.dropoff_lng) },
-        map: map,
-        title: 'Dropoff: ' + order.dropoff_address,
-        icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="#1A2F4B" stroke="#C9A87C" stroke-width="2"/><circle cx="12" cy="10" r="3" fill="#C9A87C"/></svg>'
-          ),
-          scaledSize: new google.maps.Size(32, 32),
-          anchor: new google.maps.Point(16, 28),
-        },
-      });
-    }
-
-    // Driver marker
-    if (driverLocation && driverLocation.lat && driverLocation.lng) {
-      driverMarker = new google.maps.Marker({
-        position: { lat: parseFloat(driverLocation.lat), lng: parseFloat(driverLocation.lng) },
-        map: map,
-        title: 'Driver Location',
-        icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#4C8C64" stroke="#FFFFFF" stroke-width="2"/><text x="12" y="16" text-anchor="middle" fill="#FFFFFF" font-size="10" font-family="Arial" font-weight="bold">D</text></svg>'
-          ),
-          scaledSize: new google.maps.Size(36, 36),
-          anchor: new google.maps.Point(18, 18),
-        },
-      });
-    }
-
-    // Draw route between pickup and dropoff if both exist
-    if (order.pickup_lat && order.pickup_lng && order.dropoff_lat && order.dropoff_lng) {
-      drawRoute(
-        { lat: parseFloat(order.pickup_lat), lng: parseFloat(order.pickup_lng) },
-        { lat: parseFloat(order.dropoff_lat), lng: parseFloat(order.dropoff_lng) }
-      );
-    }
-
-    // Fit bounds to show all markers
-    fitBounds();
+    if (pickupMarker) { map.removeLayer(pickupMarker); pickupMarker = null; }
+    if (dropoffMarker) { map.removeLayer(dropoffMarker); dropoffMarker = null; }
+    if (order.pickup_lat && order.pickup_lng) pickupMarker = L.marker([parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)]).addTo(map).bindPopup("Pickup");
+    if (order.dropoff_lat && order.dropoff_lng) dropoffMarker = L.marker([parseFloat(order.dropoff_lat), parseFloat(order.dropoff_lng)]).addTo(map).bindPopup("Dropoff");
+    fitLeaflet();
   }
-
-  // ─── Draw route using DirectionsService ───
-  function drawRoute(origin, destination) {
-    if (!google.maps.DirectionsService) return;
-
-    const directionsService = new google.maps.DirectionsService();
-    directionsService.route(
-      {
-        origin: origin,
-        destination: destination,
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      function (result, status) {
-        if (status === 'OK' && result.routes[0]) {
-          routePolyline = new google.maps.Polyline({
-            path: result.routes[0].overview_path,
-            geodesic: true,
-            strokeColor: '#C9A87C',
-            strokeOpacity: 0.8,
-            strokeWeight: 4,
-          });
-          routePolyline.setMap(map);
-
-          // Update ETA from route duration
-          const leg = result.routes[0].legs[0];
-          if (leg && leg.duration) {
-            updateETA(leg.duration.value); // seconds
-          }
-        }
-      }
-    );
+  function fitLeaflet() {
+    if (!map || typeof L === "undefined") return;
+    const pts = [];
+    if (pickupMarker) pts.push(pickupMarker.getLatLng());
+    if (dropoffMarker) pts.push(dropoffMarker.getLatLng());
+    if (driverMarker) pts.push(driverMarker.getLatLng());
+    if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2));
   }
-
-  // ─── Fit bounds ───
-  function fitBounds() {
-    if (!map) return;
-    const bounds = new google.maps.LatLngBounds();
-    let hasPoints = false;
-
-    if (pickupMarker) { bounds.extend(pickupMarker.getPosition()); hasPoints = true; }
-    if (dropoffMarker) { bounds.extend(dropoffMarker.getPosition()); hasPoints = true; }
-    if (driverMarker) { bounds.extend(driverMarker.getPosition()); hasPoints = true; }
-
-    if (hasPoints) {
-      map.fitBounds(bounds, { padding: 60 });
-    }
-  }
-
-  // ─── Update driver marker position ───
   function updateDriverMarker(lat, lng) {
-    if (!map) return;
-    const pos = { lat: parseFloat(lat), lng: parseFloat(lng) };
-
-    if (driverMarker) {
-      driverMarker.setPosition(pos);
-    } else {
-      driverMarker = new google.maps.Marker({
-        position: pos,
-        map: map,
-        title: 'Driver Location',
-        icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#4C8C64" stroke="#FFFFFF" stroke-width="2"/><text x="12" y="16" text-anchor="middle" fill="#FFFFFF" font-size="10" font-family="Arial" font-weight="bold">D</text></svg>'
-          ),
-          scaledSize: new google.maps.Size(36, 36),
-          anchor: new google.maps.Point(18, 18),
-        },
-      });
-    }
-
-    // Recalculate ETA if we have dropoff
+    const la = parseFloat(lat), ln = parseFloat(lng);
+    if (!map || Number.isNaN(la) || Number.isNaN(ln)) return;
+    if (driverMarker) driverMarker.setLatLng([la, ln]);
+    else driverMarker = L.circleMarker([la, ln], { radius: 10, color: "#1A2F4B", fillColor: "#4C8C64", fillOpacity: 1 }).addTo(map).bindPopup("Driver");
+    fitLeaflet();
     if (currentOrder && currentOrder.dropoff_lat && currentOrder.dropoff_lng) {
-      const directionsService = new google.maps.DirectionsService();
-      directionsService.route(
-        {
-          origin: pos,
-          destination: { lat: parseFloat(currentOrder.dropoff_lat), lng: parseFloat(currentOrder.dropoff_lng) },
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        function (result, status) {
-          if (status === 'OK' && result.routes[0] && result.routes[0].legs[0]) {
-            updateETA(result.routes[0].legs[0].duration.value);
-          }
-        }
-      );
-    }
-
-    fitBounds();
-  }
-
-  // ─── Update ETA display ───
-  function updateETA(seconds) {
-    const etaValue = document.getElementById('etaValue');
-    const etaUnit = document.getElementById('etaUnit');
-    if (!etaValue) return;
-
-    if (seconds < 60) {
-      etaValue.textContent = '< 1';
-      etaUnit.textContent = 'minute';
-    } else {
-      const minutes = Math.round(seconds / 60);
-      etaValue.textContent = minutes;
-      etaUnit.textContent = minutes === 1 ? 'minute' : 'minutes';
+      const R = 3958.8, toRad = function (d) { return (d * Math.PI) / 180; };
+      const dLat = toRad(parseFloat(currentOrder.dropoff_lat) - la);
+      const dLng = toRad(parseFloat(currentOrder.dropoff_lng) - ln);
+      const s = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(la)) * Math.cos(toRad(parseFloat(currentOrder.dropoff_lat))) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const miles = 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+      const minutes = Math.max(1, Math.round((miles / 22) * 60));
+      const etaValue = document.getElementById("etaValue");
+      const etaUnit = document.getElementById("etaUnit");
+      if (etaValue) etaValue.textContent = String(minutes);
+      if (etaUnit) etaUnit.textContent = minutes === 1 ? "minute" : "minutes";
     }
   }
-
-  // ─── Update status timeline ───
   function updateTimeline(order) {
-    const statuses = ['pending', 'assigned', 'in_progress', 'completed'];
+    const statuses = ["pending", "assigned", "in_progress", "completed"];
     const currentIndex = statuses.indexOf(order.status);
-
-    statuses.forEach((s, i) => {
-      const dot = document.getElementById('dot' + s.charAt(0).toUpperCase() + s.slice(1).replace('_', ''));
+    statuses.forEach(function (s, i) {
+      const camel = s === "in_progress" ? "InProgress" : s.charAt(0).toUpperCase() + s.slice(1);
+      const dot = document.getElementById("dot" + camel);
       if (!dot) return;
-
-      if (i < currentIndex) {
-        dot.classList.add('completed');
-        dot.classList.remove('active');
-      } else if (i === currentIndex) {
-        dot.classList.add('active');
-        dot.classList.remove('completed');
-      } else {
-        dot.classList.remove('active', 'completed');
-      }
+      dot.classList.toggle("completed", i < currentIndex);
+      dot.classList.toggle("active", i === currentIndex);
     });
-
-    // Update timestamps if available from status logs
-    if (order.status_logs && Array.isArray(order.status_logs)) {
-      order.status_logs.forEach(log => {
-        const timeEl = document.getElementById('time' + log.status.charAt(0).toUpperCase() + log.status.slice(1).replace('_', ''));
-        if (timeEl && log.created_at) {
-          timeEl.textContent = formatTime(log.created_at);
-        }
-      });
-    }
   }
-
-  // ─── Fetch driver location ───
   async function fetchDriverLocation(driverId, orderId) {
     try {
-      let url = `${API_BASE}/get-driver-location?`;
-      if (driverId) url += `driver_id=${encodeURIComponent(driverId)}`;
-      else if (orderId) url += `order_id=${encodeURIComponent(orderId)}`;
+      const params = new URLSearchParams();
+      if (driverId) params.set("driver_id", driverId);
+      else if (orderId) params.set("order_id", orderId);
       else return;
-
-      const res = await fetch(url);
+      const res = await fetch(API_BASE + "/get-driver-location?" + params.toString(),
+        currentToken ? { headers: { Authorization: "Bearer " + currentToken } } : undefined);
       const json = await res.json();
-
       if (json.success && json.data && json.data.location) {
-        const loc = json.data.location;
-        updateDriverMarker(loc.lat, loc.lng);
-
-        // Update driver info if available
+        updateDriverMarker(json.data.location.lat, json.data.location.lng);
         if (json.data.driver) {
           const d = json.data.driver;
-          document.getElementById('driverName').textContent = `${d.first_name || ''} ${d.last_name || ''}`.trim() || 'Your Driver';
-          document.getElementById('driverVehicle').textContent = d.vehicle_make && d.vehicle_model
-            ? `${d.vehicle_color || ''} ${d.vehicle_make} ${d.vehicle_model}`.trim()
-            : 'Vehicle info unavailable';
+          document.getElementById("driverName").textContent = ((d.first_name || "") + " " + (d.last_name || "")).trim() || "Your Driver";
+          document.getElementById("driverVehicle").textContent = d.vehicle_make && d.vehicle_model ? ((d.vehicle_color || "") + " " + d.vehicle_make + " " + d.vehicle_model).trim() : "Vehicle info unavailable";
         }
       }
-    } catch (err) {
-      console.error('Error fetching driver location:', err);
-    }
+    } catch (err) { console.error(err); }
+  }
+  // ── Order loading (customer tracking JWT; see netlify/functions/get-orders.js) ──
+  let currentToken = null;
+  let polling = false;
+  const C = window.CoyoteCoastal || null;
+
+  async function mintToken(orderNumber, phone) {
+    const res = await fetch(API_BASE + "/get-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_number: orderNumber, phone: phone }),
+    });
+    const json = await res.json().catch(function () { return {}; });
+    if (!res.ok || !json.token) return null;
+    if (C) C.saveTrackingToken(json.orderNumber || orderNumber, json.token);
+    return json.token;
   }
 
-  // ─── Poll for updates ───
-  function startPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(() => {
-      if (currentDriverId) {
-        fetchDriverLocation(currentDriverId, currentOrder ? currentOrder.id : null);
-      }
-    }, POLL_INTERVAL_MS);
+  // Returns { order } | { expired: true } | { error }
+  async function fetchOrder(token) {
+    const res = await fetch(API_BASE + "/get-orders", { headers: { Authorization: "Bearer " + token } });
+    if (res.status === 401 || res.status === 403) return { expired: true };
+    const json = await res.json().catch(function () { return {}; });
+    if (!res.ok) return { error: json.error || "Lookup failed" };
+    const payload = json.data || json;
+    const rows = Array.isArray(payload) ? payload : payload ? [payload] : [];
+    return rows[0] ? { order: rows[0] } : { error: "Order not found" };
   }
 
-  function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
+  function renderOrder(order) {
+    currentOrder = order;
+    currentDriverId = order.driver_id || null;
+    showCard("etaCard"); showCard("driverCard"); showCard("orderCard"); showCard("timelineCard");
+    document.getElementById("detailOrderNum").textContent = order.order_number;
+    document.getElementById("detailService").textContent = formatServiceType(order.service_type);
+    document.getElementById("detailPickup").textContent = order.pickup_address || "--";
+    document.getElementById("detailDropoff").textContent = order.dropoff_address || "--";
+    document.getElementById("detailStatus").textContent = formatStatus(order.status);
+    updateTimeline(order);
   }
 
-  // ─── Lookup order ───
-  async function lookupOrder(orderNumber, phone) {
-    lookupBtn.disabled = true;
-    lookupBtn.textContent = 'Tracking...';
+  function isTerminal(status) {
+    return C ? C.isTerminalStatus(status) : (status === "completed" || status === "cancelled");
+  }
 
+  async function tick() {
+    if (polling || !currentToken) return; // never overlap requests
+    polling = true;
     try {
-      const res = await fetch(`${API_BASE}/orders?order_number=${encodeURIComponent(orderNumber)}&phone=${encodeURIComponent(phone)}`);
-      const json = await res.json();
-
-      if (!json.success || !json.data || (Array.isArray(json.data) && json.data.length === 0)) {
-        alert('Order not found. Please check your order number and phone number.');
+      const r = await fetchOrder(currentToken);
+      if (r.expired) {
+        stopPolling();
+        if (C && currentOrder) C.clearTrackingToken(currentOrder.order_number);
+        currentToken = null;
+        alert("Your tracking session expired. Enter your order number and phone to keep tracking.");
         return;
       }
-
-      const order = Array.isArray(json.data) ? json.data[0] : json.data;
-      currentOrder = order;
-      currentDriverId = order.driver_id || null;
-
-      // Show tracking cards
-      showCard('etaCard');
-      showCard('driverCard');
-      showCard('orderCard');
-      showCard('timelineCard');
-
-      // Populate order details
-      document.getElementById('detailOrderNum').textContent = order.order_number;
-      document.getElementById('detailService').textContent = formatServiceType(order.service_type);
-      document.getElementById('detailPickup').textContent = order.pickup_address || '--';
-      document.getElementById('detailDropoff').textContent = order.dropoff_address || '--';
-      document.getElementById('detailStatus').textContent = formatStatus(order.status);
-
-      // Update timeline
-      updateTimeline(order);
-
-      // Initialize map
-      // Try to get driver location first, then init map
-      let driverLoc = null;
-      if (currentDriverId) {
-        try {
-          const locRes = await fetch(`${API_BASE}/get-driver-location?driver_id=${encodeURIComponent(currentDriverId)}`);
-          const locJson = await locRes.json();
-          if (locJson.success && locJson.data && locJson.data.location) {
-            driverLoc = locJson.data.location;
-            if (locJson.data.driver) {
-              const d = locJson.data.driver;
-              document.getElementById('driverName').textContent = `${d.first_name || ''} ${d.last_name || ''}`.trim() || 'Your Driver';
-              document.getElementById('driverVehicle').textContent = d.vehicle_make && d.vehicle_model
-                ? `${d.vehicle_color || ''} ${d.vehicle_make} ${d.vehicle_model}`.trim()
-                : 'Vehicle info unavailable';
-            }
-          }
-        } catch (e) {
-          console.error('Could not fetch initial driver location:', e);
-        }
+      if (r.order) {
+        renderOrder(r.order);
+        if (isTerminal(r.order.status)) { stopPolling(); return; }
       }
-
-      initOrderMap(order, driverLoc);
-
-      // Start polling for live updates
-      if (order.status === 'assigned' || order.status === 'in_progress') {
-        startPolling();
-      }
-
+      await fetchDriverLocation(currentDriverId, currentOrder && currentOrder.id);
     } catch (err) {
-      console.error('Error looking up order:', err);
-      alert('Something went wrong. Please try again.');
+      console.error(err); // keep polling; transient network errors are common on the beach
     } finally {
-      lookupBtn.disabled = false;
-      lookupBtn.textContent = 'Track Order';
+      polling = false;
     }
   }
 
-  // ─── Event listeners ───
-  lookupForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const orderNum = document.getElementById('lookupOrderNum').value.trim();
-    const phone = document.getElementById('lookupPhone').value.trim();
-    if (orderNum && phone) {
-      lookupOrder(orderNum, phone);
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(tick, POLL_INTERVAL_MS);
+  }
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  async function trackWithToken(token) {
+    currentToken = token;
+    const r = await fetchOrder(token);
+    if (r.expired) return { expired: true };
+    if (!r.order) return { error: r.error };
+    renderOrder(r.order);
+    readyMap(r.order);
+    await fetchDriverLocation(currentDriverId, r.order.id);
+    if (!isTerminal(r.order.status)) startPolling(); else stopPolling();
+    return { ok: true };
+  }
+
+  async function lookupOrder(orderNumber, phone) {
+    lookupBtn.disabled = true;
+    lookupBtn.textContent = "Tracking...";
+    try {
+      orderNumber = (orderNumber || "").toUpperCase();
+      let token = C ? C.getTrackingToken(orderNumber) : null;
+      if (!token) {
+        if (!orderNumber || !phone) { alert("Please enter both order number and phone number."); return; }
+        token = await mintToken(orderNumber, phone);
+      }
+      if (!token) { alert("Order not found. Please check your order number and phone number."); return; }
+      let r = await trackWithToken(token);
+      if (r.expired && phone) {
+        if (C) C.clearTrackingToken(orderNumber);
+        token = await mintToken(orderNumber, phone);
+        r = token ? await trackWithToken(token) : { error: "Order not found" };
+      }
+      if (r.expired) {
+        if (C) C.clearTrackingToken(orderNumber);
+        alert("Your tracking link expired. Enter your phone number to continue.");
+      } else if (!r.ok) {
+        alert("Order not found. Please check your order number and phone number.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      lookupBtn.disabled = false;
+      lookupBtn.textContent = "Track Order";
     }
+  }
+
+  lookupForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    lookupOrder(document.getElementById("lookupOrderNum").value.trim(), document.getElementById("lookupPhone").value.trim());
   });
 
-  // ─── Cleanup on page unload ───
-  window.addEventListener('beforeunload', stopPolling);
+  // Deep link from the order confirmation: /track/?order=CDD-...
+  (function autoTrack() {
+    const params = C ? C.parseOrderParams(window.location.search) : {};
+    if (!params.track) return;
+    document.getElementById("lookupOrderNum").value = params.track;
+    if (C && C.getTrackingToken(params.track)) lookupOrder(params.track, "");
+  })();
 
+  window.addEventListener("beforeunload", stopPolling);
 })();

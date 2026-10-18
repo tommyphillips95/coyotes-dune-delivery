@@ -16,8 +16,26 @@
     'use strict';
 
     // ── Configuration ─────────────────────────────────────────
-    // Stripe publishable key is loaded from a global set by the backend or inline
-    const STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
+    // Prefer window.STRIPE_PUBLISHABLE_KEY (inline / Netlify snippet).
+    // Otherwise fetch /api/public-config (Netlify env STRIPE_PUBLISHABLE_KEY).
+    let STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
+
+    async function ensurePublishableKey() {
+        if (STRIPE_PUBLISHABLE_KEY) return STRIPE_PUBLISHABLE_KEY;
+        try {
+            const res = await fetch('/api/public-config');
+            if (!res.ok) return '';
+            const data = await res.json();
+            STRIPE_PUBLISHABLE_KEY = data.stripePublishableKey || '';
+            if (STRIPE_PUBLISHABLE_KEY) {
+                window.STRIPE_PUBLISHABLE_KEY = STRIPE_PUBLISHABLE_KEY;
+            }
+            return STRIPE_PUBLISHABLE_KEY;
+        } catch (err) {
+            console.warn('Could not load Stripe publishable key from /api/public-config', err);
+            return '';
+        }
+    }
 
     // ── State ─────────────────────────────────────────────────
     let stripe = null;
@@ -41,9 +59,14 @@
     let paymentSpinner = null;
 
     // ── Initialize Stripe ─────────────────────────────────────
-    function initStripe() {
+    async function initStripe() {
+        await ensurePublishableKey();
         if (!STRIPE_PUBLISHABLE_KEY) {
-            console.warn('Stripe publishable key not configured. Payment form will not be available.');
+            console.warn('Stripe publishable key not configured. Set STRIPE_PUBLISHABLE_KEY in Netlify or window.STRIPE_PUBLISHABLE_KEY.');
+            return false;
+        }
+        if (typeof Stripe === 'undefined') {
+            console.error('Stripe.js not loaded. Include https://js.stripe.com/v3/ before stripe-payment.js');
             return false;
         }
         try {
@@ -253,26 +276,29 @@
     }
 
     // ── Show Payment Skipped Success ────────────────────────
-    function showPaymentSkippedSuccess() {
+    function finish(ctx) {
         if (paymentFormContainer) paymentFormContainer.remove();
+        if (window.CoyoteOrder && window.CoyoteOrder.showSuccess) {
+            window.CoyoteOrder.showSuccess(Object.assign({ orderNumber: currentOrderNumber }, ctx));
+            return;
+        }
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
-
-        // Update success message for unpaid
-        const successTitle = orderSuccess.querySelector('h2');
-        if (successTitle) successTitle.textContent = 'Order Confirmed';
-
-        const successPs = orderSuccess.querySelectorAll('p');
-        if (successPs[1]) {
-            successPs[1].textContent = 'Your driver will be assigned shortly. You can pay cash or card to the driver.';
-        }
-
         orderSuccess.classList.add('active');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showPaymentSkippedSuccess() {
+        finish({
+            title: 'Order Confirmed',
+            message: 'Your driver will be assigned shortly. You can pay cash or card to the driver.',
+        });
     }
 
     // ── Handle Payment Submit ───────────────────────────────
+    let paying = false;
+
     async function handlePaymentSubmit() {
+        if (paying) return; // no double charges from double clicks
         if (!stripe || !cardElement) {
             showPaymentError('Payment system is not initialized. Please refresh the page.');
             return;
@@ -283,6 +309,7 @@
             return;
         }
 
+        paying = true;
         setPaymentLoading(true);
         clearPaymentError();
 
@@ -318,8 +345,8 @@
                 throw new Error(confirmError.message);
             }
 
-            if (paymentIntent.status === 'succeeded') {
-                // Payment succeeded!
+            if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+                // processing = bank still confirming; the webhook marks it paid.
                 showPaymentSuccess();
             } else if (paymentIntent.status === 'requires_action') {
                 // 3D Secure or additional authentication required
@@ -333,26 +360,20 @@
             console.error('Payment failed:', err);
             showPaymentError(err.message || 'Payment failed. Please try again or use a different card.');
         } finally {
+            paying = false;
             setPaymentLoading(false);
         }
     }
 
     // ── Show Payment Success ────────────────────────────────
     function showPaymentSuccess() {
-        if (paymentFormContainer) paymentFormContainer.remove();
-        if (form) form.style.display = 'none';
-        if (progressBar) progressBar.style.display = 'none';
-
-        // Update success message for paid
-        const successTitle = orderSuccess.querySelector('h2');
-        if (successTitle) successTitle.textContent = 'Payment Successful!';
-
+        finish({
+            title: 'Payment Successful!',
+            message: 'Your driver will be assigned shortly. You will receive a confirmation text and email with driver details.',
+        });
         const successPs = orderSuccess.querySelectorAll('p');
         if (successPs[0]) {
             successPs[0].textContent = 'Thank you for your payment. Your order is confirmed.';
-        }
-        if (successPs[1]) {
-            successPs[1].textContent = 'Your driver will be assigned shortly. You will receive a confirmation text and email with driver details.';
         }
 
         // Add payment badge
@@ -399,168 +420,31 @@
         }
     }
 
-    // ── Override submitOrder to show payment form ───────────
-    // We intercept the original submitOrder flow from order.js
-    // After the order is created, we show the payment form instead of the success screen
-
-    const originalSubmitOrder = window.submitOrder;
-
-    async function submitOrderWithPayment(e) {
-        e.preventDefault();
-
-        const terms = document.getElementById('termsAgree');
-        if (!terms.checked) {
-            terms.focus();
-            return;
-        }
-
-        submitBtn.disabled = true;
-        const originalText = submitBtn.textContent;
-        submitBtn.innerHTML = '<span class="spinner"></span> Placing Order...';
-
-        const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
-        const dateVal = document.getElementById('serviceDate').value;
-        const timeVal = document.getElementById('serviceTime').value;
-        const now = new Date();
-        const isAsap = new Date(`${dateVal}T${timeVal}`) <= new Date(now.getTime() + 60 * 60 * 1000);
-
-        const orderData = {
-            first_name: document.getElementById('customerFirstName').value.trim(),
-            last_name: document.getElementById('customerLastName').value.trim(),
-            phone: document.getElementById('customerPhone').value.trim(),
-            email: document.getElementById('customerEmail').value.trim() || null,
-            service_type: serviceType,
-            pickup_address: document.getElementById('pickupAddress').value.trim(),
-            pickup_city: document.getElementById('pickupCity').value,
-            pickup_zip: document.getElementById('pickupZip').value.trim() || null,
-            dropoff_address: document.getElementById('dropoffAddress').value.trim() || null,
-            dropoff_city: document.getElementById('dropoffCity').value || null,
-            dropoff_zip: document.getElementById('dropoffZip').value.trim() || null,
-            schedule: isAsap ? 'asap' : 'later',
-            scheduled_date: isAsap ? null : dateVal,
-            scheduled_time: isAsap ? null : timeVal,
-            passenger_count: serviceType === 'ride'
-                ? parseInt(document.querySelector('input[name="passengers"]:checked').value)
-                : null,
-            package_size: serviceType === 'package_delivery'
-                ? document.querySelector('input[name="packageSize"]:checked').value
-                : null,
-            package_description: document.getElementById('itemDescription')?.value.trim() || null,
-            special_instructions: document.getElementById('specialInstructions').value.trim() || null,
-        };
-
-        try {
-            const result = await CoyoteAPI.post('/api/create-order', orderData);
-
-            if (result.ok) {
-                currentOrderId = result.data.orderId;
-                currentOrderNumber = result.data.orderNumber;
-                currentAmount = result.data.estimatedPrice || 0;
-
-                // Store order in localStorage
-                try {
-                    const orders = JSON.parse(localStorage.getItem('cdd_orders') || '[]');
-                    orders.push({
-                        orderNumber: currentOrderNumber,
-                        orderId: currentOrderId,
-                        createdAt: new Date().toISOString(),
-                        serviceType: orderData.service_type,
-                    });
-                    localStorage.setItem('cdd_orders', JSON.stringify(orders));
-                } catch (_) { /* ignore */ }
-
-                // Hide the order form, show payment form
-                form.style.display = 'none';
-                progressBar.style.display = 'none';
-
-                // Update order ID display for when payment succeeds
-                document.getElementById('orderIdDisplay').textContent = currentOrderNumber;
-
-                // Initialize Stripe and show payment form
-                if (initStripe()) {
-                    createPaymentForm();
-                    document.getElementById('paymentAmount').textContent = `$${currentAmount.toFixed(2)}`;
-                } else {
-                    // Stripe not configured — show skip-to-success
-                    showPaymentSkippedSuccess();
-                }
-
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            } else {
-                alert('Failed to place order: ' + (result.error || result.data?.message || 'Unknown error'));
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
-            }
-        } catch (err) {
-            console.error('Order submission failed:', err);
-            alert('Something went wrong. Please try again or call (361) 555-1234.');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-        }
+    // ── Checkout hook ───────────────────────────────────────
+    // order.js creates the order exactly once (POST /api/create-order) and
+    // then calls CoyoteCheckout.afterOrderCreated(ctx). We only add the card
+    // step; the charge amount is re-derived server-side from
+    // orders.estimated_price in /api/create-payment-intent.
+    // (Previously this file cloned #orderForm to strip listeners, which also
+    //  broke order.js step/price handlers and the live estimate.)
+    async function afterOrderCreated(ctx) {
+        currentOrderId = ctx.orderId;
+        currentOrderNumber = ctx.orderNumber;
+        currentAmount = Number(ctx.amount) || 0;
+        const idEl = document.getElementById('orderIdDisplay');
+        if (idEl) idEl.textContent = currentOrderNumber;
+        if (!currentOrderId || !currentAmount) return false;
+        if (!(await initStripe())) return false; // no publishable key → pay driver
+        if (form) form.style.display = 'none';
+        if (progressBar) progressBar.style.display = 'none';
+        const quoteBox = document.getElementById('ccLiveQuote');
+        if (quoteBox) quoteBox.hidden = true;
+        createPaymentForm();
+        const amt = document.getElementById('paymentAmount');
+        if (amt) amt.textContent = `$${currentAmount.toFixed(2)}`;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return true;
     }
 
-    // ── Hook into the order form ────────────────────────────
-    // Replace the original submit handler from order.js
-    // We do this by removing the old listener and adding our new one
-    function hookPaymentIntoOrderForm() {
-        if (!form) return;
-
-        // Clone the form to remove all existing listeners, then re-add ours
-        const newForm = form.cloneNode(true);
-        form.parentNode.replaceChild(newForm, form);
-
-        // Re-bind all the original order.js step navigation
-        // (The order.js IIFE already bound these, but since we cloned,
-        //  we need to re-initialize. However, the order.js IIFE runs
-        //  on DOMContentLoaded and binds to elements by ID. Since we
-        //  cloned, the new form has the same IDs.)
-
-        // Re-bind step navigation for the new form
-        newForm.querySelectorAll('.next-step').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const next = parseInt(btn.dataset.next, 10);
-                // Call the original goToStep if available
-                if (window.goToStep) {
-                    window.goToStep(next);
-                } else {
-                    // Fallback: manually switch steps
-                    document.querySelectorAll('.form-step').forEach(el => {
-                        el.classList.toggle('active', parseInt(el.dataset.step, 10) === next);
-                    });
-                    document.querySelectorAll('.progress-step').forEach(el => {
-                        const s = parseInt(el.dataset.step, 10);
-                        el.classList.remove('active', 'completed');
-                        if (s === next) el.classList.add('active');
-                        if (s < next) el.classList.add('completed');
-                    });
-                }
-            });
-        });
-
-        newForm.querySelectorAll('.prev-step').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const prev = parseInt(btn.dataset.prev, 10);
-                if (window.goToStep) {
-                    window.goToStep(prev);
-                }
-            });
-        });
-
-        // Bind our payment-aware submit handler
-        newForm.addEventListener('submit', submitOrderWithPayment);
-    }
-
-    // ── Initialize ──────────────────────────────────────────
-    function init() {
-        // Wait for order.js to finish initializing, then hook in
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(hookPaymentIntoOrderForm, 100);
-            });
-        } else {
-            setTimeout(hookPaymentIntoOrderForm, 100);
-        }
-    }
-
-    init();
+    window.CoyoteCheckout = { afterOrderCreated: afterOrderCreated };
 })();

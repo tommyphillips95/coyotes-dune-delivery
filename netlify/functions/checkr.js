@@ -19,7 +19,8 @@ function authHeaders(apiKey) {
 async function verifyAdmin(event) {
   const token = (event.headers.authorization || '').replace('Bearer ', '');
   if (!token) throw Object.assign(new Error('Unauthorized'), { status: 401 });
-  const secret = process.env.JWT_SECRET || 'coyote-dune-delivery-secret-key-2024';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw Object.assign(new Error('Auth not configured'), { status: 500 });
   const decoded = jwt.verify(token, secret);
   if (decoded.role !== 'admin') throw Object.assign(new Error('Admin only'), { status: 403 });
   return decoded;

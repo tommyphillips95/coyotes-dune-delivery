@@ -96,6 +96,7 @@
             method,
             headers: { 'Content-Type': 'application/json' }
         };
+        if (session && session.token) opts.headers['Authorization'] = 'Bearer ' + session.token;
         if (body) opts.body = JSON.stringify(body);
         return fetch(API_BASE + endpoint, opts).then(async r => {
             const data = await r.json().catch(() => ({}));
@@ -115,7 +116,7 @@
         if (!applicantId || !email) { loginError.textContent = 'Please fill in both fields.'; return; }
         try {
             const data = await api('POST', '/get-status', { applicantId, email });
-            session = { applicantId, email, data };
+            session = { applicantId, email, data, token: data.token || null };
             saveSession();
             showPortal();
             renderStatus(data);
@@ -218,9 +219,7 @@
             ['License Plate', data.vehicle_plate],
             ['Insurance', data.insurance_provider],
             ['Policy Number', data.insurance_policy],
-            ['Bank', data.bank_name],
-            ['Account Number', data.bank_account],
-            ['Routing Number', data.bank_routing],
+            ['Payouts', 'Stripe Connect (bank details are not stored here)'],
         ];
         profileGrid.innerHTML = fields.map(([label, value]) => `
             <div class="info-field">
@@ -237,9 +236,6 @@
         document.getElementById('edit-vehicle-plate').value = data.vehicle_plate || '';
         document.getElementById('edit-insurance-provider').value = data.insurance_provider || '';
         document.getElementById('edit-insurance-policy').value = data.insurance_policy || '';
-        document.getElementById('edit-bank-name').value = data.bank_name || '';
-        document.getElementById('edit-bank-account').value = data.bank_account || '';
-        document.getElementById('edit-bank-routing').value = data.bank_routing || '';
     }
 
     /* ===== Edit Profile ===== */
@@ -267,12 +263,9 @@
             vehicle_plate: document.getElementById('edit-vehicle-plate').value.trim(),
             insurance_provider: document.getElementById('edit-insurance-provider').value.trim(),
             insurance_policy: document.getElementById('edit-insurance-policy').value.trim(),
-            bank_name: document.getElementById('edit-bank-name').value.trim(),
-            bank_account: document.getElementById('edit-bank-account').value.trim(),
-            bank_routing: document.getElementById('edit-bank-routing').value.trim(),
         };
         try {
-            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), payload);
+            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), { ...payload, email: session.email });
             Object.assign(session.data, payload);
             saveSession();
             renderProfile(session.data);
@@ -500,11 +493,12 @@
         if (!lastPosition || !session || !session.applicantId) return;
 
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (session.token) headers['Authorization'] = 'Bearer ' + session.token;
             const res = await fetch(`${API_BASE}/update-driver-location`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
-                    driver_id: session.applicantId,
                     lat: lastPosition.lat,
                     lng: lastPosition.lng,
                     accuracy: lastPosition.accuracy,

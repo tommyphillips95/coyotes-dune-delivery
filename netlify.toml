@@ -3,12 +3,26 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 [[redirects]]
   from = "/api/checkr/*"
   to = "/.netlify/functions/checkr/:splat"
   status = 200
+
+# One order contract: legacy /api/submit-order callers hit create-order
+# (server-priced, same response). There is no separate submit-order function.
+[[redirects]]
+  from = "/api/submit-order"
+  to = "/.netlify/functions/create-order"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/applications"
+  to = "/.netlify/functions/submit-application"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/api/*"
@@ -36,6 +50,11 @@
   status = 200
 
 [[redirects]]
+  from = "/status"
+  to = "/driver/index.html"
+  status = 200
+
+[[redirects]]
   from = "/status/*"
   to = "/driver/index.html"
   status = 200
@@ -56,3 +75,10 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Local development only; production build settings above are unchanged.
+[dev]
+  framework = "#static"
+  publish = "frontend"
+  port = 8888
+  autoLaunch = false
