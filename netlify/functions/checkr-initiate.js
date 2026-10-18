@@ -19,6 +19,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { errorResponse } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 const CHECKR_BASE_URL = 'https://api.checkr.com/v1';
 const DEFAULT_PACKAGE = 'driver_pro';
@@ -75,11 +76,10 @@ function formatDob(isoDate) {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };

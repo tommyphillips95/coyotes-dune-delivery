@@ -5,6 +5,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { errorResponse } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const jwt = require('jsonwebtoken');
 
 const CHECKR_API_BASE = 'https://api.checkr.com/v1';
@@ -27,12 +28,11 @@ async function verifyAdmin(event) {
   return decoded;
 }
 
-function cors() {
-  return {
-    'Access-Control-Allow-Origin': '*',
+function cors(event) {
+  return corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  };
+  });
 }
 
 /* ── route handlers ────────────────────────── */
@@ -266,7 +266,7 @@ function formatDate(iso) {
 
 /* ── main handler ──────────────────────────── */
 exports.handler = async (event) => {
-  const headers = cors();
+  const headers = cors(event);
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
   }

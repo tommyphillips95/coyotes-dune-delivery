@@ -19,6 +19,7 @@
 
 const admin = require('firebase-admin');
 const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const { createClient } = require('@supabase/supabase-js');
 
 let firebaseAppInitialized = false;
@@ -52,12 +53,11 @@ function initFirebase() {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };

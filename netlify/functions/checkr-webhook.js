@@ -18,6 +18,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const crypto = require('crypto');
 
 /* ─── Config ─── */
@@ -70,11 +71,10 @@ function deriveApplicationStatus(bgStatus) {
 
 /* ─── Main handler ─── */
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, X-Checkr-Signature, X-Checkr-Webhook-Signature',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };

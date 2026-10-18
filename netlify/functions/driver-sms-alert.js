@@ -8,6 +8,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 // Lazy-load Twilio SDK
 let twilioClient = null;
@@ -23,11 +24,10 @@ function getTwilioClient() {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
