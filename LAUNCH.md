@@ -110,6 +110,7 @@ Go-live: repeat the endpoint and secret steps in live mode, swap the three env v
 4. `schema/issue_13_constraints.sql` (beach permit flags + `last_location_at` heartbeat)
 5. `schema/order_idempotency.sql` (`orders.idempotency_key` + partial unique index + `orders.idempotency_payload_hash`; `create-order` dedupes checkout retries on it, and creates orders normally with a log warning until this is applied). Exact steps: [Step 5 on Supabase](#step-5-on-supabase-order_idempotencysql).
 6. *(Optional, NOT yet run anywhere)* `schema/customer_phone_normalize.sql`: adds `customers.phone_normalized` (10 US digits), a trigger to keep it in sync, a backfill, and a lookup index. The **unique** index is created only if no two customers share a number; otherwise the script skips it and prints a NOTICE. The script ends with a read-only report of duplicate numbers, and the same report can be pasted alone first as a pre-check. Merging duplicate customers is a **manual decision for Tommy**: `orders.customer_id` is `ON DELETE CASCADE`, so re-point orders before deleting anything. A suggested merge is included, commented out. `create-order` works with or without this column, and never writes it (the trigger does).
+7. *(NOT yet run anywhere; run before or right after deploying the vehicle-class change)* `schema/vehicle_verification.sql`: adds `applications.vehicle_class_reported`, `vehicle_class_verified_at`, `vehicle_class_verified_by` (all nullable, re-runnable, no data changed, nobody marked verified). Beach (4x4) orders now need a 4x4/AWD/UTV class that an admin verified, in auto-dispatch and admin assign alike. **Until this runs, no driver counts as verified, so beach orders get no driver**: auto-dispatch logs "No online 4x4 driver available. Holding for dispatch." plus a pointer to this step and admin assign refuses with a message pointing here. Mainland (2wd) orders are unaffected. Exact steps: [Step 7 on Supabase](#step-7-on-supabase-vehicle_verificationsql).
 
 ### Step 5 on Supabase: `order_idempotency.sql`
 Run this once, after `orders` exists (steps 1–4). It is re-runnable: every statement is `IF NOT EXISTS`, so a second run makes no changes and raises no error. It only adds two nullable columns and one partial unique index, so no data is changed or deleted. Existing orders keep `NULL` in both columns.
@@ -154,6 +155,21 @@ SELECT
 ```
 
 If any value is `false`, run step 2 again; it is safe to repeat. Until this is applied, `create-order` still creates orders, but without duplicate protection, and logs a warning. To undo it, use the rollback lines at the top of the file.
+
+### Step 7 on Supabase: `vehicle_verification.sql`
+1. Supabase dashboard → **SQL Editor** → **New query**. Paste the full contents of `schema/vehicle_verification.sql` and click **Run**. It ends with a read-only list of approved drivers; every `vehicle_class_verified_at` is empty at first. Safe to run again.
+2. Verify the columns exist (expect one row, all `true`):
+
+```sql
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'vehicle_class_reported') AS has_reported,
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'vehicle_class_verified_at') AS has_verified_at,
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'vehicle_class_verified_by') AS has_verified_by;
+```
+
+3. **Tommy:** for each approved driver who should get beach orders, check the vehicle yourself (photo / registration), then in `SITE/admin/` → **Applications** → **View** → **Vehicle Class (dispatch)**, pick the class and tap **Save & mark verified**. Each change adds a dated line to that driver's Admin Notes. Drivers you haven't verified still get mainland orders. If a driver later edits their make/model/year/plate in the driver portal, the verification is cleared automatically and has to be redone.
+
+To undo: `ALTER TABLE applications DROP COLUMN IF EXISTS vehicle_class_verified_by, DROP COLUMN IF EXISTS vehicle_class_verified_at, DROP COLUMN IF EXISTS vehicle_class_reported;` (the app goes back to treating everyone as unverified).
 
 ### Idempotency
 - Tables/indexes/extensions: mostly `IF NOT EXISTS` — safe to re-run.
@@ -219,7 +235,7 @@ Tick before merging `[dune] Launch v1` into `main`:
 
 Run on a real phone against `https://coyote-dune-delivery.netlify.app` (`SITE=` below). Use test data only: your own phone number, a name like "Smoke Test", and Stripe **test mode**. Write down each order number (`CDD-…`) you create for the cleanup step. Console errors: iPhone → Safari Web Inspector on a Mac; Android → `chrome://inspect` on a desktop.
 
-**Before you start:** one approved driver application for a test driver (your own phone) with `vehicle_class` = `4x4`. The apply form and admin don't set vehicle class yet, so set it once in Supabase Table Editor → `applications`.
+**Before you start:** one approved driver application for a test driver (your own phone). In `SITE/admin/` → **Applications** → **View** → **Vehicle Class (dispatch)**, pick **4x4 truck or SUV (4-wheel drive)** and tap **Save & mark verified** (needs [SQL step 7](#step-7-on-supabase-vehicle_verificationsql); before it runs the panel says so and the buttons are disabled). Expect "Verified: …, by <you> on …" and a new line in Admin Notes.
 
 - [ ] **Old tracking links:** open `SITE/order/?track=CDD-TEST1`. Expect a 301 to `SITE/track/?order=CDD-TEST1` with the order number filled in. `SITE/order/?service=ride` should still open the order form (no redirect).
 - [ ] **Pages load:** open `SITE/`, `SITE/order/`, `SITE/track/`. Each renders with no console errors. A `/favicon.ico` 404 means the site-icons change isn't deployed yet.
@@ -228,7 +244,7 @@ Run on a real phone against `https://coyote-dune-delivery.netlify.app` (`SITE=` 
 - [ ] **Timeout / Retry:** fill an order, turn on airplane mode, tap **Place Order**. Expect "You're offline. Reconnect, then tap Retry. Nothing was charged." Turn airplane mode off and tap **Retry**: one order is created, not two (check admin).
 - [ ] **Card payments:** run [Test-mode checklist](#test-mode-checklist) steps 2–5 (4242 success, 3-D Secure pass/fail, 4000 0000 0000 0002 decline then retry, already-paid retry → **Already Paid** screen). Skip until Stripe test keys are set.
 - [ ] **Admin:** log in at `SITE/admin/`. Under **Orders & Weather Hold**, the declined-card order (or any flagged one) shows the "⚠ … need attention" banner and its flag.
-- [ ] **Assign + status:** on the 78418 island order, pick the 4x4 test driver and tap **Assign**. Expect status **Assigned**, the driver name, and a history line "Admin <you>: status pending → assigned; driver … (4x4)." Then tap **Mark in progress** and **Mark completed**; each adds a "status … → …" history line. Any 2wd driver in the list is disabled for this order.
+- [ ] **Assign + status:** on the 78418 island order, pick the 4x4 test driver and tap **Assign**. Expect status **Assigned**, the driver name, and a history line "Admin <you>: status pending → assigned; driver … (4x4)." Then tap **Mark in progress** and **Mark completed**; each adds a "status … → …" history line. Any 2wd driver, and any 4x4 driver marked "(unverified)", is disabled for this order ("needs a verified 4x4").
 - [ ] **Customer tracking:** keep `SITE/track/?order=<that CDD-…>` open on the phone while doing the step above (refreshes every 15 s). Expect status Pending → Assigned → On the Way → Completed, and the driver card "Driver assigned" → "Driver on the way" → "Trip completed".
 - [ ] **SMS (only once Twilio is configured):**
   - after Place Order, the customer phone gets "Your order CDD-… has been received. We'll assign a driver shortly. — Coyote's Dune Delivery"

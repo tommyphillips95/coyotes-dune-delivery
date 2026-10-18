@@ -6,7 +6,8 @@
  *   - payment state is never set here (Stripe webhook owns payment_status /
  *     final_price); requests that try are refused
  *   - a driver must exist, be approved, and fit the order's vehicle class
- *     (same rule as auto-dispatch: 4x4 orders need 4x4/utv/awd)
+ *     (same rule as auto-dispatch, in _vehicle.js: 4x4 orders need a
+ *     4x4/utv/awd vehicle that an admin has verified)
  *   - every change writes order_status_logs: who, from -> to, driver
  * Errors are thrown with .status (4xx) and .code so callers can answer with
  * a clear message; anything else is a 500 via _errors.serverError.
@@ -14,6 +15,7 @@
 "use strict";
 
 const { requiredClass } = require("./zones");
+const vehicle = require("./_vehicle");
 
 const STATUSES = ["pending", "assigned", "in_progress", "completed", "cancelled"];
 const TRANSITIONS = {
@@ -24,7 +26,6 @@ const TRANSITIONS = {
   cancelled: [],
 };
 const NEEDS_CONFIRM = ["cancelled"];
-const BEACH_CLASSES = ["4x4", "utv", "awd"]; // dispatch.js classOk()
 const PAYMENT_FIELDS = ["payment_status", "final_price", "paid", "stripe_payment_intent_id", "amount", "estimated_price"];
 const NOTE_MAX = 500;
 
@@ -44,16 +45,17 @@ function ruleResponse(headers, err) {
 
 function label(s) { return String(s || "pending").replace(/_/g, " "); }
 function driverName(d) { return d ? [d.first_name, d.last_name ? d.last_name.charAt(0) + "." : ""].filter(Boolean).join(" ") : ""; }
-function canDrive(need, cls) { return need !== "4x4" || BEACH_CLASSES.includes(String(cls || "2wd").toLowerCase()); }
+/** Driver row (vehicle_class + vehicle_class_verified_at) fits the order's class? */
+function canDrive(need, d) { return vehicle.vehicleCheck(need, d).ok; }
 function allowedNext(status) { return TRANSITIONS[STATUSES.includes(status) ? status : "pending"].slice(); }
 
-/** Driver choices for an order: [{ id, name, vehicle_class, online, eligible, reason }] */
+/** Driver choices for an order: [{ id, name, vehicle_class, vehicle_verified, online, eligible, reason }] */
 function driverOptions(drivers, order) {
   const need = (order && order.required_vehicle_class) || requiredClass(order.pickup_city, order.dropoff_city || order.pickup_city);
   return (drivers || []).map((d) => {
-    const ok = canDrive(need, d.vehicle_class);
-    return { id: d.id, name: driverName(d), vehicle_class: d.vehicle_class || "2wd", online: d.online === true, beach_permit_ok: d.beach_permit_ok === true,
-      eligible: ok, reason: ok ? null : `needs ${need}; drives ${d.vehicle_class || "2wd"}` };
+    const chk = vehicle.vehicleCheck(need, d);
+    return { id: d.id, name: driverName(d), vehicle_class: vehicle.classOf(d), vehicle_verified: vehicle.isVerified(d),
+      online: d.online === true, beach_permit_ok: d.beach_permit_ok === true, eligible: chk.ok, reason: chk.reason };
   });
 }
 
@@ -89,14 +91,21 @@ async function changeOrder(supabase, orderId, body, actor) {
   if (wantDriver) {
     if (!["pending", "assigned"].includes(from)) throw fail(409, "invalid_transition", `Can't change the driver of a ${label(from)} order.`);
     if (to !== "assigned") throw fail(400, "invalid_combo", "Assigning a driver sets the status to assigned.");
-    const { data: d, error: dErr } = await supabase.from("applications")
-      .select("id, first_name, last_name, phone, status, vehicle_class, online, beach_permit_ok").eq("id", wantDriver).maybeSingle();
+    const { data: d, error: dErr, verificationReady } = await vehicle.selectWithVerification(
+      (cols) => supabase.from("applications").select(cols).eq("id", wantDriver).maybeSingle(),
+      "id, first_name, last_name, phone, status, vehicle_class, online, beach_permit_ok", "order-admin");
     if (dErr) throw dErr;
     if (!d) throw fail(404, "driver_not_found", "Driver not found.");
     if (d.status !== "approved") throw fail(422, "driver_not_approved", `${driverName(d)} isn't an approved driver (status: ${label(d.status)}).`);
     const need = order.required_vehicle_class || requiredClass(order.pickup_city, order.dropoff_city || order.pickup_city);
-    if (!canDrive(need, d.vehicle_class)) {
-      throw fail(422, "driver_ineligible", `${order.order_number} needs a ${need}; ${driverName(d)} drives ${d.vehicle_class || "2wd"}.`);
+    const chk = vehicle.vehicleCheck(need, d);
+    if (chk.code === "class") {
+      throw fail(422, "driver_ineligible", `${order.order_number} needs a ${need}; ${driverName(d)} drives ${vehicle.classOf(d)}.`);
+    }
+    if (chk.code === "unverified") {
+      throw fail(422, "vehicle_unverified", verificationReady
+        ? `${order.order_number} needs a verified ${need}; ${driverName(d)}'s ${vehicle.classOf(d)} isn't verified yet. Verify it in Applications first.`
+        : `${order.order_number} needs a verified ${need}. ${vehicle.SETUP_MESSAGE}`);
     }
     if (d.online !== true) warnings.push(`${driverName(d)} is offline; call them to confirm.`);
     if (need === "4x4" && d.beach_permit_ok !== true) warnings.push(`${driverName(d)} has no beach permit on file.`);
@@ -136,7 +145,7 @@ async function changeOrder(supabase, orderId, body, actor) {
 
   const prevDriver = order.driver_id && (!driver || driver.id !== order.driver_id) ? order.driver_id : null;
   const parts = [`Admin ${actor || "admin"}: status ${label(from)} → ${label(to)}`];
-  if (driver) parts.push(`driver ${driverName(driver)} (${driver.vehicle_class || "2wd"})`);
+  if (driver) parts.push(`driver ${driverName(driver)} (${vehicle.classOf(driver)})`);
   if (to === "pending" && prevDriver) parts.push("driver unassigned");
   else if (driver && prevDriver) parts.push("replaces previous driver");
   let text = parts.join("; ") + ".";

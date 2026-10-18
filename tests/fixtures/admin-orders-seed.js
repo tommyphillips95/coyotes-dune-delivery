@@ -12,9 +12,9 @@ module.exports = () => ({
     { id: "a-1", first_name: "Sam", last_name: "Test", email: "sam@example.com", status: "pending", created_at: "2026-10-01" },
     { id: "a-2", first_name: "Jo", last_name: "Test", email: "jo@example.com", status: "background_check", created_at: "2026-10-02" },
     // Approved drivers for the assign select (fake 555 numbers).
-    { id: "d-4x4", first_name: "Dana", last_name: "Beach", email: "dana@example.com", phone: "+15555550101", status: "approved", vehicle_class: "4x4", online: true, beach_permit_ok: true, created_at: "2026-09-20" },
-    { id: "d-2wd", first_name: "Ray", last_name: "Town", email: "ray@example.com", phone: "+15555550102", status: "approved", vehicle_class: "2wd", online: true, beach_permit_ok: false, created_at: "2026-09-21" },
-    { id: "d-utv", first_name: "Lee", last_name: "Dune", email: "lee@example.com", phone: "+15555550103", status: "approved", vehicle_class: "utv", online: false, beach_permit_ok: false, created_at: "2026-09-22" },
+    { id: "d-4x4", first_name: "Dana", last_name: "Beach", email: "dana@example.com", phone: "+15555550101", status: "approved", vehicle_class: "4x4", vehicle_class_verified_at: "2026-10-01T15:00:00Z", vehicle_class_verified_by: "ops", online: true, beach_permit_ok: true, created_at: "2026-09-20" },
+    { id: "d-2wd", first_name: "Ray", last_name: "Town", email: "ray@example.com", phone: "+15555550102", status: "approved", vehicle_class: "2wd", vehicle_class_verified_at: null, vehicle_class_verified_by: null, online: true, beach_permit_ok: false, created_at: "2026-09-21" },
+    { id: "d-utv", first_name: "Lee", last_name: "Dune", email: "lee@example.com", phone: "+15555550103", status: "approved", vehicle_class: "utv", vehicle_class_verified_at: "2026-10-01T15:00:00Z", vehicle_class_verified_by: "ops", online: false, beach_permit_ok: false, created_at: "2026-09-22" },
   ],
   orders: [
     o("o-ok", "CDD-OK1", { status: "completed", payment_status: "paid", final_price: 35, created_at: t(9) }),

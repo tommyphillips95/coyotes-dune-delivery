@@ -1488,6 +1488,13 @@ a:hover {
     margin-bottom: 7px;
 }
 
+.form-group .form-hint {
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--cc-muted, #646F7A);
+}
+
 .form-group label .required {
     color: #C45A3E;
     margin-left: 2px;

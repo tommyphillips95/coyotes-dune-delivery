@@ -3,9 +3,9 @@
 const { requiredClass, isBeachCity } = require("./zones");
 const { weatherShutdownActive } = require("./_weather");
 const { siteUrl } = require("./_site-url");
+const vehicle = require("./_vehicle");
 
 const OFFER_SECONDS = 90;
-const BEACH_CLASSES = new Set(["4x4", "utv", "awd"]);
 
 function haversineMi(aLat, aLng, bLat, bLng) {
   const R = 3958.8;
@@ -60,12 +60,6 @@ async function expireStale(supabase) {
   return stale;
 }
 
-function classOk(need, have) {
-  const h = (have || "2wd").toLowerCase();
-  if (need === "4x4") return BEACH_CLASSES.has(h);
-  return true;
-}
-
 async function offerNext(supabase, orderId) {
   await expireStale(supabase);
 
@@ -100,22 +94,29 @@ async function offerNext(supabase, orderId) {
     .eq("order_id", orderId);
   const skip = new Set((already || []).map((r) => r.driver_id));
 
-  const { data: drivers, error: drvErr } = await supabase
-    .from("applications")
-    .select("id, first_name, last_name, phone, vehicle_class, online, status")
-    .eq("status", "approved")
-    .eq("online", true);
+  // Same vehicle rule as admin assign (_vehicle.js): 4x4 orders need a
+  // 4x4-capable class that an admin has verified.
+  const { data: drivers, error: drvErr, verificationReady } = await vehicle.selectWithVerification(
+    (cols) => supabase.from("applications").select(cols).eq("status", "approved").eq("online", true),
+    "id, first_name, last_name, phone, vehicle_class, online, status", "dispatch");
   if (drvErr) throw drvErr;
 
-  const pool = (drivers || []).filter((d) => !skip.has(d.id) && classOk(need, d.vehicle_class));
+  const fresh = (drivers || []).filter((d) => !skip.has(d.id));
+  const pool = fresh.filter((d) => vehicle.vehicleCheck(need, d).ok);
   if (!pool.length) {
+    const unverified = fresh.filter((d) => vehicle.vehicleCheck(need, d).code === "unverified").length;
+    let note = "No online " + need + " driver available. Holding for dispatch.";
+    if (unverified) note += ` ${unverified} online driver(s) have a 4x4-capable vehicle that isn't verified yet; verify it in Admin > Applications.`;
+    if (need === "4x4" && !verificationReady) note += " " + vehicle.SETUP_MESSAGE;
     await supabase.from("order_status_logs").insert([{
       order_id: orderId,
       status: order.status,
-      note: "No online " + need + " driver available. Holding for dispatch.",
+      note,
       changed_by: "dispatch",
     }]);
-    return { offered: false, reason: "no_drivers", requiredClass: need };
+    const out = { offered: false, reason: "no_drivers", requiredClass: need };
+    if (unverified) out.unverified = unverified;
+    return out;
   }
 
   const ids = pool.map((d) => d.id);
