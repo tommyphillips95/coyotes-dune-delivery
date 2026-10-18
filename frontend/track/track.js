@@ -172,16 +172,29 @@
     document.getElementById("detailStatus").textContent = formatStatus(order.status);
     // Until the driver shares GPS, say what we know instead of a stale default
     // ("Not assigned yet" next to Status: Assigned) or a bare "--".
-    if (!driverInfoShown) {
-      const hasDriver = !!order.driver_id || order.status === "assigned" || order.status === "in_progress";
-      document.getElementById("driverName").textContent = hasDriver ? "Driver assigned" : "Not assigned yet";
-      document.getElementById("driverVehicle").textContent = hasDriver ? "Details appear when your driver is on the way." : "We'll show your driver here once one accepts.";
+    // Dispatch can also unassign or cancel from the admin dashboard, so the
+    // card follows the order rather than sticking on the last GPS driver.
+    if (!order.driver_id && order.status === "pending") driverInfoShown = false;
+    const t = driverCardText(order);
+    if (!driverInfoShown || t.final) {
+      document.getElementById("driverName").textContent = t.name;
+      document.getElementById("driverVehicle").textContent = t.detail;
     }
     if (!driverMarker) {
       const etaUnit = document.getElementById("etaUnit");
       if (etaUnit) etaUnit.textContent = isTerminal(order.status) ? "" : "Shown once your driver shares their location";
     }
     updateTimeline(order);
+  }
+
+  function driverCardText(order) {
+    if (order.status === "cancelled") return { name: "Order cancelled", detail: "No driver is coming for this order.", final: true };
+    if (order.status === "completed") return { name: "Trip completed", detail: "", final: true };
+    if (order.status === "in_progress") return { name: "Driver on the way", detail: "Details appear once your driver shares their location." };
+    const hasDriver = !!order.driver_id || order.status === "assigned" || order.status === "in_progress";
+    return hasDriver
+      ? { name: "Driver assigned", detail: "Details appear when your driver is on the way." }
+      : { name: "Not assigned yet", detail: "We'll show your driver here once one accepts." };
   }
 
   function isTerminal(status) {

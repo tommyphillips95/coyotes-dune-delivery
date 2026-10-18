@@ -9,6 +9,11 @@
  *   POST /api/admin/applications/bulk          -> bulk status
  *   GET  /api/admin/orders                     -> recent orders + weather_hold, payment
  *                                                 label, "needs attention" flags, history
+ *                                                 + approved drivers and allowed next statuses
+ *   PUT  /api/admin/orders/:id                 -> assign driver / change status
+ *                                                 { status?, driver_id?, note?, confirm? }
+ *                                                 rules in _order-admin.js
+ *   GET  /api/admin/drivers                    -> approved drivers (for the assign select)
  *   PUT  /api/admin/orders/:id/weather-hold    -> set/clear per-order hold
  *   GET  /api/admin/weather                    -> read-only WEATHER_SHUTDOWN state
  *
@@ -21,6 +26,8 @@ const cors = require("./_cors");
 const { weatherShutdownActive, weatherShutdownReason } = require("./_weather");
 const loginAdmin = require("./login-admin");
 const orderAttention = require("./_order-attention");
+const orderAdmin = require("./_order-admin");
+const { sendSMS, logSMS } = require("./dispatch");
 
 const ORDERS_LIMIT = 50;
 const LOGS_LIMIT = 1000; // newest logs across the listed orders
@@ -93,6 +100,32 @@ function buildApplicationPatch(body) {
   return { patch };
 }
 
+const DRIVER_COLS = "id, first_name, last_name, status, vehicle_class, online, beach_permit_ok";
+
+async function approvedDrivers(supabase) {
+  const { data, error } = await supabase.from("applications").select(DRIVER_COLS).eq("status", "approved");
+  if (error) throw error;
+  return data || [];
+}
+
+/** Text the driver about a dispatcher assignment. sendSMS is a no-op without Twilio env. */
+async function notifyDriver(supabase, result) {
+  const d = result.driver;
+  if (!d || !d.phone) return { sent: false, reason: "no_phone" };
+  const o = result.order || {};
+  const route = [o.pickup_city, o.dropoff_city].filter(Boolean).join(" to ");
+  const msg = `Coyote's Dune Delivery: dispatch assigned you ${o.order_number || "an order"}${route ? " (" + route + ")" : ""}. Call dispatch if you can't take it.`;
+  const sent = await sendSMS(d.phone, msg);
+  await logSMS(supabase, { order_id: o.id, phone_number: d.phone, message: msg, status: sent.success ? "sent" : "failed", twilio_sid: sent.messageSid || null, error: sent.error || null });
+  return { sent: !!sent.success, reason: sent.success ? null : sent.error || "failed" };
+}
+
+function pick(o, keys, extra) {
+  const out = {};
+  keys.forEach((k) => { if (o && o[k] !== undefined) out[k] = o[k]; });
+  return Object.assign(out, extra || {});
+}
+
 function weatherState() {
   const active = weatherShutdownActive();
   return { active, reason: active ? weatherShutdownReason() : null, source: "netlify_env" };
@@ -158,7 +191,7 @@ exports.handler = async (event) => {
       const supabase = db();
       if (parts.length === 1 && method === "GET") {
         const { data, error } = await supabase.from("orders")
-          .select("id, order_number, status, payment_status, pickup_city, dropoff_city, required_vehicle_class, weather_hold, estimated_price, final_price, is_asap, scheduled_date, scheduled_time, created_at")
+          .select("id, order_number, status, payment_status, driver_id, pickup_city, dropoff_city, required_vehicle_class, weather_hold, estimated_price, final_price, is_asap, scheduled_date, scheduled_time, created_at")
           .order("created_at", { ascending: false }).limit(ORDERS_LIMIT);
         if (error) throw error;
         const orders = data || [];
@@ -175,9 +208,15 @@ exports.handler = async (event) => {
           if (lErr) { console.error("[admin] order_status_logs:", lErr.message || lErr); logsError = true; }
           (logs || []).forEach((l) => { (logsByOrder[l.order_id] = logsByOrder[l.order_id] || []).push(l); });
         }
+        const drivers = await approvedDrivers(supabase);
+        const byId = {};
+        drivers.forEach((d) => { byId[d.id] = d; });
         const shaped = orders.map((o) => {
           const logs = logsByOrder[o.id] || [];
           return Object.assign({}, o, {
+            driver_name: o.driver_id ? (byId[o.driver_id] ? orderAdmin.driverName(byId[o.driver_id]) : "Driver (not approved)") : null,
+            allowed: orderAdmin.allowedNext(o.status),
+            driver_options: orderAdmin.driverOptions(drivers, o),
             payment: orderAttention.payment(o, logs),
             attention: orderAttention.attention(o, logs),
             history: orderAttention.newestFirst(logs).slice(0, HISTORY_PER_ORDER)
@@ -185,6 +224,22 @@ exports.handler = async (event) => {
           });
         });
         return json(headers, 200, { orders: shaped, logsError, weather: weatherState() });
+      }
+      if (parts.length === 2 && method === "PUT") {
+        const actor = (admin && admin.user) || "admin";
+        let result;
+        try {
+          result = await orderAdmin.changeOrder(supabase, parts[1], body, actor);
+        } catch (e) {
+          const rule = orderAdmin.ruleResponse(headers, e);
+          if (rule) return rule;
+          throw e;
+        }
+        const sms = result.driver ? await notifyDriver(supabase, result) : null;
+        return json(headers, 200, {
+          success: true, from: result.from, to: result.to, warnings: result.warnings, driverSms: sms,
+          order: pick(result.order, ["id", "order_number", "status", "driver_id", "assigned_at", "completed_at", "payment_status"], { allowed: orderAdmin.allowedNext(result.to), driver_name: result.driver ? orderAdmin.driverName(result.driver) : null }),
+        });
       }
       if (parts.length === 3 && parts[2] === "weather-hold" && method === "PUT") {
         const hold = toBool(body.weather_hold);
@@ -202,6 +257,11 @@ exports.handler = async (event) => {
         }]);
         return json(headers, 200, { success: true, data });
       }
+    }
+
+    if (parts[0] === "drivers" && parts.length === 1 && method === "GET") {
+      const drivers = await approvedDrivers(db());
+      return json(headers, 200, { drivers: drivers.map((d) => ({ id: d.id, name: orderAdmin.driverName(d), vehicle_class: d.vehicle_class || "2wd", online: d.online === true, beach_permit_ok: d.beach_permit_ok === true })) });
     }
 
     return json(headers, 404, { error: "Not found" });

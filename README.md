@@ -422,7 +422,7 @@ Use any future expiry date, any 3-digit CVC, and any ZIP code.
 | `GET` | `/api/get-applications` | List all applications | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?status=pending` | Filter by status | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?search=john` | Search by name/email/ID | `Authorization: Bearer <token>` |
-| `PATCH` | `/api/update-order` | Update order status | `Authorization: Bearer <token>` |
+| `PATCH` | `/api/update-order` | Update order status (admin JWT; same rules as `PUT /api/admin/orders/:id`, see docs/backend.md) | `Authorization: Bearer <token>` |
 | `POST` | `/api/send-sms` | Send a single SMS | `Authorization: Bearer <token>` |
 | `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `Authorization: Bearer <token>` |
 | `POST` | `/api/checkr-initiate` | Start a Checkr background check | `Authorization: Bearer <token>` |

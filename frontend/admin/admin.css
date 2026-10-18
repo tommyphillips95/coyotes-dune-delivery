@@ -971,7 +971,18 @@ body {
 .badge-completed { background: #dcfce7; color: #166534; }
 .badge-cancelled { background: #f3f4f6; color: #4b5563; }
 .badge-unknown { background: #f3f4f6; color: #374151; }
-/* Phones: each order is a card (the 7-column table doesn't fit) */
+/* Dispatcher controls: driver select + status buttons (44px targets) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.driver-name { font-weight: 600; }
+.driver-none { color: #92400e; font-weight: 600; }
+.driver-hint { display: block; color: #4b5563; }
+.assign-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.assign-row .driver-select { min-height: 44px; min-width: 0; max-width: 260px; flex: 1 1 160px; }
+#orders-table .btn { min-height: 44px; }
+.order-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#orders-table .btn:focus-visible, .driver-select:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+#orders-table .btn:disabled, .driver-select:disabled { opacity: .6; cursor: wait; }
+/* Phones: each order is a card (the 8-column table doesn't fit) */
 @media (max-width: 768px) {
     #orders-table thead { display: none; }
     #orders-table, #orders-table tbody, #orders-table tr, #orders-table td { display: block; width: 100%; box-sizing: border-box; }
@@ -980,6 +991,8 @@ body {
     #orders-table tr.order-row td[data-label]::before { content: attr(data-label) ": "; font-weight: 600; color: #4b5563; }
     #orders-table tr.order-row td .btn { width: 100%; min-height: 44px; margin-top: 4px; }
     #orders-table .order-detail-row td { padding: 0 12px 10px; }
+    .order-actions { flex-direction: column; }
+    .assign-row .driver-select { width: 100%; max-width: none; flex-basis: 100%; font-size: 16px; }
     .order-row.needs-attention td:first-child, .order-detail-row.needs-attention td { box-shadow: none; }
     #orders-table tr.order-row.needs-attention, #orders-table tr.order-detail-row.needs-attention { border-left: 4px solid #f59e0b; }
 }
