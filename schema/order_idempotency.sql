@@ -1,6 +1,7 @@
 -- One order per checkout attempt: create-order dedupes on orders.idempotency_key.
 -- Safe to re-run. Run after schema/issue_13_constraints.sql.
 -- Rollback: DROP INDEX IF EXISTS orders_idempotency_key_uidx;
+--           ALTER TABLE orders DROP COLUMN IF EXISTS idempotency_payload_hash;
 --           ALTER TABLE orders DROP COLUMN IF EXISTS idempotency_key;
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
@@ -9,3 +10,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx
     ON orders (idempotency_key)
     WHERE idempotency_key IS NOT NULL;
+
+-- sha256 (hex) of the order-defining request fields, saved with the key. A
+-- repeated key whose payload hash differs is refused (422) instead of replayed.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT;
