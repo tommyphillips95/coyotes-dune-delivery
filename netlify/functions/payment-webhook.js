@@ -36,6 +36,62 @@ const IGNORED_STALE = (headers, eventType) => ({
   body: JSON.stringify({ received: true, ignored: "superseded_or_paid", event: eventType }),
 });
 
+/**
+ * charge.refunded fires for every refund, partial or full, and Stripe may
+ * redeliver or reorder events. Work from the charge's CUMULATIVE
+ * amount_refunded (never per-event deltas):
+ *   - full (charge.refunded === true or amount_refunded >= amount):
+ *     orders.payment_status = 'refunded'
+ *   - partial: payment_status unchanged; one 'partial_refund' status-log row
+ *     with the running total
+ * Each logged state carries a marker [refund:<charge id>:<cumulative cents>];
+ * a state already logged, or older than one already logged (out of order),
+ * is acknowledged and skipped. No schema change.
+ */
+const REFUND_MARKER = /\[refund:([^:\]]+):(\d+)\]/;
+const dollars = (cents) => "$" + (Number(cents || 0) / 100).toFixed(2);
+
+async function handleRefund(supabase, headers, charge) {
+  const ok = (extra) => ({ statusCode: 200, headers, body: JSON.stringify(Object.assign({ received: true }, extra)) });
+  const orderId = charge && charge.metadata && charge.metadata.order_id;
+  if (!orderId) return ok({ warning: "No order_id in metadata" });
+
+  const amount = Number(charge.amount) || 0;
+  const refundedCents = Number(charge.amount_refunded) || 0;
+  const full = charge.refunded === true || (amount > 0 && refundedCents >= amount);
+  const marker = `[refund:${charge.id}:${refundedCents}]`;
+
+  const { data: logs, error: logsError } = await supabase
+    .from("order_status_logs").select("note").eq("order_id", orderId).limit(500);
+  if (logsError) throw logsError;
+  let seenMax = -1;
+  for (const row of logs || []) {
+    const m = REFUND_MARKER.exec((row && row.note) || "");
+    if (m && m[1] === String(charge.id)) seenMax = Math.max(seenMax, Number(m[2]));
+  }
+  if (refundedCents <= seenMax) return ok({ status: full ? "refunded" : "partial_refund", duplicate: true });
+
+  if (full) {
+    const { error } = await supabase.from("orders").update({ payment_status: "refunded", updated_at: new Date().toISOString() }).eq("id", orderId);
+    if (error) throw error;
+    await supabase.from("order_status_logs").insert([{
+      order_id: orderId,
+      status: "refunded",
+      note: `Refund issued: ${dollars(refundedCents)} of ${dollars(amount)} (full) ${marker}`,
+      changed_by: "stripe_webhook",
+    }]);
+    return ok({ status: "refunded" });
+  }
+
+  await supabase.from("order_status_logs").insert([{
+    order_id: orderId,
+    status: "partial_refund",
+    note: `Partial refund: ${dollars(refundedCents)} of ${dollars(amount)} refunded so far ${marker}`,
+    changed_by: "stripe_webhook",
+  }]);
+  return ok({ status: "partial_refund", amount_refunded: refundedCents });
+}
+
 exports.handler = async (event) => {
   // Stripe server-to-server; still avoid wildcard CORS.
   const headers = corsHeaders(event);
@@ -166,24 +222,7 @@ exports.handler = async (event) => {
     }
 
     if (eventType === "charge.refunded") {
-      const charge = stripeEvent.data.object;
-      const refundedOrderId = charge.metadata && charge.metadata.order_id;
-      if (refundedOrderId) {
-        await supabase.from("orders").update({ payment_status: "refunded" }).eq("id", refundedOrderId);
-        await supabase.from("order_status_logs").insert([
-          {
-            order_id: refundedOrderId,
-            status: "refunded",
-            note: "Refund issued",
-            changed_by: "stripe_webhook",
-          },
-        ]);
-      }
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({ received: true, status: "refunded" }),
-      };
+      return await handleRefund(supabase, headers, stripeEvent.data.object);
     }
 
     return {
