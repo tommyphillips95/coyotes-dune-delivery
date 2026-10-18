@@ -39,14 +39,41 @@
     const center = defaultCenter(order);
     if (typeof L === "undefined") { mapError.classList.remove("hidden"); return; }
     if (!map) {
-      map = L.map(mapEl).setView(center, 13);
+      // On touch screens one finger scrolls the page (no scroll trap); two fingers
+      // pinch-zoom and move the map. Desktop keeps Leaflet's defaults.
+      const touch = isTouchScreen();
+      map = L.map(mapEl, touch ? { dragging: false, tap: false, scrollWheelZoom: false } : {}).setView(center, 13);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
+      const hint = document.getElementById("mapHint");
+      if (touch && hint) {
+        hint.classList.remove("hidden");
+        mapEl.addEventListener("touchstart", function (e) { if (e.touches && e.touches.length > 1) hint.classList.add("hidden"); }, { passive: true });
+      }
+      watchMapSize();
     }
+    map.invalidateSize();
     if (pickupMarker) { map.removeLayer(pickupMarker); pickupMarker = null; }
     if (dropoffMarker) { map.removeLayer(dropoffMarker); dropoffMarker = null; }
     if (order.pickup_lat && order.pickup_lng) pickupMarker = L.marker([parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)]).addTo(map).bindPopup("Pickup");
     if (order.dropoff_lat && order.dropoff_lng) dropoffMarker = L.marker([parseFloat(order.dropoff_lat), parseFloat(order.dropoff_lng)]).addTo(map).bindPopup("Dropoff");
     fitLeaflet();
+  }
+  function isTouchScreen() {
+    try { if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true; } catch (e) {}
+    return typeof L !== "undefined" && !!(L.Browser && L.Browser.mobile);
+  }
+  // Keep Leaflet's tile grid in sync when the box changes size (rotation, cards
+  // appearing above it, the hidden->visible switch).
+  let sizeTimer = null;
+  function resizeMapSoon() {
+    if (!map) return;
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(function () { map.invalidateSize(); }, 150); // no refit: keep the user's zoom
+  }
+  function watchMapSize() {
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(resizeMapSoon).observe(mapEl);
+    window.addEventListener("resize", resizeMapSoon);
+    window.addEventListener("orientationchange", resizeMapSoon);
   }
   function fitLeaflet() {
     if (!map || typeof L === "undefined") return;

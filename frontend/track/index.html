@@ -30,6 +30,16 @@
         .eta-value { font-size: 1.8rem; font-weight: 700; }
         .map-container { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; }
         #map { width: 100%; height: 100%; min-height: 500px; }
+        /* Phones/tablets (single column): map sized to the screen instead of a fixed 500px block. */
+        @media (max-width: 900px) {
+            .map-container { min-height: 0; }
+            #map { min-height: 280px; height: 45vh; max-height: 440px; }
+        }
+        /* Touch screens: map zoom buttons big enough to hit (Leaflet default is 30x30). */
+        @media (pointer: coarse) {
+            .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 22px; }
+        }
+        .map-hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 500; background: rgba(16, 32, 46, 0.85); color: #fff; font-size: 0.8rem; padding: 6px 10px; border-radius: 999px; pointer-events: none; white-space: nowrap; }
         .hidden { display: none !important; }
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3FB8A6; display: inline-block; }
         .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EADFCC; font-size: 0.88rem; }
@@ -93,6 +103,7 @@
                 <div id="mapLoading">Enter your order details to see the live map.</div>
                 <div class="hidden" id="mapError"><h3>Map unavailable</h3></div>
                 <div id="map" class="hidden"></div>
+                <div class="map-hint hidden" id="mapHint">Use two fingers to move the map</div>
             </div>
         </div>
     </main>

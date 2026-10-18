@@ -515,15 +515,21 @@
         if (params.pickup) document.getElementById('pickupCity').value = params.pickup;
         if (params.dropoff) document.getElementById('dropoffCity').value = params.dropoff;
         const cat = params.category && C ? C.categoryById(params.category) : null;
+        const partner = params.restaurant && C ? C.partnerBySlug(params.restaurant) : null;
+        // Partner names come from a fixed whitelist and are only ever set via .value/.textContent.
+        const pickupAddr = document.getElementById('pickupAddress');
+        if (partner && pickupAddr && !pickupAddr.value) pickupAddr.value = partner.name;
         const noteParts = [];
         if (cat && cat.note) noteParts.push(cat.note);
+        if (partner) noteParts.push(partner.name);
         if (params.q) noteParts.push(params.q);
         const item = document.getElementById('itemDescription');
         if (item && noteParts.length && !item.value) item.value = noteParts.join(': ');
         const banner = document.getElementById('ccPrefillNote');
-        if (banner && (cat || params.pickup)) {
+        if (banner && (cat || params.pickup || partner)) {
             const bits = [];
-            if (cat) bits.push(cat.label);
+            if (partner) bits.push(partner.name);
+            else if (cat) bits.push(cat.label);
             if (params.pickup && params.dropoff) bits.push(`${params.pickup} → ${params.dropoff}`);
             else if (params.pickup) bits.push(`near ${params.pickup}`);
             banner.textContent = 'Starting your order: ' + bits.join(' · ');
