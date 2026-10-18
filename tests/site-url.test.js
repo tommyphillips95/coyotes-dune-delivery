@@ -90,7 +90,7 @@ test("every function that texts a link uses the shared builder, none reads SITE_
   const files = fs.readdirSync(FN).filter((f) => f.endsWith(".js") && f !== "_site-url.js");
   const raw = files.filter((f) => /process\.env\.SITE_ORIGIN/.test(fs.readFileSync(path.join(FN, f), "utf8")) && f !== "_cors.js");
   assert.deepStrictEqual(raw, [], "build links with _site-url.js");
-  for (const f of ["update-order.js", "respond-offer.js", "dispatch.js", "driver-sms-alert.js", "public-config.js"]) {
+  for (const f of ["_assign-sms.js", "respond-offer.js", "dispatch.js", "driver-sms-alert.js", "public-config.js"]) {
     assert(/require\(['"]\.\/_site-url['"]\)/.test(fs.readFileSync(path.join(FN, f), "utf8")), f);
   }
   const ro = fs.readFileSync(path.join(FN, "respond-offer.js"), "utf8");

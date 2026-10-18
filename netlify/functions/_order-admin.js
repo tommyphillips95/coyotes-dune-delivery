@@ -11,6 +11,9 @@
  *   - every change writes order_status_logs: who, from -> to, driver
  * Errors are thrown with .status (4xx) and .code so callers can answer with
  * a clear message; anything else is a 500 via _errors.serverError.
+ *
+ * Assigning a driver also texts the customer the /track/ link
+ * (_assign-sms.js), after the write; a failed text never undoes it.
  */
 "use strict";
 
@@ -155,7 +158,10 @@ async function changeOrder(supabase, orderId, body, actor) {
   const { error: lErr } = await supabase.from("order_status_logs").insert([log]);
   if (lErr) console.error("[order-admin] status log failed", lErr.message || lErr);
 
-  return { order: updated, from, to, driver, warnings, log };
+  // Customer text after the change is saved; never throws, never rolls back.
+  const customerSms = driver && to === "assigned" ? await require("./_assign-sms").notifyCustomerAssigned(supabase, updated, driver) : null;
+
+  return { order: updated, from, to, driver, warnings, log, customerSms };
 }
 
 module.exports = { ruleResponse, STATUSES, TRANSITIONS, NEEDS_CONFIRM, PAYMENT_FIELDS, changeOrder, driverOptions, allowedNext, driverName, canDrive };

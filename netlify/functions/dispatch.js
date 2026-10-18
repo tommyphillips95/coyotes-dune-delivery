@@ -32,7 +32,8 @@ async function sendSMS(to, body) {
     return { success: true, messageSid: msg.sid };
   } catch (err) {
     console.error("dispatch SMS error", err);
-    return { success: false, error: err.message };
+    // Keep Twilio's code (e.g. 21610 = recipient replied STOP) so callers can respect it.
+    return { success: false, error: (err.code ? err.code + ": " : "") + err.message };
   }
 }
 

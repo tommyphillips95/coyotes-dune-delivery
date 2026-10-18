@@ -749,7 +749,7 @@ The app automatically sends SMS notifications to customers at key points in the 
 | Event | Trigger | Message |
 |-------|---------|---------|
 | **Order Created** | `create-order.js` | "Your order [ORDER-123] has been received. We'll assign a driver shortly." |
-| **Driver Assigned** | `update-order.js` (status → `assigned`) | "Your driver [Name] is on the way! Track: [URL]" — URL is `SITE_ORIGIN/track/?order=CDD-…` from `netlify/functions/_site-url.js` |
+| **Driver Assigned** | `_assign-sms.js`, from `_order-admin.changeOrder` (admin dashboard assign and `update-order.js`) | "Your driver [First name] has been assigned to order CDD-…. Track: [URL] — Coyote's Dune Delivery" (no name: "A driver has been assigned…"). URL is `SITE_ORIGIN/track/?order=CDD-…` from `netlify/functions/_site-url.js`, no token. Sent once per driver; skipped if Twilio isn't set up (logged) or the number replied STOP |
 | **Order Completed** | `update-order.js` (status → `completed`) | "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!" |
 | **Driver Alert** | `driver-sms-alert.js` (manual/admin) | "New order available! Log in to accept: [driver portal URL]" |
 

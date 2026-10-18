@@ -724,13 +724,26 @@
 
     // Server first, then reload so status, driver, flags and history all come
     // from the database (nothing is changed on screen before the 200).
+    const CUSTOMER_SMS_NOTES = {
+        twilio_not_configured: 'Customer not texted (Twilio isn\'t set up).',
+        already_sent: 'Customer already has the tracking text.',
+        opted_out: 'Customer not texted (they replied STOP).',
+        no_phone: 'Customer not texted (no phone on file).',
+        no_customer: 'Customer not texted (no phone on file).',
+    };
+    function customerSmsNote(c) {
+        if (!c) return '';
+        if (c.sent) return ' Customer texted the tracking link.';
+        return ' ' + (CUSTOMER_SMS_NOTES[c.reason] || 'Customer text failed; the assignment is saved.');
+    }
+
     async function changeOrder(id, body, okText) {
         setRowBusy(id, true);
         try {
             const res = await api('PUT', `/orders/${encodeURIComponent(id)}`, body);
             await loadOrders();
             const warn = (res.warnings || []).join(' ');
-            showToast(okText + (warn ? ` ${warn}` : ''), warn ? 'warning' : 'success');
+            showToast(okText + customerSmsNote(res.customerSms) + (warn ? ` ${warn}` : ''), warn ? 'warning' : 'success');
         } catch (err) {
             setRowBusy(id, false);
             if (err.status === 409 && err.data && err.data.code === 'conflict') loadOrders();

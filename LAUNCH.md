@@ -249,6 +249,7 @@ Run on a real phone against `https://coyote-dune-delivery.netlify.app` (`SITE=` 
 - [ ] **SMS (only once Twilio is configured):**
   - after Place Order, the customer phone gets "Your order CDD-… has been received. We'll assign a driver shortly. — Coyote's Dune Delivery"
   - the test driver gets "Coyote's Dune Delivery: dispatch assigned you CDD-… (…). Call dispatch if you can't take it." when you assign from admin
+  - the customer phone gets "Your driver <first name> has been assigned to order CDD-…. Track: SITE/track/?order=CDD-… — Coyote's Dune Delivery" when you assign from admin (first name only, no driver phone, no token). Unassign and assign the same driver again: no second text. The admin toast says whether the customer was texted.
   - when a driver accepts an auto-offer (paid orders), the customer gets "… accepted CDD-…. Track: SITE/track/?order=CDD-… — Coyote's Dune Delivery". The link has no token: opening it on another phone asks for the order's phone number.
   - every send appears in Supabase `sms_logs`
 - [ ] **Refunds:** [Test-mode checklist](#test-mode-checklist) step 6 on the paid 4242 order (partial, then full). Admin shows "Paid, partly refunded", then "Refunded".

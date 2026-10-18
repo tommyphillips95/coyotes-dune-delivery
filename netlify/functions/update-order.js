@@ -4,8 +4,9 @@
  * Body: { id, status?, note?, driver_id?, confirm? }  (admin JWT)
  * Validation + audit log live in _order-admin.js (shared with the admin router).
  *
- * Sends SMS notifications on key status changes:
- * - assigned: "Your driver [Name] is on the way! Track: [URL]"  (URL from _site-url.trackUrl: SITE_ORIGIN/track/?order=…)
+ * Customer SMS:
+ * - assigned: sent by _order-admin.changeOrder (_assign-sms.js), same as the
+ *   admin dashboard: driver first name + SITE_ORIGIN/track/?order=… link, once
  * - completed: "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!"
  */
 
@@ -14,7 +15,6 @@ const { serverError } = require('./_errors');
 const { headers: corsHeaders } = require('./_cors');
 const { requireAdmin, jsonError } = require('./_auth');
 const { changeOrder, ruleResponse, PAYMENT_FIELDS } = require('./_order-admin');
-const { trackUrl: buildTrackUrl } = require('./_site-url');
 
 /**
  * Helper: Send SMS via Twilio
@@ -127,15 +127,7 @@ exports.handler = async (event) => {
       if (customerPhone && customerPhone.length >= 10) {
         let smsMessage = null;
 
-        if (result.to === 'assigned') {
-          // Fetch driver name if driver_id is provided
-          let driverName = 'Your driver';
-          if (result.driver) {
-            driverName = `${result.driver.first_name} ${result.driver.last_name}`;
-          }
-          const trackUrl = buildTrackUrl(order.order_number);
-          smsMessage = `Your driver ${driverName} is on the way! Track your order: ${trackUrl} — Coyote's Dune Delivery`;
-        }
+        // 'assigned' is texted by changeOrder (_assign-sms.js), not here.
 
         if (result.to === 'completed') {
           smsMessage = `Your delivery is complete. Thanks for choosing Coyote's Dune Delivery! — Coyote's Dune Delivery`;
