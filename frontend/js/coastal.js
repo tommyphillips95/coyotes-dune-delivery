@@ -184,6 +184,30 @@
     return TERMINAL.indexOf(String(status || "").toLowerCase()) !== -1;
   }
 
+  // <input type="date|time"> values are local wall-clock strings. Never derive
+  // them from toISOString() (UTC): after ~7 PM in Texas that rolls the date to
+  // tomorrow and blocks booking for tonight.
+  function pad2(n) {
+    return (n < 10 ? "0" : "") + n;
+  }
+  function localDateInputValue(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+  function localTimeInputValue(d) {
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+  // Default slot for the order form: now + leadMinutes (default 30), plus the
+  // earliest selectable date (today, local).
+  function defaultServiceSlot(now, leadMinutes) {
+    var base = now ? new Date(now.getTime()) : new Date();
+    var slot = new Date(base.getTime() + (leadMinutes == null ? 30 : leadMinutes) * 60000);
+    return {
+      date: localDateInputValue(slot),
+      time: localTimeInputValue(slot),
+      minDate: localDateInputValue(base)
+    };
+  }
+
   var api = {
     CITIES: CITIES,
     SERVICES: SERVICES,
@@ -198,7 +222,10 @@
     getTrackingToken: getTrackingToken,
     clearTrackingToken: clearTrackingToken,
     buildTrackUrl: buildTrackUrl,
-    isTerminalStatus: isTerminalStatus
+    isTerminalStatus: isTerminalStatus,
+    localDateInputValue: localDateInputValue,
+    localTimeInputValue: localTimeInputValue,
+    defaultServiceSlot: defaultServiceSlot
   };
 
   root.CoyoteCoastal = api;
