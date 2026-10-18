@@ -238,6 +238,7 @@ exports.handler = async (event) => {
         const sms = result.driver ? await notifyDriver(supabase, result) : null;
         return json(headers, 200, {
           success: true, from: result.from, to: result.to, warnings: result.warnings, driverSms: sms,
+          customerSms: result.customerSms ? { sent: result.customerSms.sent, reason: result.customerSms.reason } : null,
           order: pick(result.order, ["id", "order_number", "status", "driver_id", "assigned_at", "completed_at", "payment_status"], { allowed: orderAdmin.allowedNext(result.to), driver_name: result.driver ? orderAdmin.driverName(result.driver) : null }),
         });
       }
