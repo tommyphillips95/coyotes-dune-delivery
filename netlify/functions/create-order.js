@@ -16,6 +16,37 @@ function generateOrderNumber() {
   return `${prefix}-${timestamp}-${random}`;
 }
 
+// ── Server-side input checks (the browser checks too, but is not trusted) ──
+const ZIP_RE = /^\d{5}(-?\d{4})?$/; // 5-digit ZIP, optional +4 (matches the order form)
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+const SERVICE_TZ = "America/Chicago";
+
+function isValidZip(zip) {
+  return ZIP_RE.test(String(zip == null ? "" : zip).trim());
+}
+
+/** Wall-clock "YYYY-MM-DDTHH:MM" in America/Chicago for an instant. */
+function chicagoWallClock(now) {
+  const parts = {};
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: SERVICE_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now || new Date()).forEach((p) => { parts[p.type] = p.value; });
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+/** Returns an error string for a bad scheduled date/time, or null if OK. */
+function scheduleError(date, time, now) {
+  const d = String(date || "").trim();
+  const t = String(time || "").trim();
+  if (!DATE_RE.test(d) || !TIME_RE.test(t)) return "Please choose a valid date and time.";
+  const dt = new Date(d + "T00:00:00Z");
+  if (Number.isNaN(dt.getTime()) || dt.toISOString().slice(0, 10) !== d) return "Please choose a valid date and time.";
+  if (`${d}T${t.slice(0, 5)}` < chicagoWallClock(now)) return "That pickup time has already passed. Please choose a future time.";
+  return null;
+}
+
 async function sendSMS({ to_phone, message_body }) {
   try {
     const twilio = require("twilio");
@@ -62,6 +93,16 @@ exports.handler = async (event) => {
     }
     if (!body.service_type) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Service type is required" }) };
+    }
+    for (const [field, label] of [["pickup_zip", "pickup"], ["dropoff_zip", "dropoff"]]) {
+      if (body[field] != null && String(body[field]).trim() !== "" && !isValidZip(body[field])) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: `Please enter a 5-digit ZIP code for ${label}.` }) };
+      }
+    }
+    // Same condition the scheduling branch below uses; date without time still falls back to ASAP.
+    if (body.schedule === "later" && body.scheduled_date && body.scheduled_time) {
+      const bad = scheduleError(body.scheduled_date, body.scheduled_time);
+      if (bad) return { statusCode: 400, headers, body: JSON.stringify({ error: bad }) };
     }
 
     if (weatherShutdownActive()) {
@@ -185,3 +226,6 @@ exports.handler = async (event) => {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to create order", message: "We couldn't place your order. Please try again." }) };
   }
 };
+
+// Exposed for unit tests.
+exports._validation = { isValidZip, chicagoWallClock, scheduleError };
