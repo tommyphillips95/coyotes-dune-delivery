@@ -71,6 +71,16 @@ test("order form mobile inputs: numeric ZIP keypad, 16px fields, labelled tracki
   assert.ok(/aria-invalid/.test(order), "errors set aria-invalid");
 });
 
+test("pickup/dropoff Swap stays visible on mobile with a 44px target", () => {
+  const html = read("frontend/order/index.html");
+  const mobile = html.slice(html.indexOf("@media (max-width: 768px)"), html.indexOf("</style>"));
+  assert.ok(!/\.route-connector\s*\{\s*display:\s*none/.test(mobile), "route-connector must not be hidden on mobile");
+  assert.ok(/\.route-swap\s*\{[^}]*min-height:\s*44px/.test(mobile), "swap has a 44px min-height");
+  assert.ok(/id="swapLocations"[^>]*aria-label=/.test(html));
+  // Programmatic .value swaps fire no change events; the live quote must refresh.
+  assert.ok(/swapLocations\(\); updateLiveQuote\(\);/.test(read("frontend/js/order.js")));
+});
+
 test("Port A -> Mustang ride is $35 with beach access (matches quote-parity)", () => {
   const p = C.planRoute("Port Aransas", "Mustang Island", "ride", { passenger_count: 1 });
   assert.strictEqual(p.total, 35);
