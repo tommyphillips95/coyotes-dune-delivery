@@ -197,6 +197,135 @@ test("500 does not leak internal database error text", async () => {
   assert.strictEqual(JSON.parse(res.body).error, "Failed to create order");
 });
 
+// ── Idempotency: one order per checkout attempt ──
+const KEY = "3b0c4f9e-8a51-4d7e-9a3c-1f2e3d4c5b6a";
+
+/** Wrap a fake so orders queries/inserts can be made to fail like real PostgREST. */
+function withOrdersHook(fake, hook) {
+  const realFrom = fake.from;
+  fake.from = (name) => {
+    const b = realFrom(name);
+    if (name !== "orders") return b;
+    const st = { eqs: {}, insert: null };
+    const eq = b.eq, insert = b.insert, then = b.then;
+    b.eq = (c, v) => { st.eqs[c] = v; return eq(c, v); };
+    b.insert = (rows) => { st.insert = rows; return insert(rows); };
+    b.then = (res, rej) => {
+      const r = hook(st);
+      return r ? res(r) : then(res, rej);
+    };
+    return b;
+  };
+  return fake;
+}
+
+test("same idempotency_key twice -> one order, original returned", async () => {
+  currentFake = freshDb();
+  const first = await post(Object.assign(base(), { idempotency_key: KEY }));
+  assert.strictEqual(first.statusCode, 201, first.body);
+  const second = await post(Object.assign(base(), { idempotency_key: KEY }));
+  assert.strictEqual(second.statusCode, 200, second.body);
+  const a = JSON.parse(first.body), b = JSON.parse(second.body);
+  assert.strictEqual(b.replayed, true);
+  for (const k of ["orderId", "orderNumber", "estimatedPrice", "miles", "requiredClass", "status"]) assert.deepStrictEqual(b[k], a[k], k);
+  assert.strictEqual(jwt.verify(b.trackingToken, SECRET).order_id, a.orderId);
+  assert.strictEqual(currentFake.db.orders.length, 1);
+  assert.strictEqual(currentFake.db.customers.length, 1);
+  assert.strictEqual(currentFake.db.order_status_logs.length, 1, "no second status log");
+  assert.strictEqual(currentFake.db.orders[0].idempotency_key, KEY);
+});
+
+test("different keys (or no key) create separate orders", async () => {
+  currentFake = freshDb();
+  await post(Object.assign(base(), { idempotency_key: KEY }));
+  await post(Object.assign(base(), { idempotency_key: KEY.replace(/a$/, "b") }));
+  await post(base());
+  assert.strictEqual(currentFake.db.orders.length, 3);
+  assert.strictEqual(currentFake.db.orders[2].idempotency_key, undefined, "no key -> column not set");
+});
+
+test("repeated key from a different phone is 409, nothing created", async () => {
+  currentFake = freshDb();
+  await post(Object.assign(base(), { idempotency_key: KEY }));
+  const res = await post(Object.assign(base(), { idempotency_key: KEY, phone: "3615559999" }));
+  assert.strictEqual(res.statusCode, 409, res.body);
+  assert.ok(!/order_number|orderId|trackingToken/.test(res.body));
+  assert.strictEqual(currentFake.db.orders.length, 1);
+});
+
+test("malformed idempotency_key is 400", async () => {
+  for (const k of ["short", "has spaces in it 1234", "x".repeat(101), "<script>alert(1)</script>"]) {
+    currentFake = freshDb();
+    const res = await post(Object.assign(base(), { idempotency_key: k }));
+    assert.strictEqual(res.statusCode, 400, k);
+    assert.strictEqual(currentFake.db.orders.length, 0);
+  }
+});
+
+test("a retry during a weather hold still returns the order already placed", async () => {
+  currentFake = freshDb();
+  await post(Object.assign(base(), { idempotency_key: KEY }));
+  process.env.WEATHER_SHUTDOWN = "1";
+  try {
+    const res = await post(Object.assign(base(), { idempotency_key: KEY }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    // ...but a new checkout is still refused
+    assert.strictEqual((await post(Object.assign(base(), { idempotency_key: KEY + "x" }))).statusCode, 503);
+  } finally {
+    delete process.env.WEATHER_SHUTDOWN;
+  }
+});
+
+test("before the migration (no idempotency_key column) orders still go through", async () => {
+  const missing = { data: null, error: { code: "42703", message: 'column orders.idempotency_key does not exist' } };
+  currentFake = withOrdersHook(freshDb(), (st) => {
+    if ("idempotency_key" in st.eqs) return missing;
+    if (st.insert && st.insert[0] && "idempotency_key" in st.insert[0]) return missing;
+    return null;
+  });
+  const origWarn = console.warn; console.warn = () => {};
+  let res;
+  try { res = await post(Object.assign(base(), { idempotency_key: KEY })); } finally { console.warn = origWarn; }
+  assert.strictEqual(res.statusCode, 201, res.body);
+  assert.strictEqual(currentFake.db.orders.length, 1);
+  assert.strictEqual(currentFake.db.orders[0].idempotency_key, undefined);
+});
+
+test("concurrent duplicate (unique violation on insert) returns the winning order", async () => {
+  const fake = freshDb();
+  // The other request already inserted this key; our first lookup missed it.
+  fake.db.customers.push({ id: "c-win", phone: "3615550100", first_name: "Test", last_name: "Customer" });
+  const winner = { id: "o-win", order_number: "CDD-WIN-1", customer_id: "c-win", idempotency_key: KEY, service_type: "ride",
+    pickup_city: "Port Aransas", dropoff_city: "Mustang Island", passenger_count: 1, estimated_price: 35, required_vehicle_class: "4x4", status: "pending" };
+  let lookups = 0;
+  currentFake = withOrdersHook(fake, (st) => {
+    if ("idempotency_key" in st.eqs) { lookups++; return { data: lookups === 1 ? null : Object.assign({}, winner), error: null }; }
+    if (st.insert) return { data: null, error: { code: "23505", message: 'duplicate key value violates unique constraint "orders_idempotency_key_uidx"' } };
+    return null;
+  });
+  const res = await post(Object.assign(base(), { idempotency_key: KEY }));
+  assert.strictEqual(res.statusCode, 200, res.body);
+  const body = JSON.parse(res.body);
+  assert.strictEqual(body.orderId, "o-win");
+  assert.strictEqual(body.replayed, true);
+});
+
+test("order form sends one key per attempt and reuses it on retry", () => {
+  const fs = require("fs");
+  const src = fs.readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
+  assert.ok(/idempotency_key: checkoutIdempotencyKey\(\)/.test(src), "orderData carries the key");
+  assert.ok(/if \(!checkoutKey\) checkoutKey = newIdempotencyKey\(\)/.test(src), "key is created once and reused");
+  assert.ok(/if \(result\.ok\) \{\s*checkoutKey = null;/.test(src), "success clears it");
+  assert.ok(/form\.addEventListener\('input', resetCheckoutKey\)/.test(src), "edits start a new attempt");
+  assert.ok(/randomUUID/.test(src));
+  // The failure branches must not clear the key (that is what makes retry safe).
+  const fail = src.slice(src.indexOf("} else {", src.indexOf("if (result.ok) {")), src.indexOf("const trackBtn"));
+  assert.ok(!/checkoutKey = null/.test(fail), "failure keeps the key for the retry");
+  const sql = fs.readFileSync(path.join(__dirname, "..", "schema/order_idempotency.sql"), "utf8");
+  assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_key TEXT/.test(sql));
+  assert.ok(/CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx[\s\S]*WHERE idempotency_key IS NOT NULL/.test(sql));
+});
+
 (async () => {
   let failed = 0;
   for (const [name, fn] of tests) {

@@ -47,6 +47,68 @@ function scheduleError(date, time, now) {
   return null;
 }
 
+// ── Idempotency (one order per checkout attempt) ──
+// The order form sends idempotency_key (a random UUID) and reuses it when the
+// customer retries after a dropped connection. A repeat key returns the
+// original order instead of creating a second one. Needs
+// schema/order_idempotency.sql; until it is applied we log and create normally.
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
+
+function isMissingIdempotencyColumn(err) {
+  if (!err) return false;
+  const msg = String(err.message || "");
+  return err.code === "42703" || err.code === "PGRST204" || (/idempotency_key/.test(msg) && /column/i.test(msg));
+}
+
+function isUniqueViolation(err) {
+  return !!err && err.code === "23505";
+}
+
+const digits = (p) => String(p || "").replace(/\D/g, "");
+
+/** { order } when the key was seen, { order: null } when not, { unsupported: true } before the migration. */
+async function findOrderByIdempotencyKey(supabase, key) {
+  const { data, error } = await supabase.from("orders").select("*").eq("idempotency_key", key).maybeSingle();
+  if (error) {
+    if (isMissingIdempotencyColumn(error)) {
+      console.warn("[create-order] orders.idempotency_key missing; run schema/order_idempotency.sql");
+      return { unsupported: true, order: null };
+    }
+    throw error;
+  }
+  return { order: data || null };
+}
+
+/** Same response shape as a fresh create, for a repeated key from the same customer. */
+async function replayResponse(supabase, headers, order, phone) {
+  const { data: customer, error } = await supabase.from("customers").select("id, phone").eq("id", order.customer_id).maybeSingle();
+  if (error) throw error;
+  if (!customer || digits(customer.phone) !== digits(phone)) {
+    return { statusCode: 409, headers, body: JSON.stringify({ error: "This checkout was already used. Please refresh the page and try again." }) };
+  }
+  const priced = priceQuote(order.pickup_city, order.dropoff_city || order.pickup_city, {
+    service_type: order.service_type,
+    passenger_count: order.passenger_count,
+    package_size: order.package_size,
+  });
+  const trackingToken = issueTrackingToken(order);
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify({
+      success: true,
+      replayed: true,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      estimatedPrice: order.estimated_price,
+      miles: priced.miles,
+      requiredClass: order.required_vehicle_class || priced.requiredClass,
+      status: order.status,
+      trackingToken: trackingToken || undefined,
+    }),
+  };
+}
+
 async function sendSMS({ to_phone, message_body }) {
   try {
     const twilio = require("twilio");
@@ -105,6 +167,25 @@ exports.handler = async (event) => {
       if (bad) return { statusCode: 400, headers, body: JSON.stringify({ error: bad }) };
     }
 
+    let idempotencyKey = null;
+    if (body.idempotency_key != null && body.idempotency_key !== "") {
+      idempotencyKey = String(body.idempotency_key).trim();
+      if (!IDEMPOTENCY_KEY_RE.test(idempotencyKey)) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid idempotency_key" }) };
+      }
+    }
+
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+    // A retry of a checkout that already created an order gets that order back
+    // (even if a weather hold started in between). No new rows, no second SMS.
+    let idempotencySupported = true;
+    if (idempotencyKey) {
+      const seen = await findOrderByIdempotencyKey(supabase, idempotencyKey);
+      if (seen.unsupported) idempotencySupported = false;
+      else if (seen.order) return await replayResponse(supabase, headers, seen.order, body.phone);
+    }
+
     if (weatherShutdownActive()) {
       return {
         statusCode: 503,
@@ -112,8 +193,6 @@ exports.handler = async (event) => {
         body: JSON.stringify(weatherShutdownPayload()),
       };
     }
-
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
     let customerId;
     const { data: existingCustomer, error: customerLookupError } = await supabase
@@ -179,7 +258,19 @@ exports.handler = async (event) => {
       weather_hold: false,
     };
 
-    const { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single();
+    if (idempotencyKey && idempotencySupported) orderData.idempotency_key = idempotencyKey;
+
+    let { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single();
+    if (orderError && orderData.idempotency_key && isMissingIdempotencyColumn(orderError)) {
+      console.warn("[create-order] orders.idempotency_key missing on insert; creating without it");
+      delete orderData.idempotency_key;
+      ({ data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single());
+    }
+    if (orderError && idempotencyKey && isUniqueViolation(orderError)) {
+      // Two requests with the same key raced; the other one won. Return its order.
+      const seen = await findOrderByIdempotencyKey(supabase, idempotencyKey);
+      if (seen.order) return await replayResponse(supabase, headers, seen.order, body.phone);
+    }
     if (orderError) throw orderError;
 
     await supabase.from("order_status_logs").insert([{
@@ -228,4 +319,4 @@ exports.handler = async (event) => {
 };
 
 // Exposed for unit tests.
-exports._validation = { isValidZip, chicagoWallClock, scheduleError };
+exports._validation = { isValidZip, chicagoWallClock, scheduleError, isMissingIdempotencyColumn, IDEMPOTENCY_KEY_RE };

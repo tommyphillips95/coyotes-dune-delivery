@@ -53,6 +53,7 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 2. `schema/launch_2026_09_22.sql` (drop legacy SSN/bank if present, add vehicle/weather fields, delete placeholder admin, tighten driver_locations policies)
 3. `schema/dispatch_offers.sql` (auto-offer table + service-role-only RLS)
 4. `schema/issue_13_constraints.sql` (beach permit flags + `last_location_at` heartbeat)
+5. `schema/order_idempotency.sql` (`orders.idempotency_key` + partial unique index; `create-order` dedupes checkout retries on it, and creates orders normally with a log warning until this is applied)
 
 ### Idempotency
 - Tables/indexes/extensions: mostly `IF NOT EXISTS` — safe to re-run.
@@ -89,7 +90,7 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 Tick before merging `[dune] Launch v1` into `main`:
 
 - [ ] Required Netlify env set on production: `SUPABASE_*`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `STRIPE_*`, `SITE_ORIGIN` (Twilio/Checkr/Firebase optional until those features go live)
-- [ ] Three SQL files run in order on the live Supabase project (after a backup)
+- [ ] SQL files run in order (see Run order above) on the live Supabase project (after a backup)
 - [ ] Admin password is not the placeholder / old default
 - [ ] `/apply` does not collect SSN or bank (Checkr + Stripe Connect)
 - [ ] Smoke: quote Port A → Mustang still $35; create-order stores matching `estimated_price`
@@ -98,5 +99,5 @@ Tick before merging `[dune] Launch v1` into `main`:
 
 ## To go live this week (ops)
 1. Fill the required Netlify env rows above (live site already has `SITE_ORIGIN` + `NODE_VERSION` only).
-2. Run the three SQL files on Supabase in order.
+2. Run the SQL files on Supabase in order (see Run order above).
 3. Twilio A2P 10DLC, Stripe live keys, Checkr live, privacy + terms, insurance note when ready for real traffic.
