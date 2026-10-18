@@ -88,7 +88,7 @@ test("stored estimated_price is the server quote (Port A -> Mustang ride = $35, 
 
 test("missing dropoff city is priced in-town at the pickup city", async () => {
   currentFake = freshDb();
-  const b = Object.assign(base(), { pickup_city: "Corpus Christi" });
+  const b = Object.assign(base(), { pickup_city: "Corpus Christi", pickup_zip: "78401" });
   delete b.dropoff_city; delete b.dropoff_address; delete b.dropoff_zip;
   const res = await post(b);
   assert.strictEqual(res.statusCode, 201, res.body);

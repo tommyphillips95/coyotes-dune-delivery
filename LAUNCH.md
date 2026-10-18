@@ -212,4 +212,5 @@ Tick before merging `[dune] Launch v1` into `main`:
    | Stingray's Taphouse | `stingrays-taphouse` | Port Aransas | Port Aransas |
    | Padre Island Burger Co. | `padre-island-burger-co` | North Padre Island | **Padre Island** (mapped — confirm) |
 
-   North Padre Island (Corpus Christi ZIP 78418) is priced as the existing "Padre Island" zone (beach surcharge, 4x4). Pricing is by town name only; the ZIP is format-checked but not used for price or service area.
+   North Padre Island (Corpus Christi ZIP 78418) is priced as the existing "Padre Island" zone (beach surcharge, 4x4). Pricing is by town name.
+5. **Service-area checks (create-order, `netlify/functions/_service-area.js`).** Unknown towns and ZIPs outside 783xx/784xx are refused; an island-only ZIP (78373) with a mainland town is refused with a "pick Port Aransas or Mustang Island" message; 78418 (Flour Bluff mainland + North Padre/Mustang) with Corpus Christi is accepted at the quoted price but gets a 4x4 and an "Address check" note in the order log; other Coastal Bend ZIPs we haven't mapped (e.g. Fulton 78358, Aransas Pass 78336, Ingleside 78362) are accepted and flagged. **Tommy:** say if Fulton/Aransas Pass/Ingleside should become towns (they'd need a price-table entry) or be refused.

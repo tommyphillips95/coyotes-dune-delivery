@@ -8,6 +8,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
 const { phoneKey, samePhone, phoneVariants } = require("./_phone");
 const { priceQuote } = require("./zones");
+const { checkTrip } = require("./_service-area");
 const { issueTrackingToken } = require("./_auth");
 const { weatherShutdownActive, weatherShutdownPayload } = require("./_weather");
 
@@ -277,6 +278,11 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers, body: JSON.stringify({ error: `Please enter a 5-digit ZIP code for ${label}.` }) };
       }
     }
+    // Towns must be ones we price; ZIPs must fit the town (see _service-area.js).
+    const area = checkTrip(body);
+    if (!area.ok) {
+      return { statusCode: area.status, headers, body: JSON.stringify({ error: area.error, code: area.code, field: area.field }) };
+    }
     // scheduled_at (explicit offset) first, else Central date/time; "later" without them is ASAP.
     const schedule = resolveSchedule(body);
     if (schedule.error) return { statusCode: 400, headers, body: JSON.stringify({ error: schedule.error }) };
@@ -350,7 +356,9 @@ exports.handler = async (event) => {
     });
     const miles = priced.miles;
     const estimatedPrice = priced.total;
-    const vehicle = priced.requiredClass;
+    // Ambiguous island/mainland ZIP (78418) with a mainland town: keep the price
+    // the customer was quoted, but send a 4x4 so an island address isn't stranded.
+    const vehicle = area.forceBeach ? "4x4" : priced.requiredClass;
 
     const orderData = {
       order_number: orderNumber,
@@ -399,7 +407,7 @@ exports.handler = async (event) => {
     await supabase.from("order_status_logs").insert([{
       order_id: order.id,
       status: "pending",
-      note: "Order received. " + miles + " mi. Required class " + vehicle + ".",
+      note: "Order received. " + miles + " mi. Required class " + vehicle + "." + (area.flags.length ? " Address check: " + area.flags.join(" ") : ""),
       changed_by: "system",
     }]);
 
