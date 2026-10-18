@@ -15,7 +15,15 @@
         @media (max-width: 900px) { .track-layout { grid-template-columns: 1fr; } }
         .track-card { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
         .lookup-form { display: flex; flex-direction: column; gap: 10px; }
-        .lookup-form input, .lookup-form button { padding: 12px; border-radius: 6px; font-size: 0.95rem; }
+        /* 16px+ so iOS Safari doesn't zoom the page when a field is tapped; 48px tap targets */
+        .lookup-form input, .lookup-form button { padding: 12px; border-radius: 6px; font-size: 1rem; min-height: 48px; }
+        .lookup-form label { font-size: 0.85rem; font-weight: 600; margin-bottom: -4px; }
+        .lookup-message { margin: 10px 0 0; padding: 10px 12px; border-radius: 6px; background: rgba(196, 90, 62, 0.08); color: #A8432A; font-size: 0.92rem; }
+        .timeline-step { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: #6B7280; font-size: 0.92rem; }
+        .timeline-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #EADFCC; background: #fff; flex-shrink: 0; }
+        .timeline-dot.completed { background: #3FB8A6; border-color: #3FB8A6; }
+        .timeline-dot.active { background: #FF6B4A; border-color: #FF6B4A; }
+        .timeline-step:has(.timeline-dot.active) { color: #10202E; font-weight: 600; }
         .lookup-form input { border: 1.5px solid #EADFCC; }
         .lookup-form button { border: none; background: #FF6B4A; color: #fff; font-weight: 600; cursor: pointer; }
         .eta-box { background: #10202E; color: #fff; border-radius: 14px; padding: 20px; text-align: center; }
@@ -46,11 +54,14 @@
             <aside>
                 <div class="track-card">
                     <h3>Find Your Order</h3>
-                    <form class="lookup-form" id="lookupForm">
-                        <input type="text" id="lookupOrderNum" placeholder="Order number (CDD-...)">
-                        <input type="tel" id="lookupPhone" placeholder="Phone number">
+                    <form class="lookup-form" id="lookupForm" novalidate>
+                        <label for="lookupOrderNum">Order number</label>
+                        <input type="text" id="lookupOrderNum" placeholder="CDD-..." autocapitalize="characters" autocomplete="off" spellcheck="false">
+                        <label for="lookupPhone">Phone number used for the order</label>
+                        <input type="tel" id="lookupPhone" placeholder="(361) 555-1234" autocomplete="tel" inputmode="tel">
                         <button type="submit" id="lookupBtn">Track Order</button>
                     </form>
+                    <p class="lookup-message" id="lookupMessage" role="status" aria-live="polite" hidden></p>
                 </div>
                 <div class="track-card hidden" id="etaCard">
                     <span class="live-dot"></span> Live Tracking
@@ -72,10 +83,10 @@
                     <div class="order-detail-row"><span>Status</span><span id="detailStatus">--</span></div>
                 </div>
                 <div class="track-card hidden" id="timelineCard">
-                    <div id="dotPending" class="timeline-dot"></div>
-                    <div id="dotAssigned" class="timeline-dot"></div>
-                    <div id="dotInProgress" class="timeline-dot"></div>
-                    <div id="dotCompleted" class="timeline-dot"></div>
+                    <div class="timeline-step"><div id="dotPending" class="timeline-dot"></div>Order received</div>
+                    <div class="timeline-step"><div id="dotAssigned" class="timeline-dot"></div>Driver assigned</div>
+                    <div class="timeline-step"><div id="dotInProgress" class="timeline-dot"></div>On the way</div>
+                    <div class="timeline-step"><div id="dotCompleted" class="timeline-dot"></div>Completed</div>
                 </div>
             </aside>
             <div class="map-container">
