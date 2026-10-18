@@ -20,19 +20,25 @@
     // Do not keep a second mile table here — it will drift from create-order.
 
     function initDateTime() {
-        const now = new Date();
-        now.setMinutes(now.getMinutes() + 30);
         const dateInput = document.getElementById('serviceDate');
         const timeInput = document.getElementById('serviceTime');
+        const C = window.CoyoteCoastal;
+        let slot;
+        if (C && typeof C.defaultServiceSlot === 'function') {
+            slot = C.defaultServiceSlot(new Date(), 30);
+        } else {
+            // Local wall-clock fallback (never toISOString: that is UTC).
+            const pad = n => String(n).padStart(2, '0');
+            const now = new Date();
+            const later = new Date(now.getTime() + 30 * 60000);
+            const day = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            slot = { date: day(later), time: `${pad(later.getHours())}:${pad(later.getMinutes())}`, minDate: day(now) };
+        }
         if (dateInput) {
-            dateInput.value = now.toISOString().split('T')[0];
-            dateInput.min = new Date().toISOString().split('T')[0];
+            dateInput.value = slot.date;
+            dateInput.min = slot.minDate;
         }
-        if (timeInput) {
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            timeInput.value = `${hours}:${minutes}`;
-        }
+        if (timeInput) timeInput.value = slot.time;
     }
 
     function goToStep(step) {
