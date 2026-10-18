@@ -20,6 +20,10 @@
 
     // ── Configuration ───────────────────────────────────────
     const MEASUREMENT_ID = window.__GA4_ID__ || 'G-XXXXXXXXXX'; // placeholder
+    // Only load Google's gtag.js for a real Measurement ID. With the
+    // placeholder it was ~180 KB per page sending hits to nobody.
+    const GA_CONFIGURED = /^G-[A-Z0-9]{4,}$/.test(MEASUREMENT_ID) && !/^G-X+$/.test(MEASUREMENT_ID);
+    window.__CDD_GA_CONFIGURED__ = GA_CONFIGURED;
 
     // ── Session ID (persists for 30 min, shared with Firebase) ──
     const SESSION_KEY = 'cdd_analytics_session';
@@ -54,6 +58,7 @@
 
     // ── Load GA4 Script ─────────────────────────────────────
     function loadGA4() {
+        if (!GA_CONFIGURED) return; // placeholder ID: trackEvent() etc. stay no-ops
         if (window.gtag && window.dataLayer) return; // already loaded
 
         window.dataLayer = window.dataLayer || [];
@@ -83,7 +88,7 @@
      */
     window.trackEvent = function (category, action, label, value) {
         if (!window.gtag) {
-            console.warn('[Analytics] gtag not ready');
+            if (GA_CONFIGURED) console.warn('[Analytics] gtag not ready');
             return;
         }
         const params = {
@@ -104,7 +109,7 @@
      */
     window.trackConversion = function (eventName, params) {
         if (!window.gtag) {
-            console.warn('[Analytics] gtag not ready');
+            if (GA_CONFIGURED) console.warn('[Analytics] gtag not ready');
             return;
         }
         const payload = Object.assign({}, params || {}, { session_id: sessionId });
@@ -118,7 +123,7 @@
      */
     window.trackPageView = function (pagePath, pageTitle) {
         if (!window.gtag) {
-            console.warn('[Analytics] gtag not ready');
+            if (GA_CONFIGURED) console.warn('[Analytics] gtag not ready');
             return;
         }
         const config = { send_page_view: true, session_id: sessionId };
