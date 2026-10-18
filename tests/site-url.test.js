@@ -108,7 +108,8 @@ test("netlify.toml: old /order/?track= links redirect to /track/?order= before t
 
 test("repo: the wrong netlify host and /order/?track= links don't come back (github.com URLs are fine)", () => {
   const files = execSync("git ls-files", { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean)
-    .filter((f) => !/(^|\/)node_modules\/|package-lock\.json$|\.(png|jpe?g|gif|webp|ico|pdf|woff2?)$/.test(f));
+    .filter((f) => !/(^|\/)node_modules\/|package-lock\.json$|\.(png|jpe?g|gif|webp|ico|pdf|woff2?)$/.test(f))
+    .filter((f) => f !== "tests/site-url.test.js"); // this file names the patterns it bans
   const bad = [];
   for (const f of files) {
     let text; try { text = fs.readFileSync(path.join(ROOT, f), "utf8"); } catch (e) { continue; }
