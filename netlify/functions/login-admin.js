@@ -4,13 +4,11 @@
  */
 
 const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  // Same origin lock as every other function (SITE_ORIGIN), not '*'.
+  const headers = corsHeaders(event, { 'Access-Control-Allow-Methods': 'POST, OPTIONS' });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
