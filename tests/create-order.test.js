@@ -506,7 +506,7 @@ test("hash column missing (partial migration): insert retried without both idemp
 
 test("order form resends the frozen payload on retry; edits drop it", () => {
   const src = require("fs").readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
-  assert.ok(/CoyoteAPI\.post\('\/api\/create-order', attemptPayload\(orderData\)\)/.test(src));
+  assert.ok(/CoyoteAPI\.post\('\/api\/create-order', attemptPayload\(orderData\)[,)]/.test(src));
   assert.ok(/function resetCheckoutKey[\s\S]{0,200}checkoutPayload = null/.test(src));
   const sql = require("fs").readFileSync(path.join(__dirname, "..", "schema/order_idempotency.sql"), "utf8");
   assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT/.test(sql));

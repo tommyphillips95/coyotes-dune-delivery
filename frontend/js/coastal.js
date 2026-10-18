@@ -264,15 +264,64 @@
   // from our own validation / weather hold and are safe to show; 5xx bodies can
   // carry internal error text, so those get a generic line instead.
   var SUPPORT_PHONE = "(361) 555-1234";
+  // ── Slow / dropped connections (order + payment requests) ──
+  var DEFAULT_TIMEOUT_MS = 15000;
+  function requestTimeoutMs() {
+    var o = root && root.__CDD_REQUEST_TIMEOUT_MS; // test hook (browser smoke); unset in production
+    return typeof o === "number" && o > 0 ? o : DEFAULT_TIMEOUT_MS;
+  }
+  function isOffline(nav) {
+    var n = nav || (root && root.navigator);
+    return !!(n && n.onLine === false);
+  }
+  /** fetch with an AbortController timeout. Rejects with err.timedOut / err.offline set. */
+  function timedFetch(fetchFn, url, config, ms, deps) {
+    var d = deps || {};
+    var AC = d.AbortController || (typeof AbortController !== "undefined" ? AbortController : null);
+    var setT = d.setTimeout || setTimeout, clearT = d.clearTimeout || clearTimeout;
+    var ctl = AC ? new AC() : null;
+    var cfg = Object.assign({}, config || {});
+    if (ctl) cfg.signal = ctl.signal;
+    var timedOut = false;
+    var timer = ms > 0 && ctl ? setT(function () { timedOut = true; ctl.abort(); }, ms) : null;
+    return Promise.resolve()
+      .then(function () { return fetchFn(url, cfg); })
+      .then(function (res) { if (timer) clearT(timer); return res; }, function (err) {
+        if (timer) clearT(timer);
+        // Always a fresh Error: browsers reject with a DOMException whose
+        // message is read-only (assigning it throws in strict mode).
+        var e = new Error(timedOut ? "timeout" : String((err && err.message) || err || "network error"));
+        if (timedOut) e.timedOut = true;
+        if (isOffline(d.navigator)) e.offline = true;
+        e.network = true;
+        throw e;
+      });
+  }
+  /** 'offline' | 'timeout' | 'network' for a CoyoteAPI failure with no server answer, else null. */
+  function networkFailureKind(result) {
+    if (!result || result.ok || Number(result.status) > 0) return null;
+    if (result.offline) return "offline";
+    if (result.timedOut) return "timeout";
+    return "network";
+  }
+  function orderNetworkMessage(kind) {
+    if (kind === "offline") return "You're offline. Reconnect, then tap Retry. Nothing was charged.";
+    if (kind === "timeout") return "This is taking longer than usual. Your order may already have gone through \u2014 tap Retry and we'll check without placing a second order.";
+    return "We couldn't reach Coyote's servers. Check your signal and tap Retry \u2014 it won't place a second order. Nothing was charged.";
+  }
+  function paymentNetworkMessage(kind) {
+    if (kind === "offline") return "You're offline. Reconnect, then tap Retry. You haven't been charged.";
+    if (kind === "timeout") return "Payment setup is taking longer than usual. Tap Retry \u2014 we check whether this order is already paid before charging.";
+    return "We couldn't reach the payment server. Tap Retry \u2014 we check whether this order is already paid before charging.";
+  }
+
   function orderErrorMessage(result) {
     var generic = "Something went wrong placing your order. Please try again or call " + SUPPORT_PHONE + ".";
     if (!result) return generic;
     var r = result;
     var status = Number(r.status) || 0;
     var msg = String(r.error || "").trim();
-    if (status === 0) {
-      return "We couldn't reach Coyote's servers. Check your signal and tap Place Order again. Nothing was charged.";
-    }
+    if (status === 0) return orderNetworkMessage(networkFailureKind(r) || "network");
     if (status === 503) {
       return msg || "Deliveries are paused right now. Please try again later.";
     }
@@ -429,6 +478,13 @@
     getTrackingToken: getTrackingToken,
     clearTrackingToken: clearTrackingToken,
     buildTrackUrl: buildTrackUrl,
+    DEFAULT_TIMEOUT_MS: DEFAULT_TIMEOUT_MS,
+    requestTimeoutMs: requestTimeoutMs,
+    isOffline: isOffline,
+    timedFetch: timedFetch,
+    networkFailureKind: networkFailureKind,
+    orderNetworkMessage: orderNetworkMessage,
+    paymentNetworkMessage: paymentNetworkMessage,
     maskPhone: maskPhone,
     confirmationNextSteps: confirmationNextSteps,
     formatServiceSlot: formatServiceSlot,

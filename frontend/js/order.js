@@ -323,6 +323,18 @@
         if (terms) terms.setAttribute('aria-invalid', show ? 'true' : 'false');
     }
 
+    // Slow/dropped connection: inline message + Retry. Retry goes through
+    // submitOrder() again, which reuses the same idempotency key and payload
+    // (checkoutKey/attemptPayload), so the server returns the order it may
+    // already have made instead of creating a second one.
+    const retryBtn = document.getElementById('orderRetryBtn');
+    const submitStatus = document.getElementById('orderSubmitStatus');
+    function announce(text) { if (submitStatus) submitStatus.textContent = text || ''; }
+    function showRetry(show) { if (retryBtn) { retryBtn.hidden = !show; retryBtn.disabled = false; } }
+    let lastFailureWasNetwork = false;
+    if (retryBtn) retryBtn.addEventListener('click', () => submitOrder({ preventDefault() {} }));
+    window.addEventListener('online', () => { if (lastFailureWasNetwork && retryBtn && !retryBtn.hidden) announce("You're back online. Tap Retry to finish your order."); });
+
     async function submitOrder(e) {
         e.preventDefault();
         if (submitting) return; // guard double clicks / Enter-key resubmits
@@ -336,6 +348,8 @@
         setTermsError(false);
         submitting = true;
         submitBtn.disabled = true;
+        if (retryBtn) retryBtn.disabled = true;
+        announce(lastFailureWasNetwork ? 'Retrying. Checking whether your order already went through…' : 'Placing your order…');
         const originalText = submitBtn.textContent;
         submitBtn.innerHTML = '<span class="spinner"></span> Placing Order...';
         const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
@@ -368,7 +382,13 @@
             idempotency_key: checkoutIdempotencyKey(),
         };
         try {
-            const result = await CoyoteAPI.post('/api/create-order', attemptPayload(orderData));
+            const C = window.CoyoteCoastal;
+            const result = await CoyoteAPI.post('/api/create-order', attemptPayload(orderData),
+                { timeoutMs: C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000 });
+            const netKind = C && C.networkFailureKind ? C.networkFailureKind(result) : null;
+            lastFailureWasNetwork = !!netKind;
+            showRetry(!!netKind);
+            announce(result.ok ? 'Order placed.' : '');
             if (result.ok) {
                 checkoutKey = null;
                 checkoutPayload = null;
@@ -415,6 +435,8 @@
             }
         } catch (err) {
             console.error('Order submission failed:', err);
+            announce('');
+            if (retryBtn) retryBtn.disabled = false;
             showSubmitError(orderErrorMessage({ ok: false, status: 500 }));
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
