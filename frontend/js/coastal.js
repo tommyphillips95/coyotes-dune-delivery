@@ -26,6 +26,24 @@
     { id: "packages", label: "Packages", blurb: "Send anything across the Coastal Bend", service: "package_delivery", note: "" }
   ];
 
+  // Partners listed on the home page (names/towns copied from frontend/index.html).
+  // `/order/?restaurant=<slug>` prefills the pickup; unknown slugs are ignored.
+  // `city` is set only when the listed town is one of CITIES.
+  var PARTNERS = [
+    { slug: "texmexcoyote", name: "TexMexCoyote", category: "food", city: "Port Aransas" },
+    { slug: "heb-coastal-market", name: "H-E-B Coastal Market", category: "groceries", city: "Corpus Christi" },
+    { slug: "clems-bait-tackle", name: "Clem's Bait & Tackle", category: "bait", city: "Port Aransas" },
+    { slug: "shells-seafood", name: "Shells Seafood", category: "food", city: null },
+    { slug: "stingrays-taphouse", name: "Stingray's Taphouse", category: "food", city: "Port Aransas" },
+    { slug: "padre-island-burger-co", name: "Padre Island Burger Co.", category: "food", city: null }
+  ];
+  function partnerBySlug(slug) {
+    var s = String(slug || "").toLowerCase();
+    if (!/^[a-z0-9-]{1,60}$/.test(s)) return null;
+    for (var i = 0; i < PARTNERS.length; i++) if (PARTNERS[i].slug === s) return PARTNERS[i];
+    return null;
+  }
+
   var KEYWORDS = {
     food: ["taco", "food", "restaurant", "pizza", "burger", "seafood", "shrimp", "lunch", "dinner", "breakfast"],
     groceries: ["grocery", "groceries", "market", "milk", "bread", "cooler", "beer", "ice", "drink", "water"],
@@ -118,7 +136,7 @@
 
   /** Parse and whitelist /order/ query params (never trust raw input). */
   function parseOrderParams(search) {
-    var out = { service: null, category: null, pickup: null, dropoff: null, q: null, track: null };
+    var out = { service: null, category: null, pickup: null, dropoff: null, q: null, track: null, restaurant: null };
     var s = String(search || "").replace(/^\?/, "");
     if (!s) return out;
     s.split("&").forEach(function (pair) {
@@ -133,7 +151,13 @@
       else if (k === "dropoff" && isCity(val)) out.dropoff = val;
       else if (k === "q" && val) out.q = val.slice(0, 120);
       else if ((k === "track" || k === "order") && /^[A-Z0-9-]{4,40}$/i.test(val)) out.track = val.toUpperCase();
+      else if (k === "restaurant" && partnerBySlug(val)) out.restaurant = partnerBySlug(val).slug;
     });
+    if (out.restaurant) {
+      var partner = partnerBySlug(out.restaurant);
+      if (!out.category) out.category = partner.category;
+      if (!out.pickup && partner.city && isCity(partner.city)) out.pickup = partner.city;
+    }
     if (out.category && !out.service) out.service = categoryById(out.category).service;
     return out;
   }
@@ -342,6 +366,8 @@
     CITIES: CITIES,
     SERVICES: SERVICES,
     CATEGORIES: CATEGORIES,
+    PARTNERS: PARTNERS,
+    partnerBySlug: partnerBySlug,
     isCity: isCity,
     isValidZip: isValidZip,
     categoryById: categoryById,

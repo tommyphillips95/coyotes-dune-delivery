@@ -700,6 +700,10 @@ a:hover {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    /* 44px tap target; negative margins keep the card layout where it was */
+    min-height: 44px;
+    margin: -10px 0;
+    padding-right: 8px;
 }
 
 .partner-link:hover {
