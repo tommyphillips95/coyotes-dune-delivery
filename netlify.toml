@@ -39,6 +39,17 @@
   to = "/apply/index.html"
   status = 200
 
+# Old tracking links (/order/?track=CDD-…, the format update-order texted
+# before Oct 2026) go to the tracking page in the format it reads. Matches only
+# when track is the sole query param, so /order/?service=… prefill links
+# still open the order form. force: /order/index.html exists.
+[[redirects]]
+  from = "/order/"
+  to = "/track/?order=:track"
+  status = 301
+  force = true
+  query = {track = ":track"}
+
 [[redirects]]
   from = "/order/*"
   to = "/order/index.html"

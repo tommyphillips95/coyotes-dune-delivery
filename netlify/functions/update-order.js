@@ -5,7 +5,7 @@
  * Validation + audit log live in _order-admin.js (shared with the admin router).
  *
  * Sends SMS notifications on key status changes:
- * - assigned: "Your driver [Name] is on the way! Track: [URL]"
+ * - assigned: "Your driver [Name] is on the way! Track: [URL]"  (URL from _site-url.trackUrl: SITE_ORIGIN/track/?order=…)
  * - completed: "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!"
  */
 
@@ -14,6 +14,7 @@ const { serverError } = require('./_errors');
 const { headers: corsHeaders } = require('./_cors');
 const { requireAdmin, jsonError } = require('./_auth');
 const { changeOrder, ruleResponse, PAYMENT_FIELDS } = require('./_order-admin');
+const { trackUrl: buildTrackUrl } = require('./_site-url');
 
 /**
  * Helper: Send SMS via Twilio
@@ -132,7 +133,7 @@ exports.handler = async (event) => {
           if (result.driver) {
             driverName = `${result.driver.first_name} ${result.driver.last_name}`;
           }
-          const trackUrl = `https://coyotes-dune-delivery.netlify.app/order/?track=${order.order_number}`;
+          const trackUrl = buildTrackUrl(order.order_number);
           smsMessage = `Your driver ${driverName} is on the way! Track your order: ${trackUrl} — Coyote's Dune Delivery`;
         }
 

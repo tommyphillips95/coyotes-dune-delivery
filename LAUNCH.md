@@ -21,7 +21,7 @@ Customer order, driver apply/portal, admin dispatch, GPS ping tables.
 
 | Name | Used by | Required | Secret |
 |------|---------|----------|--------|
-| `SITE_ORIGIN` | `_cors.js`, `dispatch.js`, `public-config.js`, `respond-offer.js` | Yes (CORS). Default fallback exists in some paths. | No |
+| `SITE_ORIGIN` | `_cors.js` (CORS allow-list), `_site-url.js` (links in texts: `dispatch.js`, `respond-offer.js`, `update-order.js`, `driver-sms-alert.js`; and `public-config.js`) | Yes (CORS). Comma-separated OK; links use the first valid `https://` origin, else `https://coyote-dune-delivery.netlify.app`. | No |
 | `SUPABASE_URL` | Most functions (orders, offers, applications, locations, webhooks) | Yes for any live booking | No (project URL) |
 | `SUPABASE_SERVICE_KEY` | Same set as `SUPABASE_URL` | Yes | Yes |
 | `JWT_SECRET` | `_auth.js`, `login-admin.js`, and authenticated admin/driver paths | Yes for admin + protected routes | Yes |

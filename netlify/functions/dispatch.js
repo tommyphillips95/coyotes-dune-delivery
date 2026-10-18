@@ -2,6 +2,7 @@
 
 const { requiredClass, isBeachCity } = require("./zones");
 const { weatherShutdownActive } = require("./_weather");
+const { siteUrl } = require("./_site-url");
 
 const OFFER_SECONDS = 90;
 const BEACH_CLASSES = new Set(["4x4", "utv", "awd"]);
@@ -164,8 +165,7 @@ async function offerNext(supabase, orderId) {
     .single();
   if (offerErr) throw offerErr;
 
-  const site = process.env.SITE_ORIGIN || "https://coyotes-dune-delivery.netlify.app";
-  const sms = "Coyote offer " + order.order_number + ": " + order.pickup_city + " → " + (order.dropoff_city || order.pickup_city) + ". " + need.toUpperCase() + " run. " + OFFER_SECONDS + "s to accept: " + site + "/driver/?offer=" + offer.id;
+  const sms = "Coyote offer " + order.order_number + ": " + order.pickup_city + " → " + (order.dropoff_city || order.pickup_city) + ". " + need.toUpperCase() + " run. " + OFFER_SECONDS + "s to accept: " + siteUrl("/driver/", { offer: offer.id });
   if (pick.phone) {
     const sent = await sendSMS(pick.phone, sms);
     await logSMS(supabase, {

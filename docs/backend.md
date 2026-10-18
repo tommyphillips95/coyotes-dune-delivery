@@ -9,7 +9,7 @@ Confirmed for issue #11 (Oct 2026):
 - **Data:** Supabase (Postgres) through `@supabase/supabase-js` with the service
   key, server side only. There is no SQLite and no other database.
 - **Auth/CORS/payments:** `_auth.js` (admin JWT, customer tracking JWT, fails
-  closed without `JWT_SECRET`), `_cors.js` (`SITE_ORIGIN`), `_stripe.js`
+  closed without `JWT_SECRET`), `_cors.js` (`SITE_ORIGIN`), `_site-url.js` (links in texts: first valid https `SITE_ORIGIN`, else the live site; tracking links are `/track/?order=CDD-…`), `_stripe.js`
   (amount always from `orders.estimated_price`).
 - **Express:** the old Express + SQLite scaffold is quarantined in
   `legacy/express-backend/`. It never had a committed `server.js`/`database.js`,

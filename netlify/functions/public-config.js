@@ -4,6 +4,7 @@
  * Never returns secret keys.
  */
 const { headers: corsHeaders } = require("./_cors");
+const { siteOrigin: configuredOrigin } = require("./_site-url");
 
 exports.handler = async (event) => {
   const headers = {
@@ -19,9 +20,7 @@ exports.handler = async (event) => {
   }
 
   const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || "";
-  const siteOrigin =
-    (process.env.SITE_ORIGIN || "").split(",")[0].trim() ||
-    "https://coyote-dune-delivery.netlify.app";
+  const siteOrigin = configuredOrigin();
 
   return {
     statusCode: 200,

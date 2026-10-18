@@ -4,6 +4,7 @@ const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { offerNext, sendSMS, logSMS } = require("./dispatch");
 const { requireAdminOrDriver, jsonError } = require("./_auth");
+const { trackUrl } = require("./_site-url");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -49,9 +50,8 @@ exports.handler = async (event) => {
     const { data: customer } = await supabase.from("customers").select("phone").eq("id", order.customer_id).maybeSingle();
     const { data: driver } = await supabase.from("applications").select("first_name, last_name").eq("id", driverId).maybeSingle();
     const name = driver ? (driver.first_name + " " + driver.last_name).trim() : "Your driver";
-    const site = process.env.SITE_ORIGIN || "https://coyote-dune-delivery.netlify.app";
     if (customer && customer.phone) {
-      const msg = name + " accepted " + order.order_number + ". Track: " + site + "/track/ — Coyote's Dune Delivery";
+      const msg = name + " accepted " + order.order_number + ". Track: " + trackUrl(order.order_number) + " — Coyote's Dune Delivery";
       const sent = await sendSMS(customer.phone, msg);
       await logSMS(supabase, { order_id: offer.order_id, phone_number: customer.phone, message: msg, status: sent.success ? "sent" : "failed", twilio_sid: sent.messageSid || null, error: sent.error || null });
     }
