@@ -437,6 +437,23 @@ test("order form sends one key per attempt and reuses it on retry", () => {
   assert.ok(/CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx[\s\S]*WHERE idempotency_key IS NOT NULL/.test(sql));
 });
 
+test("LAUNCH.md step 5 pastes exactly schema/order_idempotency.sql, and every statement is re-runnable", () => {
+  const fs = require("fs");
+  const root = path.join(__dirname, "..");
+  const sql = fs.readFileSync(path.join(root, "schema/order_idempotency.sql"), "utf8");
+  const statements = sql.split("\n").filter((l) => !/^\s*--/.test(l)).join("\n").split(";").map((t) => t.trim()).filter(Boolean);
+  assert.strictEqual(statements.length, 3);
+  for (const st of statements) assert.ok(/IF NOT EXISTS/.test(st), "re-runnable: " + st.split("\n")[0]);
+  assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT/.test(sql));
+  const md = fs.readFileSync(path.join(root, "LAUNCH.md"), "utf8");
+  const section = md.split("### Step 5 on Supabase")[1];
+  assert.ok(section, "LAUNCH.md has the Step 5 section");
+  const blocks = [...section.split("\n### ")[0].matchAll(/```sql\n([\s\S]*?)```/g)].map((m) => m[1].trim());
+  assert.strictEqual(blocks[0], sql.trim(), "pasted SQL matches the file");
+  assert.ok(/SQL Editor/.test(section));
+  for (const want of ["idempotency_key", "idempotency_payload_hash", "orders_idempotency_key_uidx"]) assert.ok(blocks[1].includes(want), "verify query checks " + want);
+});
+
 (async () => {
   let failed = 0;
   for (const [name, fn] of tests) {
