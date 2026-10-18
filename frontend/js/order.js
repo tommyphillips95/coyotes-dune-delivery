@@ -697,7 +697,7 @@
         document.getElementById('trackingPickup').textContent = `${order.pickup_address}, ${order.pickup_city}`;
         document.getElementById('trackingDropoff').textContent = order.dropoff_address ? `${order.dropoff_address}, ${order.dropoff_city || order.pickup_city}` : 'Same as pickup';
         document.getElementById('trackingPrice').textContent = order.estimated_price ? `$${parseFloat(order.estimated_price).toFixed(2)}` : '—';
-        document.getElementById('trackingDriver').textContent = order.driver_id ? 'Assigned' : 'Not yet assigned';
+        document.getElementById('trackingDriver').textContent = order.status === 'cancelled' ? 'None (order cancelled)' : order.driver_id ? 'Assigned' : 'Not yet assigned';
         const payBox = document.getElementById('trackingPaymentStatus');
         if (payBox && window.CoyoteCoastal && window.CoyoteCoastal.paymentBadge) {
             const b = window.CoyoteCoastal.paymentBadge(order);

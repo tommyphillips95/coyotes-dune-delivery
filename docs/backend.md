@@ -60,9 +60,13 @@ this table. Once all are gone, delete `legacy/express-backend/`.
 | `PUT /api/admin/applications/:id` | whitelist: `status`, `admin_notes`, `beach_permit_ok`, `beach_access_notes` |
 | `POST /api/admin/applications/bulk` | `{ ids, status }` |
 | `DELETE /api/admin/applications/:id` | refused (405); set status to `rejected` instead |
-| `GET /api/admin/orders` | last 50 orders with `weather_hold` + global weather state |
+| `GET /api/admin/orders` | last 50 orders with `weather_hold` + global weather state; each order has `driver_name`, `allowed` next statuses and `driver_options` (approved drivers with `eligible`/`reason`) |
+| `PUT /api/admin/orders/:id` | dispatcher change: `{ driver_id }` assigns (status → `assigned`), `{ status }` moves along the map below, optional `note`; `cancelled` needs `confirm: true`. Rules in `_order-admin.js` (also used by `PATCH /api/update-order`) |
+| `GET /api/admin/drivers` | approved drivers: `id`, `name`, `vehicle_class`, `online`, `beach_permit_ok` (no phone/email) |
 | `PUT /api/admin/orders/:id/weather-hold` | `{ weather_hold: true\|false }`, logged to `order_status_logs` |
 | `GET /api/admin/weather` | read-only `WEATHER_SHUTDOWN` state (the global gate stays Netlify env only) |
+
+Order status map (admin): `pending → assigned | cancelled`, `assigned → in_progress | pending (unassign) | cancelled`, `in_progress → completed | cancelled`; `completed` and `cancelled` are closed. Payment state (`payment_status`, `final_price`, Stripe ids) is never set here; the Stripe webhook owns it, and a body carrying those fields gets 400. Drivers must be `approved`; a 4x4 order needs a `4x4`/`utv`/`awd` driver (same rule as auto-dispatch); offline or no-beach-permit drivers are allowed with a warning. Refusals are 4xx with a `code` (`invalid_transition`, `driver_ineligible`, `driver_not_approved`, `driver_not_found`, `driver_required`, `weather_hold`, `confirm_required`, `conflict`, `payment_fields_forbidden`, `invalid_status`). Every change writes `order_status_logs` (`changed_by: admin:<user>`, note `status from → to; driver …`), expires open auto-offers, and texts the assigned driver only when Twilio env is set (logged to `sms_logs` either way).
 
 ## Driver JWT (#6)
 

@@ -541,7 +541,15 @@
     const ordersCount = document.getElementById('orders-attention-count');
     const ordersAlert = document.getElementById('orders-alert');
     const PAYMENT_CODES = ['stripe_paid_not_marked', 'second_payment', 'payment_failed'];
-    const ORDER_COLS = 7;
+    const ORDER_COLS = 8;
+    // Dispatcher status buttons; the server (_order-admin.js) decides what is
+    // allowed and sends o.allowed. 'assigned' is done with the driver select.
+    const STATUS_ACTIONS = {
+        in_progress: { label: 'Mark in progress', cls: 'btn-primary' },
+        completed: { label: 'Mark completed', cls: 'btn-success' },
+        pending: { label: 'Unassign driver', cls: 'btn-secondary' },
+        cancelled: { label: 'Cancel order', cls: 'btn-danger', confirm: true },
+    };
 
     function needsAttention(o) {
         return (o.attention || []).some(a => a.level === 'danger' || a.level === 'warn');
@@ -596,16 +604,71 @@
                 </td>
             </tr>` : '';
             return `
-            <tr class="order-row${needsAttention(o) ? ' needs-attention' : ''}">
+            <tr class="order-row${needsAttention(o) ? ' needs-attention' : ''}" data-order-id="${esc(o.id)}">
                 <td><strong>${esc(o.order_number || String(o.id).slice(0, 8))}</strong><br><small>${esc(fmtWhen(o.created_at))}${price ? ` · $${price.toFixed(2)}` : ''}</small></td>
                 <td data-label="Route">${esc(o.pickup_city || '—')} to ${esc(o.dropoff_city || o.pickup_city || '—')}</td>
                 <td data-label="Vehicle">${esc(o.required_vehicle_class || '—')}</td>
                 <td data-label="Status"><span class="badge badge-${esc(status)}">${esc(fmtStatus(status))}</span></td>
                 <td data-label="Payment"><span class="pay-badge pay-${esc(pay.cls)}">${esc(pay.label)}</span></td>
+                <td data-label="Driver">${driverCell(o)}</td>
                 <td data-label="Weather hold">${o.weather_hold ? '<span class="badge badge-on_hold">on hold</span>' : 'none'}</td>
-                <td data-label="Action"><button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></td>
+                <td data-label="Action"><div class="order-actions">${statusButtons(o)}<button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></div></td>
             </tr>${detail}`;
         }).join('');
+    }
+
+    function orderLabel(o) { return o.order_number || String(o.id).slice(0, 8); }
+
+    function driverCell(o) {
+        const status = o.status || 'pending';
+        const canAssign = status === 'pending' || status === 'assigned';
+        const name = o.driver_name ? `<span class="driver-name">${esc(o.driver_name)}</span>` : (canAssign ? '<span class="driver-none">No driver</span>' : '—');
+        const opts = o.driver_options || [];
+        if (!canAssign) return name;
+        if (!opts.length) return `${name}<small class="driver-hint">No approved drivers yet.</small>`;
+        const selId = `drv-${esc(o.id)}`;
+        const options = opts.map(d => {
+            const bits = [d.name, d.vehicle_class, d.online ? 'online' : 'offline'];
+            if (!d.eligible) bits.push(d.reason || 'not eligible');
+            const current = String(d.id) === String(o.driver_id);
+            return `<option value="${esc(d.id)}"${d.eligible && !current ? '' : ' disabled'}>${esc(bits.join(' · '))}${current ? ' (current)' : ''}</option>`;
+        }).join('');
+        return `${name}
+            <div class="assign-row">
+                <label class="sr-only" for="${selId}">Driver for ${esc(orderLabel(o))}</label>
+                <select id="${selId}" class="filter-select driver-select" data-driver-for="${esc(o.id)}">
+                    <option value="">${o.driver_id ? 'Change driver…' : 'Choose driver…'}</option>${options}
+                </select>
+                <button type="button" class="btn btn-primary" data-assign-id="${esc(o.id)}" aria-label="Assign driver to ${esc(orderLabel(o))}">Assign</button>
+            </div>`;
+    }
+
+    function statusButtons(o) {
+        return (o.allowed || []).filter(s => STATUS_ACTIONS[s]).map(s => {
+            const a = STATUS_ACTIONS[s];
+            return `<button type="button" class="btn ${a.cls}" data-status-id="${esc(o.id)}" data-status-next="${esc(s)}" aria-label="${esc(a.label)}: ${esc(orderLabel(o))}">${esc(a.label)}</button>`;
+        }).join('');
+    }
+
+    function setRowBusy(id, busy) {
+        if (!ordersBody) return;
+        ordersBody.querySelectorAll(`tr[data-order-id="${CSS.escape(String(id))}"] button, tr[data-order-id="${CSS.escape(String(id))}"] select`).forEach(el => { el.disabled = busy; });
+    }
+
+    // Server first, then reload so status, driver, flags and history all come
+    // from the database (nothing is changed on screen before the 200).
+    async function changeOrder(id, body, okText) {
+        setRowBusy(id, true);
+        try {
+            const res = await api('PUT', `/orders/${encodeURIComponent(id)}`, body);
+            await loadOrders();
+            const warn = (res.warnings || []).join(' ');
+            showToast(okText + (warn ? ` ${warn}` : ''), warn ? 'warning' : 'success');
+        } catch (err) {
+            setRowBusy(id, false);
+            if (err.status === 409 && err.data && err.data.code === 'conflict') loadOrders();
+            showToast(err.message || 'Could not update the order', 'error');
+        }
     }
 
     async function loadOrders() {
@@ -623,6 +686,28 @@
     }
 
     async function onOrdersClick(e) {
+        const assignBtn = e.target.closest('button[data-assign-id]');
+        if (assignBtn) {
+            const id = assignBtn.dataset.assignId;
+            const o = currentOrders.find(x => String(x.id) === id) || {};
+            const sel = ordersBody.querySelector(`select[data-driver-for="${CSS.escape(id)}"]`);
+            if (!sel || !sel.value) { showToast('Choose a driver first.', 'warning'); if (sel) sel.focus(); return; }
+            const d = (o.driver_options || []).find(x => String(x.id) === sel.value);
+            return changeOrder(id, { driver_id: sel.value }, `${d ? d.name : 'Driver'} assigned to ${orderLabel(o)}.`);
+        }
+        const stBtn = e.target.closest('button[data-status-next]');
+        if (stBtn) {
+            const id = stBtn.dataset.statusId;
+            const next = stBtn.dataset.statusNext;
+            const o = currentOrders.find(x => String(x.id) === id) || {};
+            const a = STATUS_ACTIONS[next] || {};
+            const body = { status: next };
+            if (a.confirm) {
+                if (!window.confirm(`Cancel ${orderLabel(o)}? This can't be undone from the dashboard. Refunds are done in Stripe.`)) return;
+                body.confirm = true;
+            }
+            return changeOrder(id, body, `${orderLabel(o)}: ${fmtStatus(next)}.`);
+        }
         const btn = e.target.closest('button[data-hold-id]');
         if (!btn) return;
         const id = btn.dataset.holdId;

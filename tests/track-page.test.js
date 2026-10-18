@@ -44,5 +44,17 @@ test("driver card doesn't say 'Not assigned yet' for an assigned order", () => {
   assert(/hasDriver = !!order\.driver_id \|\| order\.status === "assigned"/.test(js), "assigned-driver text");
 });
 
+test("driver card follows dispatcher changes: cancelled, completed, unassigned", () => {
+  const src = js.match(/function driverCardText\(order\) \{[\s\S]*?\n  \}\n/);
+  assert(src, "driverCardText missing");
+  const f = new Function(src[0] + "; return driverCardText;")();
+  assert.strictEqual(f({ status: "assigned", driver_id: "d" }).name, "Driver assigned");
+  assert.strictEqual(f({ status: "in_progress", driver_id: "d" }).name, "Driver on the way");
+  assert.strictEqual(f({ status: "pending", driver_id: null }).name, "Not assigned yet");
+  assert.strictEqual(f({ status: "cancelled", driver_id: "d" }).name, "Order cancelled", "not 'Driver assigned' on a cancelled order");
+  assert.strictEqual(f({ status: "completed", driver_id: "d" }).name, "Trip completed");
+  assert(/if \(!order\.driver_id && order\.status === "pending"\) driverInfoShown = false;/.test(js), "unassign resets the GPS driver card");
+});
+
 if (failed) { console.error(failed + " failed"); process.exit(1); }
 console.log("track-page tests passed");
