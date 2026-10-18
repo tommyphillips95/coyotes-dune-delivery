@@ -29,6 +29,10 @@ Module._load = function (request) {
 const FN = path.join(__dirname, "..", "netlify/functions");
 const createOrder = require(path.join(FN, "create-order.js"));
 const { priceQuote } = require(path.join(FN, "zones.js"));
+const V = createOrder._validation;
+// Chicago wall-clock date/time for an instant (dates in tests are relative to now).
+const chicago = (ms) => V.chicagoWallClock(new Date(ms)).split("T");
+const [FUTURE_DATE] = chicago(Date.now() + 36 * 3600 * 1000);
 
 const freshDb = () => createFakeSupabase({ customers: [], orders: [], order_status_logs: [], sms_logs: [] });
 const base = () => ({
@@ -95,17 +99,59 @@ test("missing dropoff city is priced in-town at the pickup city", async () => {
 
 test("schedule=later with date+time is stored; otherwise ASAP", async () => {
   currentFake = freshDb();
-  await post(Object.assign(base(), { schedule: "later", scheduled_date: "2026-10-19", scheduled_time: "09:30" }));
+  await post(Object.assign(base(), { schedule: "later", scheduled_date: FUTURE_DATE, scheduled_time: "09:30" }));
   let row = currentFake.db.orders[0];
   assert.strictEqual(row.is_asap, false);
-  assert.strictEqual(row.scheduled_date, "2026-10-19");
+  assert.strictEqual(row.scheduled_date, FUTURE_DATE);
   assert.strictEqual(row.scheduled_time, "09:30");
 
   currentFake = freshDb();
-  await post(Object.assign(base(), { schedule: "later", scheduled_date: "2026-10-19" })); // no time
+  await post(Object.assign(base(), { schedule: "later", scheduled_date: FUTURE_DATE })); // no time
   row = currentFake.db.orders[0];
   assert.strictEqual(row.is_asap, true);
   assert.strictEqual(row.scheduled_date, null);
+});
+
+test("chicagoWallClock uses America/Chicago (CDT and CST)", () => {
+  assert.strictEqual(V.chicagoWallClock(new Date("2026-10-19T01:00:00Z")), "2026-10-18T20:00"); // CDT, UTC already tomorrow
+  assert.strictEqual(V.chicagoWallClock(new Date("2026-12-01T05:30:00Z")), "2026-11-30T23:30"); // CST
+});
+
+test("scheduleError: past, bad format, impossible dates, future ok", () => {
+  const now = new Date("2026-10-19T01:00:00Z"); // Sun Oct 18 8:00 PM CDT
+  assert.match(V.scheduleError("2026-10-18", "19:59", now), /already passed/);
+  assert.match(V.scheduleError("2026-10-17", "23:00", now), /already passed/);
+  assert.strictEqual(V.scheduleError("2026-10-18", "20:00", now), null);
+  assert.strictEqual(V.scheduleError("2026-10-18", "21:15", now), null); // later tonight (UTC date is the 19th)
+  assert.strictEqual(V.scheduleError("2026-10-19", "08:00:00", now), null);
+  for (const [d, t] of [["10/19/2026", "09:00"], ["2026-10-19", "9am"], ["2026-02-30", "09:00"], ["2026-10-19", "24:00"]]) {
+    assert.match(V.scheduleError(d, t, now), /valid date and time/, d + " " + t);
+  }
+});
+
+test("400 when a scheduled pickup is in the past (Chicago time); nothing written", async () => {
+  const [d, t] = chicago(Date.now() - 2 * 3600 * 1000);
+  currentFake = freshDb();
+  const res = await post(Object.assign(base(), { schedule: "later", scheduled_date: d, scheduled_time: t }));
+  assert.strictEqual(res.statusCode, 400, res.body);
+  assert.match(JSON.parse(res.body).error, /already passed/);
+  assert.strictEqual(currentFake.db.orders.length, 0);
+  assert.strictEqual(currentFake.db.customers.length, 0);
+});
+
+test("400 on a malformed ZIP; ZIP+4 and missing optional ZIPs are fine", async () => {
+  for (const [field, zip] of [["pickup_zip", "7837"], ["dropoff_zip", "abcde"], ["pickup_zip", "78373 "+"x"]]) {
+    currentFake = freshDb();
+    const res = await post(Object.assign(base(), { [field]: zip }));
+    assert.strictEqual(res.statusCode, 400, field + "=" + zip);
+    assert.match(JSON.parse(res.body).error, /5-digit ZIP/);
+    assert.strictEqual(currentFake.db.orders.length, 0);
+  }
+  currentFake = freshDb();
+  assert.strictEqual((await post(Object.assign(base(), { pickup_zip: "78373-1234", dropoff_zip: null }))).statusCode, 201);
+  currentFake = freshDb();
+  const noZip = base(); delete noZip.pickup_zip; delete noZip.dropoff_zip;
+  assert.strictEqual((await post(noZip)).statusCode, 201);
 });
 
 test("repeat phone reuses the customer row", async () => {
