@@ -42,7 +42,7 @@ this list from growing.
 
 | Frontend | Calls | Closest function | What's needed |
 |---|---|---|---|
-| `/apply/` (`js/apply.js`) | `POST /api/submit-application` (also `/api/applications` redirect) | `submit-application` | Live. Form no longer collects SSN or bank details (Checkr + Stripe Connect later). Insurance card file upload to Supabase Storage is still a follow-up if multipart is needed; JSON submit works today. Honest-errors: success only after 2xx + `applicationId`. |
+| `/apply/` (`js/apply.js`) | `POST /api/submit-application` (also `/api/applications` redirect) | `submit-application` | Live. Form no longer collects SSN or bank details (Checkr + Stripe Connect later). Sends `multipart/form-data` with the required insurance card; the function parses it (`_multipart.js`), checks type/size (`_insurance-card.js`: JPG/PNG/WebP/HEIC/PDF, 4 MB) and stores it in Storage bucket `driver-documents` + a `documents` row. JSON bodies (no file) still accepted. Honest-errors: success only after 2xx + `applicationId`. |
 | `/driver/` documents | `POST /api/update-application/:id/documents` (multipart) | `update-application` (JSON `PUT`) | Same storage decision as the insurance card. |
 
 When one of these is ported, remove it from `KNOWN_GAPS` in the test and from

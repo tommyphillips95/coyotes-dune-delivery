@@ -59,6 +59,26 @@ test("2xx without an applicationId is a failure", async () => {
   }
 });
 
+test("4xx with a server message → failure carries that message (file too large, missing vehicle type)", async () => {
+  const r = await S.sendApplication(async () => res(413, { error: "Your insurance card file is 5.0 MB. The limit is 4.0 MB.", field: "insuranceCard" }), "/x", {});
+  assert.deepStrictEqual(r, { ok: false, reason: "http_413", message: "Your insurance card file is 5.0 MB. The limit is 4.0 MB.", field: "insuranceCard" });
+  const bad = await S.sendApplication(async () => res(400, null, { badJson: true }), "/x", {});
+  assert.deepStrictEqual(bad, { ok: false, reason: "http_400" });
+  // 5xx never shows server text.
+  assert.deepStrictEqual(await S.sendApplication(async () => res(500, { error: "db exploded" }), "/x", {}), { ok: false, reason: "http_500" });
+});
+
+test("checkInsuranceFile: type and 4 MB limit match the server", () => {
+  const card = require(path.join(ROOT, "netlify/functions/_insurance-card.js"));
+  assert.strictEqual(S.INSURANCE_MAX_BYTES, card.MAX_BYTES);
+  assert.strictEqual(S.checkInsuranceFile({ name: "card.jpg", type: "image/jpeg", size: 1000 }), null);
+  assert.strictEqual(S.checkInsuranceFile({ name: "IMG_1.HEIC", type: "", size: 1000 }), null);
+  assert.strictEqual(S.checkInsuranceFile({ name: "card.pdf", type: "application/pdf", size: card.MAX_BYTES }), null);
+  assert.match(S.checkInsuranceFile({ name: "card.pdf", type: "application/pdf", size: card.MAX_BYTES + 1 }), /too large \(4\.1 MB\)\. The limit is 4 MB\./);
+  assert.match(S.checkInsuranceFile({ name: "card.gif", type: "image/gif", size: 10 }), /JPG, PNG, WebP, HEIC or PDF/);
+  assert.match(S.checkInsuranceFile(null), /upload your insurance card/);
+});
+
 test("sensitive fields are stripped before localStorage", () => {
   const out = S.stripSensitive({ firstName: "Ana", ssn: "123-45-6789", accountNumber: "1", confirmAccountNumber: "1", routingNumber: "111000025", city: "Port A" });
   assert.deepStrictEqual(out, { firstName: "Ana", city: "Port A" });
@@ -74,7 +94,7 @@ test("apply.js: no fake success path, success only after a confirmed save", () =
   const successIdx = submit.indexOf("showSuccess(");
   assert.ok(failIdx > -1 && successIdx > failIdx, "failure is handled before showSuccess");
   const failBlock = submit.slice(failIdx, submit.indexOf("return;", failIdx));
-  assert.ok(/showSubmitError\(\)/.test(failBlock) && !/clearSavedData|showSuccess|reset\(/.test(failBlock), "failure keeps data");
+  assert.ok(/showSubmitError\((result\.message)?\)/.test(failBlock) && !/clearSavedData|showSuccess|reset\(/.test(failBlock), "failure keeps data");
   const catchBlock = submit.slice(submit.indexOf("} catch (err) {"), submit.indexOf("} finally {"));
   assert.ok(/showSubmitError\(\)/.test(catchBlock) && !/showSuccess|clearSavedData/.test(catchBlock), "catch is honest too");
   assert.strictEqual((submit.match(/clearSavedData\(\)/g) || []).length, 1);
