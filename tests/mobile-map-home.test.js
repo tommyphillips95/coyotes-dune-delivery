@@ -46,8 +46,8 @@ test("home: search field, Search button, town picker, partner links >= 44px tall
   const l = style.match(/\.partner-link \{[^}]*min-height: (\d+)px/); assert(l && +l[1] >= 44, "partner link");
 });
 
-test("home: every View Menu link deep-links a known partner (no href=#)", () => {
-  const links = [...home.matchAll(/<a href="([^"]*)" class="partner-link">/g)].map((m) => m[1]);
+test("home: every partner Order link deep-links a known partner (no href=#)", () => {
+  const links = [...home.matchAll(/<a href="([^"]*)" class="partner-link"[^>]*>/g)].map((m) => m[1]);
   assert.strictEqual(links.length, 6);
   const names = [...home.matchAll(/<h3>([^<]+)<\/h3>\s*<p class="partner-location">/g)].map((m) => m[1]);
   links.forEach((href, i) => {
@@ -66,8 +66,8 @@ test("partner slugs: known slug prefills category/service/pickup town", () => {
   assert.strictEqual(p.service, "package_delivery");
   assert.strictEqual(p.pickup, "Port Aransas");
   assert.strictEqual(C.parseOrderParams("?restaurant=clems-bait-tackle").category, "bait");
-  // Listed town not in CITIES -> no pickup guess.
-  assert.strictEqual(C.parseOrderParams("?restaurant=shells-seafood").pickup, null);
+  // North Padre Island partners use the "Padre Island" zone (see PARTNERS comment).
+  assert.strictEqual(C.parseOrderParams("?restaurant=shells-seafood").pickup, "Padre Island");
   // Explicit params win.
   assert.strictEqual(C.parseOrderParams("?pickup=Rockport&restaurant=texmexcoyote").pickup, "Rockport");
 });

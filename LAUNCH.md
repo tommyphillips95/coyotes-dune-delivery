@@ -201,3 +201,15 @@ Tick before merging `[dune] Launch v1` into `main`:
 1. Fill the required Netlify env rows above (live site already has `SITE_ORIGIN` + `NODE_VERSION` only).
 2. Run the SQL files on Supabase in order (see Run order above).
 3. Twilio A2P 10DLC, Stripe live keys, Checkr live, privacy + terms, insurance note when ready for real traffic.
+4. **TODO (Tommy): partner pickup addresses.** The home page "Order →" links open `/order/?restaurant=<slug>` and prefill the pickup address with just the partner *name* (no street addresses are in the code). Send the real street address (and confirm the town) for each, and they'll be added to `PARTNERS` in `frontend/js/coastal.js`:
+
+   | Partner | Slug | Listed town | Pricing town used |
+   |---|---|---|---|
+   | TexMexCoyote | `texmexcoyote` | Port Aransas | Port Aransas |
+   | H-E-B Coastal Market | `heb-coastal-market` | Corpus Christi | Corpus Christi |
+   | Clem's Bait & Tackle | `clems-bait-tackle` | Port Aransas | Port Aransas |
+   | Shells Seafood | `shells-seafood` | North Padre Island | **Padre Island** (mapped — confirm) |
+   | Stingray's Taphouse | `stingrays-taphouse` | Port Aransas | Port Aransas |
+   | Padre Island Burger Co. | `padre-island-burger-co` | North Padre Island | **Padre Island** (mapped — confirm) |
+
+   North Padre Island (Corpus Christi ZIP 78418) is priced as the existing "Padre Island" zone (beach surcharge, 4x4). Pricing is by town name only; the ZIP is format-checked but not used for price or service area.
