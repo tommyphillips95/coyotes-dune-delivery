@@ -413,6 +413,12 @@
             .order-success { padding: 40px 24px; }
             .tracking-section { padding: 22px 24px; }
             .tracking-detail { grid-template-columns: 1fr; }
+            /* iOS Safari zooms the page on focus when a field is under 16px. */
+            .form-group input, .form-group select, .form-group textarea,
+            .tracking-form input { font-size: 16px; }
+            /* 44px minimum tap targets for the small controls (swap is hidden on mobile). */
+            .tracking-form .btn { min-height: 44px; }
+            .detail-card { min-height: 48px; display: flex; align-items: center; justify-content: center; }
         }
     </style>
 </head>
@@ -566,8 +572,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="pickupZip">ZIP Code <span class="required">*</span></label>
-                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code">
-                                        <span class="error-message">Please enter a ZIP code.</span>
+                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{5}(-?[0-9]{4})?">
+                                        <span class="error-message">Please enter a 5-digit ZIP code.</span>
                                     </div>
                                 </div>
                             </div>
@@ -614,8 +620,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="dropoffZip">ZIP Code <span class="required">*</span></label>
-                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off">
-                                        <span class="error-message">Please enter a ZIP code.</span>
+                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off" inputmode="numeric" pattern="[0-9]{5}(-?[0-9]{4})?">
+                                        <span class="error-message">Please enter a 5-digit ZIP code.</span>
                                     </div>
                                 </div>
                             </div>
@@ -816,8 +822,8 @@
                 <div class="tracking-section" id="trackingSection">
                     <h3>Track an Existing Order</h3>
                     <div class="tracking-form">
-                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)">
-                        <input type="tel" id="trackPhone" placeholder="Phone number">
+                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)" aria-label="Order number" autocapitalize="characters" autocomplete="off" spellcheck="false">
+                        <input type="tel" id="trackPhone" placeholder="Phone number" aria-label="Phone number used for the order" autocomplete="tel" inputmode="tel">
                         <button class="btn btn-secondary" id="trackBtn">Track Order</button>
                     </div>
                     <p class="track-message" id="trackMessage" role="status" aria-live="polite" hidden></p>

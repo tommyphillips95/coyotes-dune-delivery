@@ -43,7 +43,11 @@
 
     function goToStep(step) {
         if (step < 1 || step > totalSteps) return;
-        if (step > currentStep && !validateStep(currentStep)) return;
+        if (step > currentStep && !validateStep(currentStep)) {
+            const firstBad = document.querySelector(`.form-step[data-step="${currentStep}"] .error`);
+            if (firstBad && typeof firstBad.focus === 'function') firstBad.focus();
+            return;
+        }
         currentStep = step;
         document.querySelectorAll('.form-step').forEach(el => {
             el.classList.toggle('active', parseInt(el.dataset.step, 10) === step);
@@ -64,10 +68,17 @@
         const err = group.querySelector('.error-message');
         if (err) err.classList.toggle('visible', show);
         input.classList.toggle('error', show);
+        input.setAttribute('aria-invalid', show ? 'true' : 'false');
     }
 
     function validateEmail(email) {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function isValidZip(zip) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.isValidZip === 'function') return C.isValidZip(zip);
+        return /^\d{5}(-?\d{4})?$/.test(String(zip || '').trim());
     }
 
     function validatePhone(phone) {
@@ -110,7 +121,8 @@
         if (step === 2) {
             ['pickupAddress', 'pickupCity', 'pickupZip', 'dropoffAddress', 'dropoffCity', 'dropoffZip'].forEach(id => {
                 const el = document.getElementById(id);
-                if (!el.value.trim()) { showError(el, true); valid = false; }
+                const bad = !el.value.trim() || (/Zip$/.test(id) && !isValidZip(el.value));
+                if (bad) { showError(el, true); valid = false; }
                 else showError(el, false);
             });
         }
