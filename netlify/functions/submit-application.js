@@ -7,6 +7,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
 const cors = require('./_cors');
 
 exports.handler = async (event) => {
@@ -81,11 +82,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, applicationId: data.id }),
     };
   } catch (err) {
-    console.error('Error submitting application:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to submit application', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to submit application', 'submit-application');
   }
 };

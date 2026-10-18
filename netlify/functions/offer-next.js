@@ -1,5 +1,6 @@
 /** POST /api/offer-next  { order_id } — admin JWT or internal secret */
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { offerNext } = require("./dispatch");
 const { requireAdminOrInternal, jsonError } = require("./_auth");
@@ -17,6 +18,6 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, ...result }) };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, "Failed to offer order", "offer-next");
   }
 };

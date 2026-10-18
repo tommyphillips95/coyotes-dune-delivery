@@ -15,6 +15,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
 
 exports.handler = async (event) => {
   const headers = {
@@ -69,11 +70,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, id: data.id }),
     };
   } catch (err) {
-    console.error('Error logging analytics event:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to log event', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to log event', 'log-analytics-event');
   }
 };

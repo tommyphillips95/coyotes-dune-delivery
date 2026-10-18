@@ -3,6 +3,8 @@
  * POST /api/admin/login
  */
 
+const { serverError } = require('./_errors');
+
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -38,6 +40,6 @@ exports.handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ token }) };
   } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, 'Login failed', 'login-admin');
   }
 };

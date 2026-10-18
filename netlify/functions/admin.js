@@ -14,6 +14,7 @@
  * Deleting applications is not supported here on purpose (set status instead).
  */
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { requireAdmin, jsonError } = require("./_auth");
 const cors = require("./_cors");
 const { weatherShutdownActive, weatherShutdownReason } = require("./_weather");
@@ -176,8 +177,7 @@ exports.handler = async (event) => {
 
     return json(headers, 404, { error: "Not found" });
   } catch (err) {
-    console.error("admin router error:", err);
-    return json(headers, 500, { error: "Admin request failed", message: err.message });
+    return serverError(headers, err, "Admin request failed", "admin");
   }
 };
 

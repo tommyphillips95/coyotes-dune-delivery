@@ -7,6 +7,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { issueDriverToken } = require("./_auth");
 
@@ -61,7 +62,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error("Error fetching status:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, "Failed to fetch status", "get-status");
   }
 };
