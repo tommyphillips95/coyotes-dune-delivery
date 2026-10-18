@@ -5,6 +5,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError, errorResponse } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { constructWebhookEvent } = require("./_stripe");
 const { offerNext } = require("./dispatch");
@@ -22,11 +23,9 @@ exports.handler = async (event) => {
   try {
     stripeEvent = constructWebhookEvent(event);
   } catch (err) {
-    return {
-      statusCode: err.status || 400,
-      headers,
-      body: JSON.stringify({ error: err.message, message: err.cause && err.cause.message }),
-    };
+    // Signature/config problems: Stripe sees a short reason; detail is logged.
+    if (err.cause) console.error("[payment-webhook] signature check:", err.cause);
+    return errorResponse(headers, err, "Webhook not accepted", "payment-webhook");
   }
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -68,7 +67,8 @@ exports.handler = async (event) => {
       try {
         dispatch = await offerNext(supabase, orderId);
       } catch (e) {
-        dispatch = { offered: false, reason: e.message };
+        console.error("[payment-webhook] offerNext:", e);
+        dispatch = { offered: false, reason: "dispatch_error" };
       }
       return {
         statusCode: 200,
@@ -153,10 +153,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ received: true, event: eventType }),
     };
   } catch (err) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Webhook processing failed", message: err.message }),
-    };
+    return serverError(headers, err, "Webhook processing failed", "payment-webhook");
   }
 };

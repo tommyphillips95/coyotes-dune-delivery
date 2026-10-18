@@ -10,6 +10,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const {
   requireAdminOrCustomer,
@@ -151,11 +152,6 @@ exports.handler = async (event) => {
   try {
     return await fetchOrders(event, headers, auth);
   } catch (err) {
-    console.error("Error fetching orders:", err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Failed to fetch orders", message: err.message }),
-    };
+    return serverError(headers, err, "Failed to fetch orders", "get-orders");
   }
 };

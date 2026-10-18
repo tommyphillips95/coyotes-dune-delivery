@@ -4,6 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
 
 exports.handler = async (event) => {
   const headers = {
@@ -55,11 +56,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ applications: applications || [] }),
     };
   } catch (err) {
-    console.error('Error fetching applications:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to fetch applications', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to fetch applications', 'get-applications');
   }
 };

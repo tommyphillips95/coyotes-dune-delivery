@@ -18,6 +18,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { errorResponse } = require('./_errors');
 
 const CHECKR_BASE_URL = 'https://api.checkr.com/v1';
 const DEFAULT_PACKAGE = 'driver_pro';
@@ -134,7 +135,6 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify({
           error: 'Application not found',
-          details: fetchError?.message,
         }),
       };
     }
@@ -229,18 +229,8 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Checkr initiation error:', err);
-
-    const status = err.status || 500;
-    const payload = {
-      error: 'Failed to initiate background check',
-      message: err.message,
-    };
-
-    if (err.checkrError) {
-      payload.checkrError = err.checkrError;
-    }
-
-    return { statusCode: status, headers, body: JSON.stringify(payload) };
+    // Raw Checkr response (err.checkrError) is logged, not returned.
+    if (err.checkrError) console.error('Checkr response body:', err.checkrError);
+    return errorResponse(headers, err, 'Failed to initiate background check', 'checkr-initiate');
   }
 };

@@ -4,6 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { errorResponse } = require('./_errors');
 const jwt = require('jsonwebtoken');
 
 const CHECKR_API_BASE = 'https://api.checkr.com/v1';
@@ -317,8 +318,6 @@ exports.handler = async (event) => {
 
     return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
   } catch (err) {
-    console.error('Checkr router error:', err);
-    const status = err.status || 500;
-    return { statusCode: status, headers, body: JSON.stringify({ error: err.message }) };
+    return errorResponse(headers, err, 'Background check request failed', 'checkr');
   }
 };

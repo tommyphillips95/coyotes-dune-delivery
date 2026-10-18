@@ -4,6 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
 
 exports.handler = async (event) => {
   const headers = {
@@ -69,7 +70,6 @@ exports.handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, data }) };
   } catch (err) {
-    console.error('Error updating application:', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, 'Failed to update application', 'update-application');
   }
 };

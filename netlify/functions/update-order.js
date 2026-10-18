@@ -9,6 +9,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
 
 /**
  * Helper: Send SMS via Twilio
@@ -244,11 +245,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, data: order }),
     };
   } catch (err) {
-    console.error('Error updating order:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to update order', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to update order', 'update-order');
   }
 };

@@ -18,6 +18,7 @@
  */
 
 const admin = require('firebase-admin');
+const { serverError } = require('./_errors');
 const { createClient } = require('@supabase/supabase-js');
 
 let firebaseAppInitialized = false;
@@ -187,15 +188,7 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('[send-push-notification] Error:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: 'Failed to send push notification',
-        message: err.message,
-      }),
-    };
+    return serverError(headers, err, 'Failed to send push notification', 'send-push-notification');
   }
 };
 

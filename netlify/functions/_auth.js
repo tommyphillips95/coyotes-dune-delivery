@@ -3,6 +3,7 @@
  * Fail closed when JWT_SECRET is unset. No hardcoded secrets.
  */
 const jwt = require("jsonwebtoken");
+const { errorResponse } = require("./_errors");
 
 function bearerToken(event) {
   const h = event.headers || {};
@@ -172,12 +173,8 @@ function issueDriverToken(driverId) {
 }
 
 function jsonError(headers, err) {
-  const status = err.status || 500;
-  return {
-    statusCode: status,
-    headers,
-    body: JSON.stringify({ error: err.message || "Error" }),
-  };
+  // 4xx auth/validation messages are meant for the caller; 5xx detail is logged only.
+  return errorResponse(headers, err, "Server error", "auth");
 }
 
 module.exports = {

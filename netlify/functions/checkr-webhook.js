@@ -17,6 +17,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
 const crypto = require('crypto');
 
 /* ─── Config ─── */
@@ -223,11 +224,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Error processing Checkr webhook:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Internal server error', message: err.message }),
-    };
+    return serverError(headers, err, 'Internal server error', 'checkr-webhook');
   }
 };
