@@ -60,6 +60,13 @@
         });
         window.scrollTo({ top: 0, behavior: 'smooth' });
         if (step === 5) buildReviewSummary();
+        // Move focus to the new step's heading so screen readers announce it and
+        // keyboard users don't land on <body> after the Next/Back button disappears.
+        const heading = document.querySelector(`.form-step[data-step="${step}"] h2`);
+        if (heading) {
+            if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+            try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
+        }
     }
 
     function showError(input, show) {
@@ -105,16 +112,23 @@
             const date = document.getElementById('serviceDate');
             const time = document.getElementById('serviceTime');
             const dateTimeError = document.getElementById('dateTimeError');
+            // Mark the field to fix so goToStep() focuses it (date if missing, else time).
+            const mark = (bad) => {
+                [date, time].forEach(el => { el.classList.toggle('error', el === bad); el.setAttribute('aria-invalid', el === bad ? 'true' : 'false'); });
+            };
             if (!date.value || !time.value) {
                 if (dateTimeError) dateTimeError.classList.add('visible');
+                mark(!date.value ? date : time);
                 valid = false;
             } else {
                 const selected = serviceInstant(date.value, time.value);
                 if (!selected || selected <= new Date()) {
                     if (dateTimeError) dateTimeError.classList.add('visible');
+                    mark(time);
                     valid = false;
-                } else if (dateTimeError) {
-                    dateTimeError.classList.remove('visible');
+                } else {
+                    if (dateTimeError) dateTimeError.classList.remove('visible');
+                    mark(null);
                 }
             }
         }

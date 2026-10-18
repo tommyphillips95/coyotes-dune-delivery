@@ -188,7 +188,8 @@ a:hover { color: var(--cc-coral-dark); }
 .cc-field label { font-size: 0.82rem; font-weight: 600; color: var(--cc-ink-2); }
 .cc-field select, .cc-field input {
     border: 1px solid var(--cc-line); border-radius: 12px; padding: 12px 14px;
-    font-size: 0.98rem; background: var(--cc-cream); color: var(--cc-text);
+    font-size: 1rem; /* >=16px: iOS Safari zooms the page on focus below that */
+    background: var(--cc-cream); color: var(--cc-text);
 }
 .cc-field select:focus, .cc-field input:focus { outline: 2px solid var(--cc-seafoam); border-color: var(--cc-seafoam); }
 .cc-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }

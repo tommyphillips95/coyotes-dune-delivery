@@ -1814,6 +1814,9 @@ a:hover {
     .form-nav { flex-direction: column; }
     .form-nav-right { width: 100%; }
     .form-nav-right .btn { flex: 1; }
+    .form-nav .btn { min-height: 48px; } /* comfortable thumb targets on phones */
+    .nav-toggle { width: 44px; height: 44px; }
+    .form-step h2:focus { outline: none; } /* focused programmatically on step change */
     .form-success { padding: 40px 24px; }
     .summary-table th, .summary-table td { padding: 8px 10px; font-size: 0.82rem; }
 }
