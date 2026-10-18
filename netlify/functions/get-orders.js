@@ -12,6 +12,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
+const { phoneKey, samePhone } = require("./_phone");
 const {
   requireAdminOrCustomer,
   issueTrackingToken,
@@ -28,22 +29,6 @@ const ORDER_SELECT = `
   order_items(*),
   status_logs:order_status_logs(*)
 `;
-
-/**
- * Phone as comparable digits: "(361) 555-0100", "361.555.0100" and
- * "+1 361 555 0100" all become "3615550100". The order form stores the phone
- * as typed, so the track lookup must not depend on punctuation or a +1.
- */
-function phoneKey(value) {
-  let d = String(value == null ? "" : value).replace(/\D/g, "");
-  if (d.length === 11 && d[0] === "1") d = d.slice(1);
-  return d;
-}
-
-function samePhone(a, b) {
-  const ka = phoneKey(a);
-  return ka.length >= 10 && ka === phoneKey(b);
-}
 
 async function mintTrackingToken(event, headers) {
   let body;

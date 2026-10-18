@@ -41,6 +41,11 @@ function createFakeSupabase(seed) {
         if (state.limitN != null) data = data.slice(0, state.limitN);
       }
       calls.push({ table: name, op: state.op, payload: state.payload });
+      // Like PostgREST: .maybeSingle()/.single() on more than one row is an
+      // error (PGRST116), not "the first row".
+      if (state.single && Array.isArray(data) && data.length > 1) {
+        return { data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+      }
       if (state.single === "maybe") return { data: Array.isArray(data) ? data[0] || null : data, error: null };
       if (state.single === "one") {
         const row = Array.isArray(data) ? data[0] : data;

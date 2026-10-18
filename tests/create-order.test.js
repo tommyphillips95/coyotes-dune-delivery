@@ -201,6 +201,97 @@ test("repeat phone reuses the customer row", async () => {
   assert.strictEqual(currentFake.db.orders[0].customer_id, currentFake.db.orders[1].customer_id);
 });
 
+test("duplicate customer rows for one phone: no 500, oldest row reused deterministically", async () => {
+  currentFake = freshDb();
+  currentFake.db.customers.push(
+    { id: "cust-new", first_name: "B", last_name: "B", phone: "3615550100", created_at: "2026-09-02T00:00:00Z" },
+    { id: "cust-old", first_name: "A", last_name: "A", phone: "3615550100", created_at: "2026-09-01T00:00:00Z" },
+  );
+  for (let i = 0; i < 2; i++) {
+    const res = await post(base());
+    assert.strictEqual(res.statusCode, 201, res.body);
+  }
+  assert.strictEqual(currentFake.db.customers.length, 2, "no third customer row");
+  assert.deepStrictEqual(currentFake.db.orders.map((o) => o.customer_id), ["cust-old", "cust-old"]);
+});
+
+test("repeat customer is matched by digits: '(361) 555-0100' then '+1 361-555-0100' is one customer", async () => {
+  currentFake = freshDb();
+  await post(Object.assign(base(), { phone: "(361) 555-0100" }));
+  for (const phone of ["+1 361-555-0100", "361.555.0100", "3615550100"]) {
+    const res = await post(Object.assign(base(), { phone }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+  }
+  assert.strictEqual(currentFake.db.customers.length, 1);
+  assert.strictEqual(currentFake.db.customers[0].phone, "(361) 555-0100", "stored phone unchanged");
+  assert.strictEqual(new Set(currentFake.db.orders.map((o) => o.customer_id)).size, 1);
+});
+
+test("after the optional phone_normalized migration, lookup uses that column (any stored format)", async () => {
+  currentFake = freshDb();
+  currentFake.db.customers.push(
+    { id: "cust-z", first_name: "Z", last_name: "Z", phone: "361 555 0100 (cell)", phone_normalized: "3615550100", created_at: "2026-09-01T00:00:00Z" },
+  );
+  const res = await post(Object.assign(base(), { phone: "(361) 555-0100" }));
+  assert.strictEqual(res.statusCode, 201, res.body);
+  assert.strictEqual(currentFake.db.customers.length, 1);
+  assert.strictEqual(currentFake.db.orders[0].customer_id, "cust-z");
+});
+
+test("phone_normalized column missing (42703) falls back cleanly; other lookup errors still surface", async () => {
+  const hooked = (err) => {
+    const fake = freshDb();
+    const realFrom = fake.from;
+    fake.from = (name) => {
+      const b = realFrom(name);
+      if (name !== "customers") return b;
+      let normalized = false;
+      const eq = b.eq, then = b.then;
+      b.eq = (c, v) => { if (c === "phone_normalized") normalized = true; return eq(c, v); };
+      b.then = (res, rej) => (normalized ? res({ data: null, error: err }) : then(res, rej));
+      return b;
+    };
+    return fake;
+  };
+  currentFake = hooked({ code: "42703", message: "column customers.phone_normalized does not exist" });
+  currentFake.db.customers.push({ id: "cust-1", first_name: "A", last_name: "A", phone: "361-555-0100", created_at: "2026-09-01T00:00:00Z" });
+  const ok = await post(base());
+  assert.strictEqual(ok.statusCode, 201, ok.body);
+  assert.strictEqual(currentFake.db.orders[0].customer_id, "cust-1");
+
+  currentFake = hooked({ code: "08006", message: "connection failure" });
+  const origErr = console.error; console.error = () => {};
+  let bad;
+  try { bad = await post(base()); } finally { console.error = origErr; }
+  assert.strictEqual(bad.statusCode, 500);
+  assert.strictEqual(currentFake.db.orders.length, 0);
+});
+
+test("unique phone index: losing the customer insert race (23505) reuses the winner", async () => {
+  currentFake = freshDb();
+  const realFrom = currentFake.from;
+  let raced = false;
+  currentFake.from = (name) => {
+    const b = realFrom(name);
+    if (name !== "customers") return b;
+    const insert = b.insert;
+    b.insert = (rows) => {
+      if (!raced) {
+        raced = true; // another request inserts the same number first
+        currentFake.db.customers.push({ id: "cust-winner", first_name: "W", last_name: "W", phone: "361-555-0100", created_at: "2026-09-01T00:00:00Z" });
+        b.then = (res) => res({ data: null, error: { code: "23505", message: "duplicate key value violates unique constraint \"customers_phone_normalized_uidx\"" } });
+        return b;
+      }
+      return insert(rows);
+    };
+    return b;
+  };
+  const res = await post(base());
+  assert.strictEqual(res.statusCode, 201, res.body);
+  assert.strictEqual(currentFake.db.customers.length, 1);
+  assert.strictEqual(currentFake.db.orders[0].customer_id, "cust-winner");
+});
+
 test("returns an order-scoped customer tracking token", async () => {
   currentFake = freshDb();
   const body = JSON.parse((await post(base())).body);

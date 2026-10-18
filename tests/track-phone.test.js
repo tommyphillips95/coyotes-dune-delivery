@@ -85,6 +85,35 @@ test("wrong phone, partial phone or someone else's order is still 'Order not fou
   }
 });
 
+test("phoneVariants covers the common typed formats of one number", () => {
+  const { phoneVariants } = require(path.join(__dirname, "..", "netlify/functions/_phone.js"));
+  const v = phoneVariants("+1 (361) 555-0100");
+  for (const f of ["3615550100", "(361) 555-0100", "361-555-0100", "361.555.0100", "+13615550100", "+1 361-555-0100", "+1 (361) 555-0100"]) assert.ok(v.includes(f), f);
+  assert.ok(v.every((x) => phoneKey(x) === "3615550100"));
+  assert.deepStrictEqual(phoneVariants("555-0100"), ["555-0100"], "short input: exact only");
+});
+
+test("draft schema/customer_phone_normalize.sql is re-runnable and never merges/deletes automatically", () => {
+  const fs = require("fs");
+  const root = path.join(__dirname, "..");
+  const sql = fs.readFileSync(path.join(root, "schema/customer_phone_normalize.sql"), "utf8");
+  const live = sql.split("\n").filter((l) => !/^\s*--/.test(l)).join("\n");
+  assert.ok(/NOT YET RUN ANYWHERE LIVE/.test(sql));
+  assert.ok(/ADD COLUMN IF NOT EXISTS phone_normalized TEXT/.test(live));
+  assert.ok(/CREATE INDEX IF NOT EXISTS idx_customers_phone_normalized/.test(live));
+  assert.ok(/DROP TRIGGER IF EXISTS customers_phone_normalized_sync/.test(live));
+  assert.ok(!/\bDELETE\b/i.test(live), "no live DELETE");
+  assert.ok(!/UPDATE\s+orders/i.test(live), "orders are never re-pointed automatically");
+  assert.ok(!/DROP\s+(TABLE|COLUMN)/i.test(live), "nothing dropped");
+  // Unique index only inside the duplicate-check DO block.
+  const doBlock = live.slice(live.indexOf("DO $$"), live.indexOf("END $$;", live.indexOf("DO $$")));
+  assert.ok(/IF dup_numbers = 0 THEN\s+CREATE UNIQUE INDEX IF NOT EXISTS customers_phone_normalized_uidx/.test(doBlock));
+  assert.strictEqual((live.match(/CREATE UNIQUE INDEX/g) || []).length, 1);
+  assert.ok(/ON DELETE CASCADE/.test(sql), "warns that deleting customers cascades to orders");
+  const md = fs.readFileSync(path.join(root, "LAUNCH.md"), "utf8");
+  assert.ok(/Optional, NOT yet run anywhere\)\* `schema\/customer_phone_normalize\.sql`/.test(md));
+});
+
 (async () => {
   let failed = 0;
   for (const [name, fn] of tests) {
