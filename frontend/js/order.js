@@ -476,6 +476,14 @@
         document.getElementById('trackingDropoff').textContent = order.dropoff_address ? `${order.dropoff_address}, ${order.dropoff_city || order.pickup_city}` : 'Same as pickup';
         document.getElementById('trackingPrice').textContent = order.estimated_price ? `$${parseFloat(order.estimated_price).toFixed(2)}` : '—';
         document.getElementById('trackingDriver').textContent = order.driver_id ? 'Assigned' : 'Not yet assigned';
+        const payBox = document.getElementById('trackingPaymentStatus');
+        if (payBox && window.CoyoteCoastal && window.CoyoteCoastal.paymentBadge) {
+            const b = window.CoyoteCoastal.paymentBadge(order);
+            const badge = document.createElement('span');
+            badge.className = 'payment-status-badge ' + b.cls;
+            badge.textContent = b.label;
+            payBox.replaceChildren(badge);
+        }
         resultEl.classList.add('active');
     }
 
