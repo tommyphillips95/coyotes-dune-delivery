@@ -641,11 +641,11 @@ a:hover {
 }
 
 .partner-restaurant .partner-category {
-    color: #C45A3E;
+    color: #C0563B; /* was #C45A3E (4.30:1 on white); 4.53:1 */
 }
 
 .partner-grocery .partner-category {
-    color: #3D8B5A;
+    color: #378555; /* was #3D8B5A (4.16:1 on white); 4.52:1 */
 }
 
 .partner-bait .partner-category {

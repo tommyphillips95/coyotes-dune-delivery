@@ -9,16 +9,24 @@
     --cc-cream: #FFF8EE;
     --cc-cream-2: #FBEFDD;
     --cc-sand: #F3E3C7;
+    /* Coral. #FF6B4A stays the brand accent on dark navy (hero <em>, logo,
+       footer links). Coral behind white text or as text on cream/white uses
+       the darker same-hue shades below (OKLCH hue 34-35, chroma kept) so it
+       meets WCAG AA 4.5:1:
+         --cc-coral-strong #D54322  white text on it 4.51:1 (was 2.81)
+         --cc-coral-dark   #C43301  hover; text on cream 5.21, coral-soft 4.51,
+                                    white 5.50; white text on it 5.50 */
     --cc-coral: #FF6B4A;
-    --cc-coral-dark: #E8552F;
+    --cc-coral-strong: #D54322;
+    --cc-coral-dark: #C43301;
     --cc-coral-soft: #FFE3DA;
     --cc-seafoam: #3FB8A6;
-    --cc-seafoam-dark: #2A9585;
+    --cc-seafoam-dark: #02796A; /* was #2A9585 (3.09-3.47:1); text on seafoam-soft 4.50, cream-2 4.69, cream 5.05; white on it 5.32 */
     --cc-seafoam-soft: #D6F2EC;
     --cc-ink: #10202E;
     --cc-ink-2: #1B3142;
     --cc-text: #24313D;
-    --cc-muted: #6B7782;
+    --cc-muted: #646F7A; /* was #6B7782 (4.03:1 on cream-2); now 4.51 cream-2, 4.86 cream */
     --cc-line: #EADBC4;
     --cc-radius: 14px;
     --cc-shadow: 0 10px 30px rgba(16, 32, 46, 0.10);
@@ -42,7 +50,7 @@
     --content-bg: var(--cc-cream);
     --text: var(--cc-text);
     --content-text: var(--cc-text);
-    --primary: var(--cc-coral);
+    --primary: var(--cc-coral-strong);
     --primary-hover: var(--cc-coral-dark);
     --info: var(--cc-seafoam);
     --success: var(--cc-seafoam-dark);
@@ -55,8 +63,8 @@ a:hover { color: var(--cc-coral-dark); }
 
 /* Buttons */
 .btn-primary, .btn.btn-primary {
-    background: var(--cc-coral);
-    border-color: var(--cc-coral);
+    background: var(--cc-coral-strong);
+    border-color: var(--cc-coral-strong);
     color: #fff;
     border-radius: 999px;
 }
@@ -72,7 +80,7 @@ a:hover { color: var(--cc-coral-dark); }
     border: 1px solid var(--cc-seafoam);
     border-radius: 999px;
 }
-.btn-seafoam:hover { background: var(--cc-seafoam); color: #fff; }
+.btn-seafoam:hover { background: var(--cc-seafoam-dark); border-color: var(--cc-seafoam-dark); color: #fff; }
 
 /* Navbar */
 .navbar { background: rgba(16, 32, 46, 0.96); border-bottom-color: rgba(255,255,255,0.06); }
@@ -231,15 +239,20 @@ a:hover { color: var(--cc-coral-dark); }
 .form-container, .order-success, .tracking-section, .tracking-result, .order-card, .zone-card, .step-card, .partner-card {
     border-radius: 18px;
 }
-.progress-step.active .step-number, .progress-step.active .progress-dot { background: var(--cc-coral); border-color: var(--cc-coral); color: #fff; }
-.progress-step.completed .step-number, .progress-step.completed .progress-dot { background: var(--cc-seafoam); border-color: var(--cc-seafoam); color: #fff; }
+.progress-step.active .step-number, .progress-step.active .progress-dot { background: var(--cc-coral-strong); border-color: var(--cc-coral-strong); color: #fff; }
+.progress-step.completed .step-number, .progress-step.completed .progress-dot { background: var(--cc-seafoam-dark); border-color: var(--cc-seafoam-dark); color: #fff; }
 .service-option.selected, .detail-card.selected { border-color: var(--cc-coral); background: var(--cc-coral-soft); }
 .cc-track-link {
     display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
 }
 
+/* Coral text on light surfaces (style.css uses --sand = brand coral, 2.5-2.8:1 there) */
+.section-label, .partner-location, .partner-link:hover, .order-phone a, .testimonial footer { color: var(--cc-coral-dark); }
+
 /* Footer */
 .footer { background: var(--cc-ink); }
+/* sand-light at 0.6 opacity was #9F7972 on ink (4.29:1); 0.65 = #AB8177, 4.84:1 */
+.footer-bottom p { opacity: 0.65; }
 .footer a:hover { color: var(--cc-coral); }
 
 /* Driver + dispatch headers pick up the ink/coral brand */
@@ -260,7 +273,8 @@ a:hover { color: var(--cc-coral-dark); }
 /* Tracking page sits under the fixed navbar */
 .track-page { padding-top: 100px; }
 .track-card { border-radius: 18px; border-color: var(--cc-line); }
-.lookup-form button, #lookupBtn { background: var(--cc-coral); border-color: var(--cc-coral); color: #fff; border-radius: 999px; }
+.lookup-form button, #lookupBtn { background: var(--cc-coral-strong); border-color: var(--cc-coral-strong); color: #fff; border-radius: 999px; }
+.lookup-form button:hover, #lookupBtn:hover { background: var(--cc-coral-dark); border-color: var(--cc-coral-dark); }
 .live-dot { background: var(--cc-seafoam); }
 
 /* Driver portal + dispatch (admin) */
