@@ -220,6 +220,25 @@
     return "We couldn't find that order. Check the order number and phone number.";
   }
 
+  // /api/create-payment-intent answers 409 with a machine-readable code when
+  // the order must NOT be charged again. Returns "already_paid",
+  // "payment_processing", or null (anything else: normal error handling).
+  function paymentConflictKind(result) {
+    if (!result || result.ok) return null;
+    if (Number(result.status) !== 409) return null;
+    var code = result.data && typeof result.data === "object" ? result.data.code : null;
+    return code === "already_paid" || code === "payment_processing" ? code : null;
+  }
+
+  // Read-only "check payment status" on the processing screen uses the
+  // order row from GET /api/get-orders. Returns "paid", "failed" or "processing".
+  function paymentStatusKind(order) {
+    var s = String((order && order.payment_status) || "").toLowerCase();
+    if (s === "paid") return "paid";
+    if (s === "failed" || s === "refunded") return "failed";
+    return "processing";
+  }
+
   var TERMINAL = ["completed", "cancelled", "delivered"];
   function isTerminalStatus(status) {
     return TERMINAL.indexOf(String(status || "").toLowerCase()) !== -1;
@@ -335,6 +354,8 @@
 
   api.orderErrorMessage = orderErrorMessage;
   api.trackErrorMessage = trackErrorMessage;
+  api.paymentConflictKind = paymentConflictKind;
+  api.paymentStatusKind = paymentStatusKind;
   root.CoyoteCoastal = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
