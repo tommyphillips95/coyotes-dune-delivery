@@ -50,6 +50,27 @@ test("planRoute rejects unknown cities", () => {
   assert.strictEqual(C.planRoute("Atlantis", "Port Aransas", "ride"), null);
 });
 
+test("isValidZip accepts 5-digit / ZIP+4 and rejects junk", () => {
+  for (const ok of ["78373", " 78418 ", "78373-1234", "783731234"]) assert.ok(C.isValidZip(ok), ok);
+  for (const bad of ["", null, undefined, "7837", "783735", "abcde", "78373-12", "Port A"]) assert.ok(!C.isValidZip(bad), String(bad));
+});
+
+test("order form mobile inputs: numeric ZIP keypad, 16px fields, labelled tracking inputs", () => {
+  const html = read("frontend/order/index.html");
+  for (const id of ["pickupZip", "dropoffZip"]) {
+    const tag = (html.match(new RegExp('<input[^>]*id="' + id + '"[^>]*>')) || [""])[0];
+    assert.ok(/inputmode="numeric"/.test(tag), id + " numeric keypad");
+    assert.ok(/pattern="/.test(tag), id + " pattern");
+  }
+  assert.ok(/\.tracking-form input \{ font-size: 16px; \}/.test(html), "no iOS focus zoom");
+  assert.ok(/min-height: 44px/.test(html), "44px tap targets");
+  assert.ok(/id="trackOrderNumber"[^>]*aria-label=/.test(html));
+  assert.ok(/id="trackPhone"[^>]*aria-label=/.test(html));
+  const order = read("frontend/js/order.js");
+  assert.ok(/isValidZip\(el\.value\)/.test(order), "route step validates ZIP format");
+  assert.ok(/aria-invalid/.test(order), "errors set aria-invalid");
+});
+
 test("Port A -> Mustang ride is $35 with beach access (matches quote-parity)", () => {
   const p = C.planRoute("Port Aransas", "Mustang Island", "ride", { passenger_count: 1 });
   assert.strictEqual(p.total, 35);

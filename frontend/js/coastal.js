@@ -43,6 +43,12 @@
     return CITIES.indexOf(String(name || "")) !== -1;
   }
 
+  // US ZIP for the order form: 5 digits, optional +4. Spaces/dashes the
+  // phone keyboard adds around it are ignored.
+  function isValidZip(zip) {
+    return /^\d{5}(-?\d{4})?$/.test(String(zip == null ? "" : zip).trim());
+  }
+
   function categoryById(id) {
     for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].id === id) return CATEGORIES[i];
     return null;
@@ -189,6 +195,7 @@
     SERVICES: SERVICES,
     CATEGORIES: CATEGORIES,
     isCity: isCity,
+    isValidZip: isValidZip,
     categoryById: categoryById,
     matchCategory: matchCategory,
     planRoute: planRoute,
