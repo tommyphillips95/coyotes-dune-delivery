@@ -196,15 +196,73 @@
   function localTimeInputValue(d) {
     return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
   }
+
+  // ── Central time (the service runs on Port Aransas time) ──
+  // The order form's date/time inputs are Central wall-clock values whatever
+  // time zone the customer's phone is set to (tourists often have Pacific or
+  // Eastern phones). They are sent as an ISO string with the Central offset.
+  var SERVICE_TZ = "America/Chicago";
+  var centralFmt = null;
+  function centralWall(d) {
+    if (!centralFmt) {
+      centralFmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: SERVICE_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+      });
+    }
+    var p = {};
+    centralFmt.formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+    return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute, s: +p.second };
+  }
+  // Minutes east of UTC for Central at an instant (-300 CDT, -360 CST).
+  function centralOffsetMinutes(instant) {
+    var w = centralWall(instant);
+    var asUtc = Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi, w.s);
+    return Math.round((asUtc - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
+  }
+  function centralParts(d) {
+    var w = centralWall(d);
+    return { date: w.y + "-" + pad2(w.mo) + "-" + pad2(w.d), time: pad2(w.h) + ":" + pad2(w.mi) };
+  }
+  // Instant for a Central wall-clock date ("YYYY-MM-DD") + time ("HH:MM").
+  function centralInstant(date, time) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+    var t = /^(\d{2}):(\d{2})/.exec(String(time || ""));
+    if (!m || !t) return null;
+    var wallUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +t[1], +t[2]);
+    var guess = new Date(wallUtc - centralOffsetMinutes(new Date(wallUtc)) * 60000);
+    var off = centralOffsetMinutes(guess); // re-check across a DST boundary
+    return new Date(wallUtc - off * 60000);
+  }
+  function formatOffset(min) {
+    var sign = min < 0 ? "-" : "+";
+    var a = Math.abs(min);
+    return sign + pad2(Math.floor(a / 60)) + ":" + pad2(a % 60);
+  }
+  // "2026-10-18T20:30:00-05:00" for the Central wall time.
+  function centralIso(date, time) {
+    var inst = centralInstant(date, time);
+    if (!inst) return null;
+    return date + "T" + String(time).slice(0, 5) + ":00" + formatOffset(centralOffsetMinutes(inst));
+  }
+  // "Sun, Oct 18, 8:30 PM CDT"
+  function formatCentral(instant) {
+    return instant.toLocaleString("en-US", {
+      timeZone: SERVICE_TZ, weekday: "short", month: "short", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short"
+    });
+  }
+
   // Default slot for the order form: now + leadMinutes (default 30), plus the
-  // earliest selectable date (today, local).
+  // earliest selectable date (today), both in Central time.
   function defaultServiceSlot(now, leadMinutes) {
     var base = now ? new Date(now.getTime()) : new Date();
     var slot = new Date(base.getTime() + (leadMinutes == null ? 30 : leadMinutes) * 60000);
+    var sp = centralParts(slot);
     return {
-      date: localDateInputValue(slot),
-      time: localTimeInputValue(slot),
-      minDate: localDateInputValue(base)
+      date: sp.date,
+      time: sp.time,
+      minDate: centralParts(base).date
     };
   }
 
@@ -225,7 +283,12 @@
     isTerminalStatus: isTerminalStatus,
     localDateInputValue: localDateInputValue,
     localTimeInputValue: localTimeInputValue,
-    defaultServiceSlot: defaultServiceSlot
+    defaultServiceSlot: defaultServiceSlot,
+    SERVICE_TZ: SERVICE_TZ,
+    centralParts: centralParts,
+    centralInstant: centralInstant,
+    centralIso: centralIso,
+    formatCentral: formatCentral
   };
 
   root.CoyoteCoastal = api;
