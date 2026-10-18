@@ -6,6 +6,11 @@
 (function() {
     'use strict';
 
+    // ── Footer year (static fallback in the HTML) ───────────
+    document.querySelectorAll('[data-current-year]').forEach(el => {
+        el.textContent = String(new Date().getFullYear());
+    });
+
     // ── Mobile Navigation ───────────────────────────────────
     const navToggle = document.getElementById('navToggle');
     const navMenu = document.getElementById('navMenu');

@@ -111,6 +111,16 @@ test("terminal statuses stop tracking", () => {
   assert.ok(!C.isTerminalStatus("in_progress"));
 });
 
+test("footers show the current year (2026 fallback, main.js keeps it current)", () => {
+  for (const p of ["index.html", "order/index.html"]) {
+    const html = read("frontend/" + p);
+    assert.ok(/<span data-current-year>2026<\/span> Coyote's Dune Delivery/.test(html), p);
+    assert.ok(!/>\s*20(24|25) Coyote's/.test(html), p + " stale year");
+  }
+  assert.ok(read("frontend/404.html").includes("&copy; 2026"));
+  assert.ok(/\[data-current-year\][\s\S]{0,120}getFullYear\(\)/.test(read("frontend/js/main.js")));
+});
+
 // ── Static regression guards ──
 test("order page loads zones.js + coastal.js before order.js and offers Mustang Island", () => {
   const html = read("frontend/order/index.html");
