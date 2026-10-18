@@ -405,6 +405,7 @@ exports.handler = async (event) => {
 
     const smsEnabled = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
     const customerPhone = body.phone.trim().replace(/\D/g, "");
+    let smsSent = false;
     if (smsEnabled && customerPhone.length >= 10) {
       const smsMessage = "Your order " + order.order_number + " has been received. We'll assign a driver shortly. — Coyote's Dune Delivery";
       const smsResult = await sendSMS({ to_phone: customerPhone, message_body: smsMessage });
@@ -416,6 +417,7 @@ exports.handler = async (event) => {
         twilio_sid: smsResult.messageSid || null,
         error: smsResult.error || null,
       });
+      smsSent = !!smsResult.success;
     }
 
     const trackingToken = issueTrackingToken(order);
@@ -431,6 +433,8 @@ exports.handler = async (event) => {
         miles: miles,
         requiredClass: vehicle,
         status: order.status,
+        // Lets the confirmation screen say "we texted you" only when we did.
+        smsSent: smsSent,
         trackingToken: trackingToken || undefined,
       }),
     };
