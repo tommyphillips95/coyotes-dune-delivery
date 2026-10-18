@@ -89,19 +89,66 @@
     if (driverMarker) driverMarker.setLatLng([la, ln]);
     else driverMarker = L.circleMarker([la, ln], { radius: 10, color: "#1A2F4B", fillColor: "#4C8C64", fillOpacity: 1 }).addTo(map).bindPopup("Driver");
     fitLeaflet();
-    if (currentOrder && currentOrder.dropoff_lat && currentOrder.dropoff_lng) {
-      const R = 3958.8, toRad = function (d) { return (d * Math.PI) / 180; };
-      const dLat = toRad(parseFloat(currentOrder.dropoff_lat) - la);
-      const dLng = toRad(parseFloat(currentOrder.dropoff_lng) - ln);
-      const s = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(la)) * Math.cos(toRad(parseFloat(currentOrder.dropoff_lat))) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-      const miles = 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
-      const minutes = Math.max(1, Math.round((miles / 22) * 60));
-      const etaValue = document.getElementById("etaValue");
-      const etaUnit = document.getElementById("etaUnit");
-      if (etaValue) etaValue.textContent = String(minutes);
-      if (etaUnit) etaUnit.textContent = minutes === 1 ? "minute" : "minutes";
+    renderEta();
+  }
+  // ETA follows the leg the driver is on: to the pickup until the trip starts
+  // (pending/assigned), to the drop-off while in progress, and nothing once the
+  // order is completed or cancelled. Straight-line miles at 22 mph.
+  function etaTarget(order) {
+    const st = order && order.status;
+    const pt = (lat, lng) => (lat != null && lng != null && lat !== "" && lng !== "" && !Number.isNaN(parseFloat(lat)) && !Number.isNaN(parseFloat(lng)))
+      ? { lat: parseFloat(lat), lng: parseFloat(lng) } : null;
+    if (st === "pending" || st === "assigned") {
+      const p = pt(order.pickup_lat, order.pickup_lng);
+      return p ? Object.assign(p, { label: "Driver arrives at pickup in" }) : null;
+    }
+    if (st === "in_progress") {
+      const d = pt(order.dropoff_lat, order.dropoff_lng);
+      return d ? Object.assign(d, { label: "Arrival at drop-off in" }) : null;
+    }
+    return null;
+  }
+  function etaMinutes(from, to) {
+    const R = 3958.8, toRad = function (d) { return (d * Math.PI) / 180; };
+    const dLat = toRad(to.lat - from.lat);
+    const dLng = toRad(to.lng - from.lng);
+    const s = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(from.lat)) * Math.cos(toRad(to.lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const miles = 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+    return Math.max(1, Math.round((miles / 22) * 60));
+  }
+  function renderEta() {
+    const etaLabel = document.getElementById("etaLabel");
+    const etaValue = document.getElementById("etaValue");
+    const etaUnit = document.getElementById("etaUnit");
+    if (!etaValue || !etaUnit) return;
+    const target = etaTarget(currentOrder);
+    if (etaLabel) etaLabel.textContent = target ? target.label : "Estimated arrival";
+    if (target && driverMarker) {
+      const here = driverMarker.getLatLng();
+      const minutes = etaMinutes({ lat: here.lat, lng: here.lng }, target);
+      etaValue.textContent = String(minutes);
+      etaUnit.textContent = minutes === 1 ? "minute" : "minutes";
+    } else {
+      etaValue.textContent = "--";
+      etaUnit.textContent = target ? "Shown once your driver shares their location" : "";
     }
   }
+  function clearDriverDot() {
+    if (driverMarker && map) map.removeLayer(driverMarker);
+    driverMarker = null;
+  }
+  // No driver on the order (never assigned, or dispatch unassigned them): an
+  // old GPS ping for this order must not show as "your driver".
+  function hasNoDriver(order) {
+    return !!order && !order.driver_id && order.status === "pending";
+  }
+  // Completed / cancelled: no live card, no driver dot, no GPS driver details.
+  function showFinished() {
+    const eta = document.getElementById("etaCard");
+    if (eta) eta.classList.add("hidden");
+    clearDriverDot();
+  }
+
   function updateTimeline(order) {
     const statuses = ["pending", "assigned", "in_progress", "completed"];
     const currentIndex = statuses.indexOf(order.status);
@@ -122,6 +169,7 @@
       const res = await fetch(API_BASE + "/get-driver-location?" + params.toString(),
         currentToken ? { headers: { Authorization: "Bearer " + currentToken } } : undefined);
       const json = await res.json();
+      if (currentOrder && (isTerminal(currentOrder.status) || hasNoDriver(currentOrder))) return; // no live dot
       if (json.success && json.data && json.data.location) {
         updateDriverMarker(json.data.location.lat, json.data.location.lng);
         if (json.data.driver) {
@@ -164,7 +212,9 @@
   function renderOrder(order) {
     currentOrder = order;
     currentDriverId = order.driver_id || null;
-    showCard("etaCard"); showCard("driverCard"); showCard("orderCard"); showCard("timelineCard");
+    showCard("driverCard"); showCard("orderCard"); showCard("timelineCard");
+    if (isTerminal(order.status)) showFinished(); else showCard("etaCard");
+    if (hasNoDriver(order)) clearDriverDot();
     document.getElementById("detailOrderNum").textContent = order.order_number;
     document.getElementById("detailService").textContent = formatServiceType(order.service_type);
     document.getElementById("detailPickup").textContent = order.pickup_address || "--";
@@ -180,10 +230,7 @@
       document.getElementById("driverName").textContent = t.name;
       document.getElementById("driverVehicle").textContent = t.detail;
     }
-    if (!driverMarker) {
-      const etaUnit = document.getElementById("etaUnit");
-      if (etaUnit) etaUnit.textContent = isTerminal(order.status) ? "" : "Shown once your driver shares their location";
-    }
+    renderEta();
     updateTimeline(order);
   }
 
@@ -238,7 +285,7 @@
     if (!r.order) return { error: r.error };
     renderOrder(r.order);
     readyMap(r.order);
-    await fetchDriverLocation(currentDriverId, r.order.id);
+    if (!isTerminal(r.order.status)) await fetchDriverLocation(currentDriverId, r.order.id);
     if (!isTerminal(r.order.status)) startPolling(); else stopPolling();
     return { ok: true };
   }

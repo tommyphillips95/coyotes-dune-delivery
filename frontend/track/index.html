@@ -45,6 +45,8 @@
             .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 22px; }
         }
         .map-hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 500; background: rgba(16, 32, 46, 0.85); color: #fff; font-size: 0.8rem; padding: 6px 10px; border-radius: 999px; pointer-events: none; white-space: nowrap; }
+        /* h2 for heading order (h1 -> h2), sized like the old h3 */
+        .track-card-title { font-size: 1.17em; margin: 0 0 12px; }
         .hidden { display: none !important; }
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3FB8A6; display: inline-block; }
         .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EADFCC; font-size: 0.88rem; }
@@ -68,7 +70,7 @@
         <div class="track-layout">
             <aside>
                 <div class="track-card">
-                    <h3>Find Your Order</h3>
+                    <h2 class="track-card-title">Find Your Order</h2>
                     <form class="lookup-form" id="lookupForm" novalidate>
                         <label for="lookupOrderNum">Order number</label>
                         <input type="text" id="lookupOrderNum" placeholder="CDD-..." autocapitalize="characters" autocomplete="off" spellcheck="false">
@@ -81,7 +83,7 @@
                 <div class="track-card hidden" id="etaCard">
                     <span class="live-dot"></span> Live Tracking
                     <div class="eta-box">
-                        <div>Estimated Arrival</div>
+                        <div id="etaLabel">Estimated arrival</div>
                         <div class="eta-value" id="etaValue">--</div>
                         <div id="etaUnit">minutes</div>
                     </div>
@@ -106,7 +108,7 @@
             </aside>
             <div class="map-container">
                 <div id="mapLoading">Enter your order details to see the live map.</div>
-                <div class="hidden" id="mapError"><h3>Map unavailable</h3></div>
+                <div class="hidden" id="mapError"><h2 class="track-card-title">Map unavailable</h2></div>
                 <div id="map" class="hidden"></div>
                 <div class="map-hint hidden" id="mapHint">Use two fingers to move the map</div>
             </div>
