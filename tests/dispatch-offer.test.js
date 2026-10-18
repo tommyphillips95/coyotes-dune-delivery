@@ -40,7 +40,8 @@ function order(over) {
   }, over);
 }
 function driver(id, cls, over) {
-  return Object.assign({ id, first_name: id, last_name: "D", phone: null, vehicle_class: cls, online: true, status: "approved" }, over);
+  // Verified by default (admin checked the vehicle); tests for unverified pass { vehicle_class_verified_at: null }.
+  return Object.assign({ id, first_name: id, last_name: "D", phone: null, vehicle_class: cls, vehicle_class_verified_at: "2026-10-01T15:00:00Z", online: true, status: "approved" }, over);
 }
 function loc(driverId, lat, lng, ts) {
   return { driver_id: driverId, lat, lng, timestamp: ts || "2026-10-10T12:00:00Z" };

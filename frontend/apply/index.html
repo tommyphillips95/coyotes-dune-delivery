@@ -200,6 +200,18 @@
                             </div>
                         </div>
                         <div class="form-group">
+                            <label for="vehicleClass">Vehicle Type <span class="required">*</span></label>
+                            <select id="vehicleClass" name="vehicleClass" required aria-describedby="vehicleClassHelp">
+                                <option value="" disabled selected>Select vehicle type</option>
+                                <option value="2wd">Regular car, truck or van (2-wheel drive)</option>
+                                <option value="awd">All-wheel drive (AWD) car or SUV</option>
+                                <option value="4x4">4x4 truck or SUV (4-wheel drive)</option>
+                                <option value="utv">UTV / side-by-side</option>
+                            </select>
+                            <p class="form-hint" id="vehicleClassHelp">Beach and island orders need a 4x4, AWD or UTV. We check your vehicle before you get beach orders; until then you only get regular-road orders.</p>
+                            <span class="error-message">Please choose your vehicle type.</span>
+                        </div>
+                        <div class="form-group">
                             <label for="licensePlate">License Plate <span class="required">*</span></label>
                             <input type="text" id="licensePlate" name="licensePlate" required placeholder="ABC-1234">
                             <span class="error-message">Please enter the license plate.</span>

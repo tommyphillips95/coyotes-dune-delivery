@@ -6,6 +6,9 @@
  *   POST /api/admin/login                      -> login-admin
  *   GET  /api/admin/applications               -> list applications
  *   PUT  /api/admin/applications/:id           -> status, notes, beach permit
+ *   PUT  /api/admin/applications/:id/vehicle   -> set + verify vehicle class
+ *                                                 { vehicle_class, verified } (logged
+ *                                                 in notes; rules in _vehicle.js)
  *   POST /api/admin/applications/bulk          -> bulk status
  *   GET  /api/admin/orders                     -> recent orders + weather_hold, payment
  *                                                 label, "needs attention" flags, history
@@ -28,6 +31,7 @@ const loginAdmin = require("./login-admin");
 const orderAttention = require("./_order-attention");
 const orderAdmin = require("./_order-admin");
 const { sendSMS, logSMS } = require("./dispatch");
+const vehicle = require("./_vehicle");
 
 const ORDERS_LIMIT = 50;
 const LOGS_LIMIT = 1000; // newest logs across the listed orders
@@ -72,7 +76,51 @@ function shapeApplication(a) {
     admin_notes: a.notes,
     beach_permit_ok: a.beach_permit_ok === true,
     beach_access_notes: a.beach_access_notes || "",
+    vehicle_class: vehicle.classOf(a),
+    vehicle_class_label: vehicle.LABELS[vehicle.classOf(a)],
+    vehicle_class_reported: a.vehicle_class_reported || null,
+    vehicle_verified: vehicle.isVerified(a),
+    vehicle_verification_ready: vehicleColumnsPresent(a),
   });
+}
+
+/** select("*") returns every column, so a missing key means the column isn't there yet. */
+function vehicleColumnsPresent(row) {
+  return !!row && vehicle.VERIFY_COLS.every((c) => Object.prototype.hasOwnProperty.call(row, c));
+}
+
+function chicagoStamp(iso) {
+  return new Date(iso).toLocaleString("en-US", { timeZone: "America/Chicago", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " CT";
+}
+
+/** PUT /applications/:id/vehicle: admin sets the class and says whether they checked it. */
+async function setVehicle(supabase, id, body, who, headers) {
+  const cls = vehicle.normalizeClass(body.vehicle_class);
+  if (!cls) return json(headers, 400, { error: "vehicle_class must be one of: " + vehicle.VEHICLE_CLASSES.join(", ") });
+  const verified = typeof body.verified === "boolean" ? body.verified : null;
+  if (verified === null) return json(headers, 400, { error: "verified must be true or false" });
+  const notReady = () => json(headers, 409, { error: vehicle.SETUP_MESSAGE + " Nothing was saved.", code: "vehicle_columns_missing" });
+
+  const { data: cur, error: cErr } = await supabase.from("applications").select("*").eq("id", id).maybeSingle();
+  if (cErr) throw cErr;
+  if (!cur) return json(headers, 404, { error: "Application not found" });
+  if (!vehicleColumnsPresent(cur)) return notReady();
+
+  const now = new Date().toISOString();
+  const line = `[${chicagoStamp(now)}] Vehicle class ${vehicle.classOf(cur)} → ${cls}, ${verified ? "verified" : "marked not verified"} by admin ${who}`
+    + (cur.vehicle_class_reported ? ` (driver reported ${cur.vehicle_class_reported})` : "") + ".";
+  const patch = {
+    vehicle_class: cls,
+    vehicle_class_verified_at: verified ? now : null,
+    vehicle_class_verified_by: verified ? String(who).slice(0, 120) : null,
+    notes: (cur.notes ? cur.notes + "\n" : "") + line,
+    updated_at: now,
+  };
+  const { data, error } = await supabase.from("applications").update(patch).eq("id", id).select().maybeSingle();
+  if (error) { if (vehicle.isMissingVehicleColumn(error)) return notReady(); throw error; }
+  if (!data) return json(headers, 404, { error: "Application not found" });
+  console.log("[admin] application " + id + ": " + line);
+  return json(headers, 200, { success: true, log: line, data: shapeApplication(data) });
 }
 
 /** Whitelist admin-editable application fields. Returns { patch } or { error }. */
@@ -102,10 +150,14 @@ function buildApplicationPatch(body) {
 
 const DRIVER_COLS = "id, first_name, last_name, status, vehicle_class, online, beach_permit_ok";
 
+/** Approved drivers with vehicle verification (if the columns exist yet). Array + .verificationReady */
 async function approvedDrivers(supabase) {
-  const { data, error } = await supabase.from("applications").select(DRIVER_COLS).eq("status", "approved");
+  const { data, error, verificationReady } = await vehicle.selectWithVerification(
+    (cols) => supabase.from("applications").select(cols).eq("status", "approved"), DRIVER_COLS, "admin");
   if (error) throw error;
-  return data || [];
+  const list = data || [];
+  list.verificationReady = verificationReady;
+  return list;
 }
 
 /** Text the driver about a dispatcher assignment. sendSMS is a no-op without Twilio env. */
@@ -162,7 +214,9 @@ exports.handler = async (event) => {
       if (parts.length === 1 && method === "GET") {
         const { data, error } = await supabase.from("applications").select("*").order("created_at", { ascending: false });
         if (error) throw error;
-        return json(headers, 200, { applications: (data || []).map(shapeApplication) });
+        const applications = (data || []).map(shapeApplication);
+        const ready = applications.every((a) => a.vehicle_verification_ready);
+        return json(headers, 200, { applications, vehicleSetupMessage: ready ? null : vehicle.SETUP_MESSAGE });
       }
       if (parts[1] === "bulk" && method === "POST") {
         const ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
@@ -181,6 +235,9 @@ exports.handler = async (event) => {
         if (error) throw error;
         if (!data) return json(headers, 404, { error: "Application not found" });
         return json(headers, 200, { success: true, data: shapeApplication(data) });
+      }
+      if (parts.length === 3 && parts[2] === "vehicle" && method === "PUT") {
+        return setVehicle(supabase, parts[1], body, (admin && admin.user) || "admin", headers);
       }
       if (parts.length === 2 && method === "DELETE") {
         return json(headers, 405, { error: "Deleting applications is disabled. Set status to rejected instead." });
@@ -223,7 +280,8 @@ exports.handler = async (event) => {
               .map((l) => ({ status: l.status, note: l.note, by: l.changed_by, at: l.created_at })),
           });
         });
-        return json(headers, 200, { orders: shaped, logsError, weather: weatherState() });
+        return json(headers, 200, { orders: shaped, logsError, weather: weatherState(),
+          vehicleSetupMessage: drivers.verificationReady ? null : vehicle.SETUP_MESSAGE });
       }
       if (parts.length === 2 && method === "PUT") {
         const actor = (admin && admin.user) || "admin";
@@ -261,7 +319,10 @@ exports.handler = async (event) => {
 
     if (parts[0] === "drivers" && parts.length === 1 && method === "GET") {
       const drivers = await approvedDrivers(db());
-      return json(headers, 200, { drivers: drivers.map((d) => ({ id: d.id, name: orderAdmin.driverName(d), vehicle_class: d.vehicle_class || "2wd", online: d.online === true, beach_permit_ok: d.beach_permit_ok === true })) });
+      return json(headers, 200, {
+        drivers: drivers.map((d) => ({ id: d.id, name: orderAdmin.driverName(d), vehicle_class: vehicle.classOf(d), vehicle_verified: vehicle.isVerified(d), online: d.online === true, beach_permit_ok: d.beach_permit_ok === true })),
+        vehicleSetupMessage: drivers.verificationReady ? null : vehicle.SETUP_MESSAGE,
+      });
     }
 
     return json(headers, 404, { error: "Not found" });

@@ -322,6 +322,7 @@
                     <div class="detail-field"><label>License Plate</label><span>${esc(app.vehicle_plate || '—')}</span></div>
                 </div>
             </div>
+            ${vehicleClassHTML(app)}
             <div class="detail-section">
                 <h4>Insurance</h4>
                 <div class="detail-grid">
@@ -347,6 +348,72 @@
                 <textarea id="admin-notes" class="admin-notes" placeholder="Add internal notes...">${esc(app.admin_notes || '')}</textarea>
             </div>
         `;
+    }
+
+    /* ===== Vehicle class: set + verify (beach / 4x4 eligibility) ===== */
+    const VEHICLE_CLASS_LABELS = {
+        '2wd': 'Regular car, truck or van (2-wheel drive)',
+        awd: 'All-wheel drive (AWD) car or SUV',
+        '4x4': '4x4 truck or SUV (4-wheel drive)',
+        utv: 'UTV / side-by-side',
+    };
+
+    function fmtWhen(iso) {
+        if (!iso) return '';
+        try { return new Date(iso).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' CT'; }
+        catch (e) { return iso; }
+    }
+
+    function vehicleClassHTML(app) {
+        const cls = app.vehicle_class || '2wd';
+        const reported = app.vehicle_class_reported;
+        const ready = app.vehicle_verification_ready !== false;
+        const status = !ready
+            ? '<p class="vehicle-status vehicle-unverified" role="status">Vehicle verification isn\'t set up yet: run <code>schema/vehicle_verification.sql</code> (LAUNCH.md, SQL run order step 7). Until then no driver counts as verified for beach (4x4) orders.</p>'
+            : app.vehicle_verified
+                ? `<p class="vehicle-status vehicle-verified">Verified: ${esc(VEHICLE_CLASS_LABELS[cls] || cls)}, by ${esc(app.vehicle_class_verified_by || 'admin')} on ${esc(fmtWhen(app.vehicle_class_verified_at))}.</p>`
+                : `<p class="vehicle-status vehicle-unverified">Not verified. This driver won't get beach (4x4) orders until you check the vehicle and mark it verified.</p>`;
+        const options = Object.keys(VEHICLE_CLASS_LABELS).map(k =>
+            `<option value="${k}"${k === cls ? ' selected' : ''}>${esc(VEHICLE_CLASS_LABELS[k])}</option>`).join('');
+        return `
+            <div class="detail-section" data-vehicle-section>
+                <h4>Vehicle Class (dispatch)</h4>
+                <p class="detail-paragraph">Driver picked: <strong>${esc(reported ? (VEHICLE_CLASS_LABELS[reported] || reported) : 'not recorded')}</strong>. Beach / island orders need a verified 4x4, AWD or UTV.</p>
+                ${status}
+                <div class="vehicle-controls">
+                    <label for="vehicle-class-select">Vehicle class</label>
+                    <select id="vehicle-class-select" class="filter-select"${ready ? '' : ' disabled'}>${options}</select>
+                    <button type="button" class="btn btn-success" data-vehicle-verify="true"${ready ? '' : ' disabled'}>Save &amp; mark verified</button>
+                    <button type="button" class="btn btn-secondary" data-vehicle-verify="false"${ready ? '' : ' disabled'}>Save as not verified</button>
+                </div>
+            </div>`;
+    }
+
+    async function onVehicleClick(e) {
+        const btn = e.target.closest('button[data-vehicle-verify]');
+        if (!btn || !currentDetailId) return;
+        const sel = document.getElementById('vehicle-class-select');
+        const verified = btn.dataset.vehicleVerify === 'true';
+        const id = currentDetailId;
+        btn.disabled = true;
+        try {
+            const res = await api('PUT', `/applications/${id}/vehicle`, { vehicle_class: sel.value, verified });
+            const i = currentApps.findIndex(a => String(a.id) === id);
+            if (i >= 0 && res.data) currentApps[i] = res.data;
+            const app = currentApps[i];
+            if (app && currentDetailId === id) {
+                const notesEl = document.getElementById('admin-notes');
+                if (notesEl) notesEl.value = app.admin_notes || '';
+                const section = modalBody.querySelector('[data-vehicle-section]');
+                if (section) section.outerHTML = vehicleClassHTML(app);
+            }
+            showToast(verified ? 'Vehicle class verified.' : 'Vehicle class saved as not verified.', 'success');
+            loadOrders();
+        } catch (err) {
+            showToast(err.message || 'Could not save vehicle class', 'error');
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     function closeDetail() {
@@ -628,7 +695,7 @@
         if (!opts.length) return `${name}<small class="driver-hint">No approved drivers yet.</small>`;
         const selId = `drv-${esc(o.id)}`;
         const options = opts.map(d => {
-            const bits = [d.name, d.vehicle_class, d.online ? 'online' : 'offline'];
+            const bits = [d.name, d.vehicle_class + (d.vehicle_verified ? ' (verified)' : ' (unverified)'), d.online ? 'online' : 'offline'];
             if (!d.eligible) bits.push(d.reason || 'not eligible');
             const current = String(d.id) === String(o.driver_id);
             return `<option value="${esc(d.id)}"${d.eligible && !current ? '' : ' disabled'}>${esc(bits.join(' · '))}${current ? ' (current)' : ''}</option>`;
@@ -679,6 +746,7 @@
             renderOrders(currentOrders);
             renderWeather(data.weather);
             if (data.logsError) showToast('Order history could not be loaded; payment/dispatch flags may be missing.', 'warning');
+            if (data.vehicleSetupMessage) showToast(data.vehicleSetupMessage, 'warning');
         } catch (err) {
             console.error(err);
             ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">Could not load orders.</td></tr>`;
@@ -777,6 +845,7 @@
         modalClose.addEventListener('click', closeDetail);
         modalCancel.addEventListener('click', closeDetail);
         modalSave.addEventListener('click', saveDetail);
+        modalBody.addEventListener('click', onVehicleClick);
         detailModal.addEventListener('click', (e) => { if (e.target === detailModal) closeDetail(); });
 
         deleteModalClose.addEventListener('click', closeDelete);

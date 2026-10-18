@@ -22,7 +22,7 @@ test("section exists, is a checkbox list, and covers every area", () => {
 });
 
 test("links to existing sections resolve, and Stripe steps aren't duplicated", () => {
-  const anchors = new Set((md.match(/^#{1,6} .+$/gm) || []).map((h) => h.replace(/^#+ /, "").toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-")));
+  const anchors = new Set((md.match(/^#{1,6} .+$/gm) || []).map((h) => h.replace(/^#+ /, "").toLowerCase().replace(/[^a-z0-9 _-]/g, "").trim().replace(/ /g, "-")));
   const links = [...section.matchAll(/\]\(#([^)]+)\)/g)].map((m) => m[1]);
   assert(links.length >= 2, "references the Stripe test-mode checklist");
   links.forEach((l) => assert(anchors.has(l), "anchor #" + l + " exists"));

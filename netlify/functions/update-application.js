@@ -55,6 +55,29 @@ exports.handler = async (event) => {
       if (updateData[key] === undefined) delete updateData[key];
     });
 
+    // A verified vehicle class belongs to the vehicle an admin checked. If the
+    // driver changes make/model/year/plate, the check no longer applies:
+    // clear it so beach (4x4) orders wait for a new admin check (_vehicle.js).
+    const { data: cur, error: curErr } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('id', id)
+      .eq('email', email)
+      .maybeSingle();
+    if (curErr) throw curErr;
+    if (!cur) {
+      return { statusCode: 404, headers, body: JSON.stringify({ error: 'Application not found' }) };
+    }
+    const VEHICLE_FIELDS = ['vehicle_make', 'vehicle_model', 'vehicle_year', 'license_plate'];
+    const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
+    const vehicleChanged = VEHICLE_FIELDS.some((k) => updateData[k] !== undefined && norm(updateData[k]) !== norm(cur[k]));
+    if (vehicleChanged && cur.vehicle_class_verified_at) {
+      updateData.vehicle_class_verified_at = null;
+      updateData.vehicle_class_verified_by = null;
+      updateData.notes = (cur.notes ? cur.notes + '\n' : '') + '[' + new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })
+        + ' CT] Driver changed vehicle details; vehicle class verification cleared.';
+    }
+
     const { data, error } = await supabase
       .from('applications')
       .update(updateData)

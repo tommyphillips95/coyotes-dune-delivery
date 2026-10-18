@@ -996,3 +996,13 @@ body {
     .order-row.needs-attention td:first-child, .order-detail-row.needs-attention td { box-shadow: none; }
     #orders-table tr.order-row.needs-attention, #orders-table tr.order-detail-row.needs-attention { border-left: 4px solid #f59e0b; }
 }
+
+/* Vehicle class verification (application detail) */
+.vehicle-status { margin: 0 0 10px; padding: 8px 10px; border-radius: 6px; font-size: 0.9rem; }
+.vehicle-verified { background: #dcfce7; color: #14532d; }
+.vehicle-unverified { background: #fef3c7; color: #78350f; }
+.vehicle-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vehicle-controls label { font-weight: 600; font-size: 0.9rem; }
+.vehicle-controls select, .vehicle-controls .btn { min-height: 44px; }
+.vehicle-controls select { flex: 1 1 220px; min-width: 0; max-width: 100%; }
+.vehicle-controls .btn:disabled, .vehicle-controls select:disabled { opacity: 0.55; cursor: not-allowed; }

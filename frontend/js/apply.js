@@ -108,6 +108,7 @@
             return year >= 2000 && year <= 2030;
         },
         vehicleColor: (v) => v.trim().length >= 1,
+        vehicleClass: (v) => ['2wd', 'awd', '4x4', 'utv'].includes(v),
         licensePlate: (v) => v.trim().length >= 2,
         insuranceProvider: (v) => v.trim().length >= 1,
         policyNumber: (v) => v.trim().length >= 3,
@@ -302,7 +303,7 @@
         state: 'State', zip: 'ZIP', emergencyName: 'Emergency Contact', emergencyPhone: 'Emergency Phone',
         licenseNumber: 'License Number', licenseState: 'License State', licenseExpiry: 'License Expiry',
         vehicleMake: 'Vehicle Make', vehicleModel: 'Vehicle Model', vehicleYear: 'Year',
-        vehicleColor: 'Color', licensePlate: 'License Plate',
+        vehicleColor: 'Color', vehicleClass: 'Vehicle Type', licensePlate: 'License Plate',
         insuranceProvider: 'Insurance Provider', policyNumber: 'Policy Number', policyExpiry: 'Policy Expiry',
     };
 
@@ -311,7 +312,7 @@
         let html = '';
         const sections = [
             { title: 'Personal Info', fields: ['firstName', 'lastName', 'email', 'phone', 'dob', 'address', 'city', 'state', 'zip', 'emergencyName', 'emergencyPhone'] },
-            { title: 'Vehicle & License', fields: ['licenseNumber', 'licenseState', 'licenseExpiry', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehicleColor', 'licensePlate'] },
+            { title: 'Vehicle & License', fields: ['licenseNumber', 'licenseState', 'licenseExpiry', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehicleColor', 'vehicleClass', 'licensePlate'] },
             { title: 'Insurance', fields: ['insuranceProvider', 'policyNumber', 'policyExpiry'] },
         ];
 
@@ -321,6 +322,7 @@
                 const input = document.querySelector('[name="' + field + '"]');
                 if (!input) return;
                 let value = input.value;
+                if (input.tagName === 'SELECT' && input.selectedIndex > 0) value = input.options[input.selectedIndex].text;
                 html += '<tr><td>' + (LABEL_MAP[field] || field) + '</td><td>' + (value || '—') + '</td></tr>';
             });
         });
