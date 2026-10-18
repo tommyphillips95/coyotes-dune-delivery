@@ -203,4 +203,24 @@ test("order.js uses the inline errors, not alert(), on checkout failure", () => 
   assert.ok(/submitting = false/.test(submit), "failure re-enables the button");
 });
 
+// ── Track an Existing Order box: inline messages, no alert() ──
+test("trackErrorMessage: missing fields, offline, server error, not found", () => {
+  assert.ok(/order number and the phone number/.test(C.trackErrorMessage("missing")));
+  assert.ok(/signal/.test(C.trackErrorMessage({ ok: false, status: 0, error: "Failed to fetch" })));
+  assert.ok(/right now/.test(C.trackErrorMessage({ ok: false, status: 500 })));
+  const nf = C.trackErrorMessage({ ok: false, status: 401, error: "Invalid order number or phone" });
+  assert.ok(/couldn't find that order/.test(nf), nf);
+  assert.ok(/couldn't find that order/.test(C.trackErrorMessage({ ok: true, status: 404 })));
+});
+
+test("track box uses an inline status message, not alert()", () => {
+  const html = read("frontend/order/index.html");
+  assert.ok(/id="trackMessage"[^>]*role="status"[^>]*hidden/.test(html));
+  const src = read("frontend/js/order.js");
+  const track = src.slice(src.indexOf("async function trackOrder"), src.indexOf("function displayTrackingResult"));
+  assert.ok(track.length > 0);
+  assert.ok(!/alert\(/.test(track), "trackOrder must not alert()");
+  assert.ok(/aria-invalid/.test(track));
+});
+
 console.log(`coastal: ${passed} passed`);

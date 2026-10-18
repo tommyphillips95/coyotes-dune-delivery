@@ -202,6 +202,18 @@
     return generic;
   }
 
+  // Inline message for the "Track an Existing Order" box on /order/.
+  // kind: "missing" (a field is empty) or a CoyoteAPI failure result.
+  function trackErrorMessage(kind) {
+    if (kind === "missing") return "Enter both your order number and the phone number used for the order.";
+    var status = Number(kind && kind.status) || 0;
+    if (kind && kind.ok === false && status === 0) {
+      return "We couldn't reach Coyote's servers. Check your signal and try again.";
+    }
+    if (status >= 500) return "We couldn't look up your order right now. Please try again in a moment.";
+    return "We couldn't find that order. Check the order number and phone number.";
+  }
+
   var TERMINAL = ["completed", "cancelled", "delivered"];
   function isTerminalStatus(status) {
     return TERMINAL.indexOf(String(status || "").toLowerCase()) !== -1;
@@ -315,6 +327,7 @@
   };
 
   api.orderErrorMessage = orderErrorMessage;
+  api.trackErrorMessage = trackErrorMessage;
   root.CoyoteCoastal = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
