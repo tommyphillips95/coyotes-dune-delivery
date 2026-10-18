@@ -428,7 +428,7 @@
         updateServiceType();
         document.querySelectorAll('input[name="serviceType"]').forEach(radio => radio.addEventListener('change', updateServiceType));
         const swapBtn = document.getElementById('swapLocations');
-        if (swapBtn) swapBtn.addEventListener('click', swapLocations);
+        if (swapBtn) swapBtn.addEventListener('click', () => { swapLocations(); updateLiveQuote(); });
         document.querySelectorAll('.next-step').forEach(btn => btn.addEventListener('click', () => goToStep(parseInt(btn.dataset.next, 10))));
         document.querySelectorAll('.prev-step').forEach(btn => btn.addEventListener('click', () => goToStep(parseInt(btn.dataset.prev, 10))));
         setupCardSelection('#rideDetails', 'passengers');

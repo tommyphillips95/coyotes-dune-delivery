@@ -378,7 +378,10 @@
             .service-selector { grid-template-columns: 1fr; }
             .location-group { flex-direction: column; gap: 0; }
             .location-icon { display: none; }
-            .route-connector { display: none; }
+            /* Swap stays available on phones: centered, full 44px tap target. */
+            .route-connector { justify-content: center; padding: 0 0 14px; }
+            .route-line { display: none; }
+            .route-swap { min-height: 44px; min-width: 44px; padding: 10px 18px; font-size: 0.9rem; }
             .datetime-row { grid-template-columns: 1fr; }
             .detail-cards { grid-template-columns: repeat(2, 1fr); }
             .contact-grid { grid-template-columns: 1fr; }
@@ -389,7 +392,7 @@
             /* iOS Safari zooms the page on focus when a field is under 16px. */
             .form-group input, .form-group select, .form-group textarea,
             .tracking-form input { font-size: 16px; }
-            /* 44px minimum tap targets for the small controls (swap is hidden on mobile). */
+            /* 44px minimum tap targets for the small controls. */
             .tracking-form .btn { min-height: 44px; }
             .detail-card { min-height: 48px; display: flex; align-items: center; justify-content: center; }
         }
@@ -553,8 +556,8 @@
 
                         <div class="route-connector">
                             <div class="route-line"></div>
-                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff" aria-label="Swap pickup and dropoff">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="17 1 21 5 17 9"/>
                                     <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
                                     <polyline points="7 23 3 19 7 15"/>
