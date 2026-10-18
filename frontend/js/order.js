@@ -311,6 +311,23 @@
         box.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
+    // create-order names the bad route field (town/ZIP checks); highlight it on
+    // the Route step so "go back and fix" lands on the right input.
+    const SERVER_FIELDS = { pickup_city: 'pickupCity', pickup_zip: 'pickupZip', dropoff_city: 'dropoffCity', dropoff_zip: 'dropoffZip' };
+    function markServerField(result) {
+        const f = result && result.data && result.data.field;
+        const id = Object.prototype.hasOwnProperty.call(SERVER_FIELDS, f) ? SERVER_FIELDS[f] : null;
+        const el = id && document.getElementById(id);
+        if (!el) return;
+        // Not showError(): its text ("Please enter a city.") would be wrong here;
+        // the server's message is shown in the submit error box.
+        el.classList.add('error');
+        el.setAttribute('aria-invalid', 'true');
+        const clear = () => { el.classList.remove('error'); el.setAttribute('aria-invalid', 'false'); };
+        el.addEventListener('change', clear, { once: true });
+        el.addEventListener('input', clear, { once: true });
+    }
+
     function clearSubmitError() {
         const box = document.getElementById('orderSubmitError');
         if (box) { box.textContent = ''; box.hidden = true; }
@@ -408,6 +425,7 @@
                 if (typeof trackConversion === 'function') trackConversion('purchase', { value: estimatedTotal, currency: 'USD', service_type: serviceType });
                 if (typeof logAnalyticsEvent === 'function') logAnalyticsEvent('order_submitted', { category: 'order', service_type: serviceType, estimated_price: estimatedTotal, order_number: result.data.orderNumber });
             } else {
+                markServerField(result);
                 showSubmitError(orderErrorMessage(result));
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
