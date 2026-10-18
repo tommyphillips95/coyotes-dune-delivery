@@ -1,11 +1,12 @@
 /** Lock CORS to the live domain. Set SITE_ORIGIN in Netlify env. */
+const { DEFAULT_ORIGIN } = require("./_site-url");
 function allowedOrigin(event) {
   const configured = (process.env.SITE_ORIGIN || "").split(",").map((s) => s.trim()).filter(Boolean);
   const requestOrigin = (event.headers && (event.headers.origin || event.headers.Origin)) || "";
   if (configured.includes(requestOrigin)) return requestOrigin;
   if (configured.length) return configured[0];
   if (/localhost|127\.0\.0\.1/.test(requestOrigin)) return requestOrigin;
-  return "https://coyote-dune-delivery.netlify.app";
+  return DEFAULT_ORIGIN;
 }
 
 function headers(event, extra) {

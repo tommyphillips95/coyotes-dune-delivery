@@ -749,7 +749,7 @@ The app automatically sends SMS notifications to customers at key points in the 
 | Event | Trigger | Message |
 |-------|---------|---------|
 | **Order Created** | `create-order.js` | "Your order [ORDER-123] has been received. We'll assign a driver shortly." |
-| **Driver Assigned** | `update-order.js` (status → `assigned`) | "Your driver [Name] is on the way! Track: [URL]" |
+| **Driver Assigned** | `update-order.js` (status → `assigned`) | "Your driver [Name] is on the way! Track: [URL]" — URL is `SITE_ORIGIN/track/?order=CDD-…` from `netlify/functions/_site-url.js` |
 | **Order Completed** | `update-order.js` (status → `completed`) | "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!" |
 | **Driver Alert** | `driver-sms-alert.js` (manual/admin) | "New order available! Log in to accept: [driver portal URL]" |
 
