@@ -10,6 +10,70 @@ const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { getStripe, resolveChargeAmountCents } = require("./_stripe");
 
+/**
+ * Stripe customer for this payment, reused per OUR customer record, never
+ * looked up by the typed email.
+ *
+ * The email on the checkout form is unverified. Picking a Stripe customer by
+ * email (in our DB or via Stripe search) would let anyone type someone else's
+ * address and attach a payment to that person's Stripe customer. So:
+ *   - the customer is the one create-order already attached to this order
+ *     (orders.customer_id, the oldest phone match since #51);
+ *   - reuse customers.stripe_customer_id when it is set and still exists;
+ *   - otherwise create one and save it on that one row (by id, never by email).
+ * The PaymentIntent never uses a saved payment method: there is no
+ * setup_future_usage, payment_method, off_session or ephemeral key, and the
+ * browser confirms with the card it just typed. Reusing a Stripe customer
+ * therefore cannot expose or charge anyone's saved cards.
+ */
+function isMissingStripeCustomer(err) {
+  return !!err && (err.code === "resource_missing" || err.statusCode === 404);
+}
+
+async function resolveStripeCustomer(stripe, supabase, order, customerEmail) {
+  let row = null;
+  if (order.customer_id) {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, stripe_customer_id")
+      .eq("id", order.customer_id)
+      .maybeSingle();
+    if (error) throw error;
+    row = data || null;
+  }
+
+  const storedId = row && row.stripe_customer_id;
+  if (storedId) {
+    try {
+      const existing = await stripe.customers.retrieve(storedId);
+      if (existing && !existing.deleted) return existing.id;
+    } catch (err) {
+      if (!isMissingStripeCustomer(err)) throw err;
+    }
+    console.warn("[create-payment-intent] stored Stripe customer is deleted or missing; creating a new one");
+  }
+
+  const params = {
+    email: customerEmail,
+    metadata: { order_id: order.id, order_number: order.order_number },
+  };
+  if (row) params.metadata.customer_id = row.id;
+  // Two tabs paying at once for the same customer get the same Stripe
+  // customer back instead of two. Including the stale id lets a replacement
+  // be created after a deletion.
+  const options = row ? { idempotencyKey: `cdd-customer-${row.id}-${storedId || "new"}` } : undefined;
+  const created = await stripe.customers.create(params, options);
+
+  if (row) {
+    const { error: saveError } = await supabase
+      .from("customers")
+      .update({ stripe_customer_id: created.id, updated_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (saveError) console.error("[create-payment-intent] could not save stripe_customer_id:", saveError.message);
+  }
+  return created.id;
+}
+
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
 
@@ -54,7 +118,7 @@ exports.handler = async (event) => {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, order_number, status, estimated_price, stripe_payment_intent_id, payment_status")
+      .select("id, order_number, status, estimated_price, stripe_payment_intent_id, payment_status, customer_id")
       .eq("id", orderId)
       .single();
 
@@ -94,23 +158,7 @@ exports.handler = async (event) => {
       };
     }
 
-    let customerId;
-    const { data: existingCustomer } = await supabase
-      .from("customers")
-      .select("stripe_customer_id")
-      .eq("email", customerEmail)
-      .maybeSingle();
-
-    if (existingCustomer && existingCustomer.stripe_customer_id) {
-      customerId = existingCustomer.stripe_customer_id;
-    } else {
-      const customer = await stripe.customers.create({
-        email: customerEmail,
-        metadata: { order_id: orderId, order_number: order.order_number },
-      });
-      customerId = customer.id;
-      await supabase.from("customers").update({ stripe_customer_id: customerId }).eq("email", customerEmail);
-    }
+    const customerId = await resolveStripeCustomer(stripe, supabase, order, customerEmail);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
@@ -166,3 +214,5 @@ exports.handler = async (event) => {
     return serverError(headers, err, "Failed to create payment intent", "create-payment-intent");
   }
 };
+
+exports._resolveStripeCustomer = resolveStripeCustomer;
