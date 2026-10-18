@@ -116,7 +116,9 @@ test("repo: the wrong netlify host and /order/?track= links don't come back (git
     text.split("\n").forEach((line, i) => {
       const stripped = line.replace(/https?:\/\/(www\.)?github\.com\/\S*/g, "");
       if (stripped.includes(WRONG_HOST)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
-      if (stripped.includes(OLD_TRACK) && f !== "netlify.toml" && !/\/_site-url\.js$/.test(f)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
+      // Old link format: banned where links are built or shown (functions,
+      // frontend). Docs/tests may name it (e.g. the LAUNCH smoke test checks the 301).
+      if (stripped.includes(OLD_TRACK) && /^(netlify\/functions|frontend)\//.test(f) && !/\/_site-url\.js$/.test(f)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
     });
   }
   assert.deepStrictEqual(bad, []);
