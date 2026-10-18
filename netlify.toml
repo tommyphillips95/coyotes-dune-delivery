@@ -87,6 +87,13 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
+# Self-hosted fonts: file names carry the font version (inter-v20-…), so they
+# can be cached for a year.
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 # Local development only; production build settings above are unchanged.
 [dev]
   framework = "#static"
