@@ -380,6 +380,16 @@
             margin: 8px 0 0;
         }
 
+        .track-message {
+            margin: 12px 0 0;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(196, 90, 62, 0.08);
+            color: #9E3F27;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
         .order-submit-error {
             margin-top: 16px;
             padding: 12px 14px;
@@ -809,6 +819,7 @@
                         <input type="tel" id="trackPhone" placeholder="Phone number">
                         <button class="btn btn-secondary" id="trackBtn">Track Order</button>
                     </div>
+                    <p class="track-message" id="trackMessage" role="status" aria-live="polite" hidden></p>
                     <div class="tracking-result" id="trackingResult">
                         <div class="tracking-result-header">
                             <h4 id="trackingOrderNum">Order #CDD-XXX</h4>

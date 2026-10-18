@@ -331,17 +331,42 @@
     const trackOrderNumber = document.getElementById('trackOrderNumber');
     if (trackOrderNumber) trackOrderNumber.addEventListener('keydown', e => { if (e.key === 'Enter') trackOrder(); });
 
+    function trackMessage(text) {
+        const box = document.getElementById('trackMessage');
+        if (!box) { if (text) alert(text); return; }
+        box.textContent = text || '';
+        box.hidden = !text;
+    }
+
+    function trackErrorMessage(kind) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.trackErrorMessage === 'function') return C.trackErrorMessage(kind);
+        return kind === 'missing'
+            ? 'Enter both your order number and the phone number used for the order.'
+            : "We couldn't find that order. Check the order number and phone number.";
+    }
+
     async function trackOrder() {
-        const orderNum = document.getElementById('trackOrderNumber').value.trim().toUpperCase();
-        const phone = document.getElementById('trackPhone').value.trim();
-        if (!orderNum || !phone) { alert('Please enter both order number and phone number'); return; }
+        const numEl = document.getElementById('trackOrderNumber');
+        const phoneEl = document.getElementById('trackPhone');
+        const orderNum = numEl.value.trim().toUpperCase();
+        const phone = phoneEl.value.trim();
+        numEl.setAttribute('aria-invalid', orderNum ? 'false' : 'true');
+        phoneEl.setAttribute('aria-invalid', phone ? 'false' : 'true');
+        if (!orderNum || !phone) {
+            trackMessage(trackErrorMessage('missing'));
+            (orderNum ? phoneEl : numEl).focus();
+            return;
+        }
+        trackMessage('');
+        document.getElementById('trackingResult').classList.remove('active');
         const btn = document.getElementById('trackBtn');
         btn.disabled = true;
         btn.textContent = 'Tracking...';
         try {
             const auth = await CoyoteAPI.post('/api/get-orders', { order_number: orderNum, phone: phone });
             if (!auth.ok || !auth.data || !auth.data.token) {
-                alert('Order not found. Please check your order number and phone number.');
+                trackMessage(trackErrorMessage(auth));
                 return;
             }
             const result = await CoyoteAPI.request('/api/get-orders', {
@@ -352,11 +377,11 @@
                 const order = Array.isArray(result.data.data) ? result.data.data[0] : result.data.data;
                 displayTrackingResult(order);
             } else {
-                alert('Order not found. Please check your order number and phone number.');
+                trackMessage(trackErrorMessage(result.ok ? { ok: true, status: 404 } : result));
             }
         } catch (err) {
             console.error('Tracking failed:', err);
-            alert('Unable to track order right now. Please try again.');
+            trackMessage(trackErrorMessage({ ok: false, status: 500 }));
         } finally {
             btn.disabled = false;
             btn.textContent = 'Track Order';
