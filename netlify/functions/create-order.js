@@ -6,6 +6,7 @@
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
+const { phoneKey, samePhone, phoneVariants } = require("./_phone");
 const { priceQuote } = require("./zones");
 const { issueTrackingToken } = require("./_auth");
 const { weatherShutdownActive, weatherShutdownPayload } = require("./_weather");
@@ -176,6 +177,54 @@ async function replayResponse(supabase, headers, order, body) {
   };
 }
 
+/**
+ * Reuse a customer by phone without ever 500-ing on duplicates.
+ * customers.phone is not unique and is stored as typed, so several rows can
+ * share one number. Match by digits (same rule as the track lookup) and take
+ * the oldest row (created_at, then id) so every order lands on the same one.
+ * Uses customers.phone_normalized when schema/customer_phone_normalize.sql has
+ * been applied; otherwise matches the common typed formats of the number.
+ */
+const CUSTOMER_LOOKUP_LIMIT = 25;
+
+function oldestCustomer(rows) {
+  const list = (rows || []).slice();
+  list.sort((a, b) => {
+    const ca = a.created_at ? Date.parse(a.created_at) : Infinity;
+    const cb = b.created_at ? Date.parse(b.created_at) : Infinity;
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
+  });
+  return list[0] || null;
+}
+
+function isMissingPhoneNormalized(error) {
+  if (!error) return false;
+  const text = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
+  return (error.code === "42703" || error.code === "PGRST204" || /does not exist|could not find/i.test(text)) && /phone_normalized/.test(text);
+}
+
+async function findCustomerByPhone(supabase, rawPhone) {
+  const key = phoneKey(rawPhone);
+  if (key.length === 10) {
+    const { data, error } = await supabase
+      .from("customers").select("id, phone, created_at")
+      .eq("phone_normalized", key)
+      .order("created_at", { ascending: true })
+      .limit(CUSTOMER_LOOKUP_LIMIT);
+    if (error && !isMissingPhoneNormalized(error)) throw error;
+    if (!error && data && data.length) return oldestCustomer(data);
+  }
+  const { data, error } = await supabase
+    .from("customers").select("id, phone, created_at")
+    .in("phone", phoneVariants(rawPhone))
+    .order("created_at", { ascending: true })
+    .limit(CUSTOMER_LOOKUP_LIMIT);
+  if (error) throw error;
+  const rows = key.length >= 10 ? (data || []).filter((r) => samePhone(r.phone, rawPhone)) : data;
+  return oldestCustomer(rows);
+}
+
 async function sendSMS({ to_phone, message_body }) {
   try {
     const twilio = require("twilio");
@@ -260,9 +309,7 @@ exports.handler = async (event) => {
     }
 
     let customerId;
-    const { data: existingCustomer, error: customerLookupError } = await supabase
-      .from("customers").select("id").eq("phone", body.phone.trim()).maybeSingle();
-    if (customerLookupError) throw customerLookupError;
+    const existingCustomer = await findCustomerByPhone(supabase, body.phone);
 
     if (existingCustomer) {
       customerId = existingCustomer.id;
@@ -273,8 +320,15 @@ exports.handler = async (event) => {
         phone: body.phone.trim(),
         email: body.email ? body.email.trim() : null,
       }]).select().single();
-      if (customerError) throw customerError;
-      customerId = newCustomer.id;
+      if (customerError) {
+        // Once the optional unique index exists, a concurrent first order from
+        // the same number loses the insert race: reuse the winner, don't 500.
+        const winner = customerError.code === "23505" ? await findCustomerByPhone(supabase, body.phone) : null;
+        if (!winner) throw customerError;
+        customerId = winner.id;
+      } else {
+        customerId = newCustomer.id;
+      }
     }
 
     const orderNumber = generateOrderNumber();
