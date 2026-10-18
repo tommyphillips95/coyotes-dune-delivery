@@ -278,16 +278,28 @@ test("parser: quoted boundary, ';' in a filename, truncated body", () => {
   assert.throws(() => mp.parseMultipart(raw, "multipart/form-data"), (e) => e.status === 400);
 });
 
-test("LAUNCH.md: step 7 + admin verify are a MUST before the production deploy (steps + checklists); bucket documented", () => {
+test("LAUNCH.md: one top 'Before the next production deploy' block (steps 5, 6, 7 + bucket + deploy, in order); no 'builds from main'", () => {
   const md = read("LAUNCH.md");
-  assert.ok(/^7\. .*MUST be run, and your beach drivers verified in admin, BEFORE the production deploy.*`schema\/vehicle_verification\.sql`/m.test(md), "run-order step 7");
+  const heads = [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+  assert.strictEqual(heads[0], "Before the next production deploy", "block is the first section");
+  assert.strictEqual(heads.filter((h) => /^Before the (next )?production deploy/.test(h)).length, 1, "only one such list");
+  const block = md.slice(md.indexOf("## Before the next production deploy"), md.indexOf("\n## ", md.indexOf("## Before the next production deploy") + 5));
+  assert.ok(block.includes("Production is deployed by hand with the Netlify CLI (the site is not linked to Git; live today is `main` @ 5e41c41). Whoever runs the next production deploy does these first:"));
+  const order = ["schema/order_idempotency.sql", "schema/customer_phone_normalize.sql", "schema/vehicle_verification.sql", "`driver-documents`", "Then the production deploy"].map((t) => block.indexOf(t));
+  order.forEach((i, n) => assert.ok(i > -1 && (n === 0 || i > order[n - 1]), "step order " + n));
+  ["schema/order_idempotency.sql", "schema/customer_phone_normalize.sql", "schema/vehicle_verification.sql"].forEach((f) => assert.ok(fs.existsSync(path.join(ROOT, f)), f));
+  assert.ok(/Step 5 \(required\)/.test(block) && /Step 6 \(optional\)/.test(block) && /If you skip this step/.test(block) && /Step 7 \(required\)/.test(block));
+  assert.ok(/Save & mark verified/.test(block) && /beach orders get no driver/.test(block));
+  assert.ok(/Public: off\*\*, file size limit \*\*4 MB\*\*/.test(block) && block.includes(card.BUCKET));
+  for (const t of ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"]) assert.ok(block.includes(t), t);
+  assert.ok(!/builds from `main`/.test(md) && !/merging this branch into `main` \*\*is\*\* the production deploy/.test(md));
+  assert.ok(!/before-the-production-deploy-must-do/.test(md), "old anchor gone");
+  // Run order + Step 7 still say MUST before the production deploy, and the deploy checklist keeps its item.
+  assert.ok(/^7\. .*MUST be run, and your beach drivers verified in admin, BEFORE the production deploy.*`schema\/vehicle_verification\.sql`/m.test(md));
   const step7 = md.slice(md.indexOf("### Step 7 on Supabase"), md.indexOf("### Idempotency"));
   assert.ok(/MUST be done BEFORE the production deploy/.test(step7) && /beach \(4x4\) orders get no driver/.test(step7));
-  const before = md.slice(md.indexOf("## Before the production deploy (MUST do)"), md.indexOf("## Driver insurance card uploads"));
-  assert.ok(/vehicle_verification\.sql/.test(before) && /Save & mark verified/.test(before) && /beach orders get no driver/.test(before));
   const gate = md.slice(md.indexOf("## PR #2 merge gate"), md.indexOf("## To go live this week"));
   assert.ok(/- \[ \] \*\*MUST, before the production deploy:\*\* SQL step 7/.test(gate), "deploy checklist item");
-  assert.ok(/driver-documents/.test(md) && md.includes(card.BUCKET));
 });
 
 (async () => {

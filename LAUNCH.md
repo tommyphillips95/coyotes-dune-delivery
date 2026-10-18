@@ -1,5 +1,16 @@
 # Coyote launch checklist
 
+## Before the next production deploy
+Production is deployed by hand with the Netlify CLI (the site is not linked to Git; live today is `main` @ 5e41c41). Whoever runs the next production deploy does these first:
+
+Do them in one sitting, in this order, on the live Supabase project. **Take a backup first.** Steps 1–4 of the [Run order](#run-order) must already be applied (Step 5 needs the `orders` table). All SQL files are re-runnable.
+
+1. **Step 5 (required): `schema/order_idempotency.sql`.** *Where:* Supabase → **SQL Editor** → **New query**. Paste the whole file, then **Run**. *Check:* "Success. No rows returned", then the verify query in [Step 5 on Supabase](#step-5-on-supabase-order_idempotencysql) returns one row with all three values `true`.
+2. **Step 6 (optional): `schema/customer_phone_normalize.sql`.** *Where:* **SQL Editor** → **New query**. Paste the whole file, then **Run**. *Check:* the last result (the duplicate report) is empty, which means the unique index was created. If it lists numbers instead, you'll also see a NOTICE, and the unique index was skipped. Merging those customers is a manual decision ([Run order](#run-order) step 6). Don't do it in this sitting. *If you skip this step:* `create-order` still works. It matches common phone formats instead of `customers.phone_normalized`, reuses the oldest customer row for a repeat phone, and the database does not enforce one customer per number.
+3. **Step 7 (required): `schema/vehicle_verification.sql`, then verify every beach driver's vehicle in admin.** *Where:* **SQL Editor** → **New query**. Paste the whole file, then **Run**. Then in `SITE/admin/`, for each approved driver who should get beach orders, check the vehicle (photo / registration) and go to **Applications** → **View** → **Vehicle Class (dispatch)** → pick the class → **Save & mark verified**. *Check:* the column query in [Step 7 on Supabase](#step-7-on-supabase-vehicle_verificationsql) returns all `true`. Each driver shows "Verified: …, by <you> on …", and the file's closing driver list (safe to re-run) shows `vehicle_class_verified_at` filled for them. **Without this, beach orders get no driver.**
+4. **Storage bucket `driver-documents` (private) for insurance cards.** *Where:* Supabase → **Storage** → **New bucket**. Name `driver-documents`, **Public: off**, file size limit **4 MB**, allowed MIME types `image/jpeg, image/png, image/webp, image/heic, image/heif, application/pdf`. *Check:* Storage lists `driver-documents` as private with those limits. After the deploy, a test application's card appears under `driver-documents/applications/<application id>/`. Without the bucket, applications still save, but the card is not kept and the application notes say to ask for it again. Details: [Driver insurance card uploads](#driver-insurance-card-uploads).
+5. **Then the production deploy.** The required [Netlify env vars](#exact-netlify-env-vars-from-processenv-in-netlifyfunctions) must be set first, since env changes apply on the next deploy. Deploy with the Netlify CLI from a clean checkout of the commit being released, with `npm test` passing. Merging a PR does **not** deploy. Then run the [Post-deploy smoke test](#post-deploy-smoke-test-after-each-production-deploy-15-min).
+
 This repo is the delivery product only.
 
 ## What already exists
@@ -110,7 +121,7 @@ Go-live: repeat the endpoint and secret steps in live mode, swap the three env v
 4. `schema/issue_13_constraints.sql` (beach permit flags + `last_location_at` heartbeat)
 5. `schema/order_idempotency.sql` (`orders.idempotency_key` + partial unique index + `orders.idempotency_payload_hash`; `create-order` dedupes checkout retries on it, and creates orders normally with a log warning until this is applied). Exact steps: [Step 5 on Supabase](#step-5-on-supabase-order_idempotencysql).
 6. *(Optional, NOT yet run anywhere)* `schema/customer_phone_normalize.sql`: adds `customers.phone_normalized` (10 US digits), a trigger to keep it in sync, a backfill, and a lookup index. The **unique** index is created only if no two customers share a number; otherwise the script skips it and prints a NOTICE. The script ends with a read-only report of duplicate numbers, and the same report can be pasted alone first as a pre-check. Merging duplicate customers is a **manual decision for Tommy**: `orders.customer_id` is `ON DELETE CASCADE`, so re-point orders before deleting anything. A suggested merge is included, commented out. `create-order` works with or without this column, and never writes it (the trigger does).
-7. *(NOT yet run anywhere. **MUST be run, and your beach drivers verified in admin, BEFORE the production deploy** of this branch; see [Before the production deploy](#before-the-production-deploy-must-do))* `schema/vehicle_verification.sql`: adds `applications.vehicle_class_reported`, `vehicle_class_verified_at`, `vehicle_class_verified_by` (all nullable, re-runnable, no data changed, nobody marked verified). Beach (4x4) orders now need a 4x4/AWD/UTV class that an admin verified, in auto-dispatch and admin assign alike. **Until this runs, no driver counts as verified, so beach orders get no driver**: auto-dispatch logs "No online 4x4 driver available. Holding for dispatch." plus a pointer to this step and admin assign refuses with a message pointing here. Mainland (2wd) orders are unaffected. Exact steps: [Step 7 on Supabase](#step-7-on-supabase-vehicle_verificationsql).
+7. *(NOT yet run anywhere. **MUST be run, and your beach drivers verified in admin, BEFORE the production deploy** of this branch; see [Before the next production deploy](#before-the-next-production-deploy))* `schema/vehicle_verification.sql`: adds `applications.vehicle_class_reported`, `vehicle_class_verified_at`, `vehicle_class_verified_by` (all nullable, re-runnable, no data changed, nobody marked verified). Beach (4x4) orders now need a 4x4/AWD/UTV class that an admin verified, in auto-dispatch and admin assign alike. **Until this runs, no driver counts as verified, so beach orders get no driver**: auto-dispatch logs "No online 4x4 driver available. Holding for dispatch." plus a pointer to this step and admin assign refuses with a message pointing here. Mainland (2wd) orders are unaffected. Exact steps: [Step 7 on Supabase](#step-7-on-supabase-vehicle_verificationsql).
 
 ### Step 5 on Supabase: `order_idempotency.sql`
 Run this once, after `orders` exists (steps 1–4). It is re-runnable: every statement is `IF NOT EXISTS`, so a second run makes no changes and raises no error. It only adds two nullable columns and one partial unique index, so no data is changed or deleted. Existing orders keep `NULL` in both columns.
@@ -203,14 +214,6 @@ To undo: `ALTER TABLE applications DROP COLUMN IF EXISTS vehicle_class_verified_
 - Fresh `schema.sql`: `applications` has **zero** `ssn` / `bank_*` columns (no create, no drop needed).
 - Re-running the full trio on the same DB: **fails** at first `CREATE POLICY` in `schema.sql` (expected; see idempotency gap). Launch + dispatch files alone re-run cleanly.
 
-## Before the production deploy (MUST do)
-Production builds from `main`, so merging this branch into `main` **is** the production deploy. In this order:
-
-1. **SQL step 7 run:** [`schema/vehicle_verification.sql`](#step-7-on-supabase-vehicle_verificationsql) on the live Supabase project (after a backup), and the column check in that section returns all `true`.
-2. **Drivers verified in admin:** every approved driver who should take beach orders has a vehicle class saved with **Save & mark verified** (Step 7, item 3). Skip this and **beach orders get no driver** after the deploy.
-3. **Insurance card bucket:** the private Supabase Storage bucket `driver-documents` exists (see [Driver insurance card uploads](#driver-insurance-card-uploads)). Without it applications still save, but the card is not kept and admin notes say to ask for it again.
-4. Then merge / deploy, and run the [Post-deploy smoke test](#post-deploy-smoke-test-after-each-production-deploy-15-min).
-
 ## Driver insurance card uploads
 The apply page sends the form as `multipart/form-data` with the insurance card (field `insuranceCard`). `submit-application` reads it (`netlify/functions/_multipart.js`), checks it (`_insurance-card.js`) and:
 - accepts **JPG, PNG, WebP, HEIC/HEIF or PDF**, judged by the file's bytes, up to **4 MB** (Netlify's ~6 MB request limit, after base64). Too large → 413, wrong type → 415, missing → 400, each with a message the applicant sees. The page checks the same limits before sending.
@@ -221,11 +224,11 @@ The apply page sends the form as `multipart/form-data` with the insurance card (
 
 ## PR #2 merge gate (Tommy)
 
-Tick before merging `[dune] Launch v1` into `main`:
+Tick before merging `[dune] Launch v1` into `main` (merged 2026-10-17). Merging into `main` does not deploy; production is deployed by hand. See [Before the next production deploy](#before-the-next-production-deploy).
 
 - [ ] Required Netlify env set on production: `SUPABASE_*`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `STRIPE_*`, `SITE_ORIGIN` (Twilio/Checkr/Firebase optional until those features go live)
 - [ ] SQL files run in order (see Run order above) on the live Supabase project (after a backup)
-- [ ] **MUST, before the production deploy:** SQL step 7 (`schema/vehicle_verification.sql`) run **and** beach drivers verified in admin (**Save & mark verified**). Otherwise beach orders get no driver. See [Before the production deploy](#before-the-production-deploy-must-do).
+- [ ] **MUST, before the production deploy:** SQL step 7 (`schema/vehicle_verification.sql`) run **and** beach drivers verified in admin (**Save & mark verified**). Otherwise beach orders get no driver. See [Before the next production deploy](#before-the-next-production-deploy).
 - [ ] Storage bucket `driver-documents` (private) created for insurance cards
 - [ ] Admin password is not the placeholder / old default
 - [ ] `/apply` does not collect SSN or bank (Checkr + Stripe Connect)
@@ -235,7 +238,7 @@ Tick before merging `[dune] Launch v1` into `main`:
 
 ## To go live this week (ops)
 1. Fill the required Netlify env rows above (live site already has `SITE_ORIGIN` + `NODE_VERSION` only).
-2. Run the SQL files on Supabase in order (see Run order above). **Step 7 (`schema/vehicle_verification.sql`) and verifying beach drivers in admin MUST be done BEFORE the production deploy**, or beach orders get no driver.
+2. Run the SQL files on Supabase in order (see Run order above; the remaining steps are listed in [Before the next production deploy](#before-the-next-production-deploy)). **Step 7 (`schema/vehicle_verification.sql`) and verifying beach drivers in admin MUST be done BEFORE the production deploy**, or beach orders get no driver.
 3. Twilio A2P 10DLC, Stripe live keys, Checkr live, privacy + terms, insurance note when ready for real traffic.
 4. **TODO (Tommy): partner pickup addresses.** The home page "Order →" links open `/order/?restaurant=<slug>` and prefill the pickup address with just the partner *name* (no street addresses are in the code). Send the real street address (and confirm the town) for each, and they'll be added to `PARTNERS` in `frontend/js/coastal.js`:
 
