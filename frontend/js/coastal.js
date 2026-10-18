@@ -28,14 +28,21 @@
 
   // Partners listed on the home page (names/towns copied from frontend/index.html).
   // `/order/?restaurant=<slug>` prefills the pickup; unknown slugs are ignored.
-  // `city` is set only when the listed town is one of CITIES.
+  // `city` must be one of CITIES (the zone/pricing towns).
+  // Town mapping: Shells Seafood and Padre Island Burger Co. are listed as
+  // "North Padre Island" (Corpus Christi ZIP 78418). That area IS the
+  // "Padre Island" zone (hub 27.5772,-97.2736, NP mile markers; the home page
+  // describes the Padre Island zone as "North Padre Island, Corpus Christi
+  // Bayfront…"), so they map to "Padre Island" (beach, 4x4, same price table).
+  // Don't add a separate "North Padre Island" town: pricing is by town name and
+  // an unknown town falls back to a flat 10 mi with no beach surcharge.
   var PARTNERS = [
     { slug: "texmexcoyote", name: "TexMexCoyote", category: "food", city: "Port Aransas" },
     { slug: "heb-coastal-market", name: "H-E-B Coastal Market", category: "groceries", city: "Corpus Christi" },
     { slug: "clems-bait-tackle", name: "Clem's Bait & Tackle", category: "bait", city: "Port Aransas" },
-    { slug: "shells-seafood", name: "Shells Seafood", category: "food", city: null },
+    { slug: "shells-seafood", name: "Shells Seafood", category: "food", city: "Padre Island" },
     { slug: "stingrays-taphouse", name: "Stingray's Taphouse", category: "food", city: "Port Aransas" },
-    { slug: "padre-island-burger-co", name: "Padre Island Burger Co.", category: "food", city: null }
+    { slug: "padre-island-burger-co", name: "Padre Island Burger Co.", category: "food", city: "Padre Island" }
   ];
   function partnerBySlug(slug) {
     var s = String(slug || "").toLowerCase();
