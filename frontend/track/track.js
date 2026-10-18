@@ -7,7 +7,7 @@
   const API_BASE = "/api";
   const POLL_INTERVAL_MS = 15000;
   let map = null, driverMarker = null, pickupMarker = null, dropoffMarker = null;
-  let pollTimer = null, currentOrder = null, currentDriverId = null;
+  let pollTimer = null, currentOrder = null, currentDriverId = null, driverInfoShown = false;
   const lookupForm = document.getElementById("lookupForm");
   const lookupBtn = document.getElementById("lookupBtn");
   const mapEl = document.getElementById("map");
@@ -19,6 +19,13 @@
   }
   function formatServiceType(type) {
     return ({ ride: "On-Demand Ride", package_delivery: "Package Delivery", grocery_run: "Grocery Run", group_transport: "Group Transport" })[type] || type;
+  }
+  // Inline, announced messages instead of alert() pop-ups.
+  function say(text) {
+    const box = document.getElementById("lookupMessage");
+    if (!box) { if (text) alert(text); return; }
+    box.textContent = text || "";
+    box.hidden = !text;
   }
   function showCard(id) { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); }
   function defaultCenter(order) {
@@ -91,6 +98,7 @@
       if (json.success && json.data && json.data.location) {
         updateDriverMarker(json.data.location.lat, json.data.location.lng);
         if (json.data.driver) {
+          driverInfoShown = true;
           const d = json.data.driver;
           document.getElementById("driverName").textContent = ((d.first_name || "") + " " + (d.last_name || "")).trim() || "Your Driver";
           document.getElementById("driverVehicle").textContent = d.vehicle_make && d.vehicle_model ? ((d.vehicle_color || "") + " " + d.vehicle_make + " " + d.vehicle_model).trim() : "Vehicle info unavailable";
@@ -135,6 +143,17 @@
     document.getElementById("detailPickup").textContent = order.pickup_address || "--";
     document.getElementById("detailDropoff").textContent = order.dropoff_address || "--";
     document.getElementById("detailStatus").textContent = formatStatus(order.status);
+    // Until the driver shares GPS, say what we know instead of a stale default
+    // ("Not assigned yet" next to Status: Assigned) or a bare "--".
+    if (!driverInfoShown) {
+      const hasDriver = !!order.driver_id || order.status === "assigned" || order.status === "in_progress";
+      document.getElementById("driverName").textContent = hasDriver ? "Driver assigned" : "Not assigned yet";
+      document.getElementById("driverVehicle").textContent = hasDriver ? "Details appear when your driver is on the way." : "We'll show your driver here once one accepts.";
+    }
+    if (!driverMarker) {
+      const etaUnit = document.getElementById("etaUnit");
+      if (etaUnit) etaUnit.textContent = isTerminal(order.status) ? "" : "Shown once your driver shares their location";
+    }
     updateTimeline(order);
   }
 
@@ -151,7 +170,7 @@
         stopPolling();
         if (C && currentOrder) C.clearTrackingToken(currentOrder.order_number);
         currentToken = null;
-        alert("Your tracking session expired. Enter your order number and phone to keep tracking.");
+        say("Your tracking session expired. Enter your order number and phone to keep tracking.");
         return;
       }
       if (r.order) {
@@ -187,14 +206,15 @@
   async function lookupOrder(orderNumber, phone) {
     lookupBtn.disabled = true;
     lookupBtn.textContent = "Tracking...";
+    say("");
     try {
       orderNumber = (orderNumber || "").toUpperCase();
       let token = C ? C.getTrackingToken(orderNumber) : null;
       if (!token) {
-        if (!orderNumber || !phone) { alert("Please enter both order number and phone number."); return; }
+        if (!orderNumber || !phone) { say("Enter both your order number and the phone number used for the order."); (orderNumber ? document.getElementById("lookupPhone") : document.getElementById("lookupOrderNum")).focus(); return; }
         token = await mintToken(orderNumber, phone);
       }
-      if (!token) { alert("Order not found. Please check your order number and phone number."); return; }
+      if (!token) { say("We couldn't find that order. Check the order number and phone number."); return; }
       let r = await trackWithToken(token);
       if (r.expired && phone) {
         if (C) C.clearTrackingToken(orderNumber);
@@ -203,13 +223,14 @@
       }
       if (r.expired) {
         if (C) C.clearTrackingToken(orderNumber);
-        alert("Your tracking link expired. Enter your phone number to continue.");
+        say("Your tracking link expired. Enter your phone number to continue.");
+        document.getElementById("lookupPhone").focus();
       } else if (!r.ok) {
-        alert("Order not found. Please check your order number and phone number.");
+        say("We couldn't find that order. Check the order number and phone number.");
       }
     } catch (err) {
       console.error(err);
-      alert("Something went wrong. Please try again.");
+      say("We couldn't look up your order right now. Check your signal and try again.");
     } finally {
       lookupBtn.disabled = false;
       lookupBtn.textContent = "Track Order";
