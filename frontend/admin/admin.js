@@ -215,7 +215,7 @@
                 <td class="col-id" title="${esc(app.id)}">#${esc(String(app.id).slice(0, 8))}</td>
                 <td class="col-name">${esc(app.name)}</td>
                 <td class="col-email">${esc(app.email)}</td>
-                <td class="col-status"><span class="badge badge-${app.status}">${fmtStatus(app.status)}</span></td>
+                <td class="col-status"><span class="badge badge-${esc(app.status)}">${esc(fmtStatus(app.status))}</span></td>
                 <td class="col-date">${fmtDate(app.submitted || app.created_at)}</td>
                 <td class="col-actions">
                     <div class="actions-cell">
@@ -534,21 +534,78 @@
         }
     }
 
+    // Order states from #53-#65 (payment, refunds, dispatch, address checks)
+    // come shaped by GET /api/admin/orders: o.payment {cls,label},
+    // o.attention [{level,code,text}], o.history [{status,note,by,at}].
+    const ordersFilter = document.getElementById('orders-filter');
+    const ordersCount = document.getElementById('orders-attention-count');
+    const ordersAlert = document.getElementById('orders-alert');
+    const PAYMENT_CODES = ['stripe_paid_not_marked', 'second_payment', 'payment_failed'];
+    const ORDER_COLS = 7;
+
+    function needsAttention(o) {
+        return (o.attention || []).some(a => a.level === 'danger' || a.level === 'warn');
+    }
+    function orderMatchesFilter(o, f) {
+        if (f === 'attention') return needsAttention(o);
+        if (f === 'payment') return (o.attention || []).some(a => PAYMENT_CODES.includes(a.code));
+        if (f === 'unpaid') return !o.payment || !['paid', 'partial', 'refunded'].includes(o.payment.cls);
+        return true;
+    }
+    function fmtWhen(d) {
+        if (!d) return '';
+        const date = new Date(d);
+        if (isNaN(date)) return String(d);
+        return date.toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' CT';
+    }
+
     function renderOrders(orders) {
         if (!ordersBody) return;
-        if (!orders.length) {
-            ordersBody.innerHTML = '<tr><td colspan="6">No orders yet.</td></tr>';
+        const all = orders || [];
+        const flagged = all.filter(needsAttention).length;
+        const urgent = all.filter(o => (o.attention || []).some(a => a.level === 'danger')).length;
+        if (ordersCount) ordersCount.textContent = flagged ? `${flagged} of ${all.length} recent orders need attention${urgent ? ` (${urgent} payment problem${urgent === 1 ? '' : 's'})` : ''}.` : (all.length ? 'Nothing needs attention.' : '');
+        if (ordersAlert) {
+            ordersAlert.hidden = !flagged;
+            ordersAlert.className = 'orders-alert' + (urgent ? ' orders-alert-danger' : '');
+            ordersAlert.textContent = flagged ? `⚠ ${flagged} order${flagged === 1 ? '' : 's'} need${flagged === 1 ? 's' : ''} attention${urgent ? ` — ${urgent} payment problem${urgent === 1 ? '' : 's'}` : ''}. View orders ↓` : '';
+        }
+        const f = ordersFilter ? ordersFilter.value : 'all';
+        const list = all.filter(o => orderMatchesFilter(o, f));
+        if (!all.length) {
+            ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">No orders yet.</td></tr>`;
             return;
         }
-        ordersBody.innerHTML = orders.map(o => `
-            <tr>
-                <td>${esc(o.order_number || String(o.id).slice(0, 8))}</td>
-                <td>${esc(o.pickup_city || '—')} to ${esc(o.dropoff_city || o.pickup_city || '—')}</td>
-                <td>${esc(o.required_vehicle_class || '—')}</td>
-                <td><span class="badge badge-${esc(o.status)}">${fmtStatus(o.status || 'pending')}</span></td>
-                <td>${o.weather_hold ? '<span class="badge badge-on_hold">on hold</span>' : 'none'}</td>
-                <td><button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></td>
-            </tr>`).join('');
+        if (!list.length) {
+            ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">No orders match this filter.</td></tr>`;
+            return;
+        }
+        ordersBody.innerHTML = list.map(o => {
+            const status = o.status || 'pending';
+            const pay = o.payment || { cls: 'none', label: '—' };
+            const flags = (o.attention || []).map(a =>
+                `<li class="attn attn-${esc(a.level)}"><span class="attn-level">${a.level === 'danger' ? 'Urgent' : a.level === 'warn' ? 'Check' : 'Note'}:</span> ${esc(a.text)}</li>`).join('');
+            const history = (o.history || []).map(h =>
+                `<li><time>${esc(fmtWhen(h.at))}</time> <span class="hist-status">${esc(fmtStatus(h.status))}</span> ${esc(h.note || '')}${h.by ? ` <span class="hist-by">(${esc(h.by)})</span>` : ''}</li>`).join('');
+            const price = Number(o.final_price || o.estimated_price);
+            const detail = (flags || history) ? `
+            <tr class="order-detail-row${needsAttention(o) ? ' needs-attention' : ''}">
+                <td colspan="${ORDER_COLS}">
+                    ${flags ? `<ul class="attn-list">${flags}</ul>` : ''}
+                    ${history ? `<details class="order-history"><summary>History (${(o.history || []).length})</summary><ul>${history}</ul></details>` : ''}
+                </td>
+            </tr>` : '';
+            return `
+            <tr class="order-row${needsAttention(o) ? ' needs-attention' : ''}">
+                <td><strong>${esc(o.order_number || String(o.id).slice(0, 8))}</strong><br><small>${esc(fmtWhen(o.created_at))}${price ? ` · $${price.toFixed(2)}` : ''}</small></td>
+                <td data-label="Route">${esc(o.pickup_city || '—')} to ${esc(o.dropoff_city || o.pickup_city || '—')}</td>
+                <td data-label="Vehicle">${esc(o.required_vehicle_class || '—')}</td>
+                <td data-label="Status"><span class="badge badge-${esc(status)}">${esc(fmtStatus(status))}</span></td>
+                <td data-label="Payment"><span class="pay-badge pay-${esc(pay.cls)}">${esc(pay.label)}</span></td>
+                <td data-label="Weather hold">${o.weather_hold ? '<span class="badge badge-on_hold">on hold</span>' : 'none'}</td>
+                <td data-label="Action"><button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></td>
+            </tr>${detail}`;
+        }).join('');
     }
 
     async function loadOrders() {
@@ -558,9 +615,10 @@
             currentOrders = data.orders || [];
             renderOrders(currentOrders);
             renderWeather(data.weather);
+            if (data.logsError) showToast('Order history could not be loaded; payment/dispatch flags may be missing.', 'warning');
         } catch (err) {
             console.error(err);
-            ordersBody.innerHTML = '<tr><td colspan="6">Could not load orders.</td></tr>';
+            ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">Could not load orders.</td></tr>`;
         }
     }
 
@@ -593,7 +651,7 @@
     }
 
     function fmtStatus(s) {
-        return s.replace(/_/g, ' ');
+        return String(s == null || s === '' ? 'unknown' : s).replace(/_/g, ' ');
     }
 
     function fmtDate(d) {
@@ -624,6 +682,7 @@
         logoutBtn.addEventListener('click', onLogout);
         refreshBtn.addEventListener('click', () => { loadApplications(); loadOrders(); });
         if (ordersBody) ordersBody.addEventListener('click', onOrdersClick);
+        if (ordersFilter) ordersFilter.addEventListener('change', () => renderOrders(currentOrders));
         searchInput.addEventListener('input', debounce(applyFiltersAndSort, 250));
         statusFilter.addEventListener('change', applyFiltersAndSort);
         selectAll.addEventListener('change', onSelectAll);
