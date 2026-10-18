@@ -181,6 +181,7 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error("Error creating order:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to create order", message: err.message }) };
+    // Details stay in the function log; the browser shows this message, so no DB/internal text.
+    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to create order", message: "We couldn't place your order. Please try again." }) };
   }
 };
