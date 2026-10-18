@@ -7,7 +7,8 @@
  *   GET  /api/admin/applications               -> list applications
  *   PUT  /api/admin/applications/:id           -> status, notes, beach permit
  *   POST /api/admin/applications/bulk          -> bulk status
- *   GET  /api/admin/orders                     -> recent orders + weather_hold
+ *   GET  /api/admin/orders                     -> recent orders + weather_hold, payment
+ *                                                 label, "needs attention" flags, history
  *   PUT  /api/admin/orders/:id/weather-hold    -> set/clear per-order hold
  *   GET  /api/admin/weather                    -> read-only WEATHER_SHUTDOWN state
  *
@@ -19,6 +20,11 @@ const { requireAdmin, jsonError } = require("./_auth");
 const cors = require("./_cors");
 const { weatherShutdownActive, weatherShutdownReason } = require("./_weather");
 const loginAdmin = require("./login-admin");
+const orderAttention = require("./_order-attention");
+
+const ORDERS_LIMIT = 50;
+const LOGS_LIMIT = 1000; // newest logs across the listed orders
+const HISTORY_PER_ORDER = 12;
 
 const APP_STATUSES = ["pending", "background_check", "approved", "rejected", "on_hold"];
 const NOTES_MAX = 2000;
@@ -152,10 +158,33 @@ exports.handler = async (event) => {
       const supabase = db();
       if (parts.length === 1 && method === "GET") {
         const { data, error } = await supabase.from("orders")
-          .select("id, order_number, status, payment_status, pickup_city, dropoff_city, required_vehicle_class, weather_hold, created_at")
-          .order("created_at", { ascending: false }).limit(50);
+          .select("id, order_number, status, payment_status, pickup_city, dropoff_city, required_vehicle_class, weather_hold, estimated_price, final_price, is_asap, scheduled_date, scheduled_time, created_at")
+          .order("created_at", { ascending: false }).limit(ORDERS_LIMIT);
         if (error) throw error;
-        return json(headers, 200, { orders: data || [], weather: weatherState() });
+        const orders = data || [];
+        // Status history (payment, refund, dispatch, address-check notes) so the
+        // dashboard can show what needs a person. Logs are optional: if they
+        // can't be read the list still loads, flagged as such.
+        let logsByOrder = {};
+        let logsError = false;
+        if (orders.length) {
+          const { data: logs, error: lErr } = await supabase.from("order_status_logs")
+            .select("order_id, status, note, changed_by, created_at")
+            .in("order_id", orders.map((o) => o.id))
+            .order("created_at", { ascending: false }).limit(LOGS_LIMIT);
+          if (lErr) { console.error("[admin] order_status_logs:", lErr.message || lErr); logsError = true; }
+          (logs || []).forEach((l) => { (logsByOrder[l.order_id] = logsByOrder[l.order_id] || []).push(l); });
+        }
+        const shaped = orders.map((o) => {
+          const logs = logsByOrder[o.id] || [];
+          return Object.assign({}, o, {
+            payment: orderAttention.payment(o, logs),
+            attention: orderAttention.attention(o, logs),
+            history: orderAttention.newestFirst(logs).slice(0, HISTORY_PER_ORDER)
+              .map((l) => ({ status: l.status, note: l.note, by: l.changed_by, at: l.created_at })),
+          });
+        });
+        return json(headers, 200, { orders: shaped, logsError, weather: weatherState() });
       }
       if (parts.length === 3 && parts[2] === "weather-hold" && method === "PUT") {
         const hold = toBool(body.weather_hold);

@@ -85,6 +85,9 @@
                 </div>
             </header>
 
+            <!-- Orders needing a person (payment, dispatch, address checks) -->
+            <a class="orders-alert" id="orders-alert" href="#orders-section" hidden></a>
+
             <!-- Stats Cards -->
             <section class="stats-grid">
                 <div class="stat-card stat-total">
@@ -185,19 +188,30 @@
             </section>
 
             <!-- Orders + weather hold (#33) -->
-            <section class="table-section orders-weather">
-                <h3>Orders &amp; Weather Hold</h3>
+            <section class="table-section orders-weather" id="orders-section" aria-labelledby="orders-heading">
+                <h3 id="orders-heading">Orders &amp; Weather Hold</h3>
                 <div id="weather-banner" class="weather-banner">Loading weather status…</div>
+                <div class="orders-toolbar">
+                    <label for="orders-filter">Show</label>
+                    <select id="orders-filter" class="filter-select">
+                        <option value="all">All recent orders</option>
+                        <option value="attention">Needs attention</option>
+                        <option value="payment">Payment problems</option>
+                        <option value="unpaid">Not paid by card</option>
+                    </select>
+                    <span id="orders-attention-count" class="orders-attention-count" role="status" aria-live="polite"></span>
+                </div>
                 <div class="table-wrapper">
                     <table class="data-table" id="orders-table">
                         <thead>
                             <tr>
-                                <th>Order</th>
-                                <th>Route</th>
-                                <th>Vehicle</th>
-                                <th>Status</th>
-                                <th>Weather hold</th>
-                                <th>Action</th>
+                                <th scope="col">Order</th>
+                                <th scope="col">Route</th>
+                                <th scope="col">Vehicle</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Payment</th>
+                                <th scope="col">Weather hold</th>
+                                <th scope="col">Action</th>
                             </tr>
                         </thead>
                         <tbody id="orders-table-body">
