@@ -74,6 +74,94 @@ async function resolveStripeCustomer(stripe, supabase, order, customerEmail) {
   return created.id;
 }
 
+/**
+ * Reuse, update, or replace the order's existing PaymentIntent without ever
+ * risking a second charge.
+ *   succeeded                     -> no new intent; "already paid" (409)
+ *   processing / requires_capture -> no new intent; "in progress" (409)
+ *   requires_payment_method / requires_confirmation / requires_action
+ *       right amount + currency   -> reuse it
+ *       wrong amount or currency  -> paymentIntents.update; if that fails,
+ *                                    cancel it, then create a fresh one
+ *   canceled / missing in Stripe  -> create a fresh one
+ *   anything else                 -> error, nothing created
+ * Returns { response, statusCode } to answer now, or { replaced } to create.
+ */
+const CURRENCY = "usd";
+const MODIFIABLE = new Set(["requires_payment_method", "requires_confirmation", "requires_action"]);
+const IN_FLIGHT = new Set(["processing", "requires_capture"]);
+
+function intentReply(intent, order, amountCents, status) {
+  return {
+    statusCode: 200,
+    response: {
+      success: true,
+      client_secret: intent.client_secret,
+      payment_intent_id: intent.id,
+      order_id: order.id,
+      amount: amountCents / 100,
+      currency: CURRENCY,
+      status,
+    },
+  };
+}
+
+async function reconcileExistingIntent(stripe, supabase, order, amountCents) {
+  const oldId = order.stripe_payment_intent_id;
+  let intent = null;
+  try {
+    intent = await stripe.paymentIntents.retrieve(oldId);
+  } catch (err) {
+    if (!(err && (err.code === "resource_missing" || err.statusCode === 404))) throw err;
+  }
+  if (!intent) return { replaced: oldId };
+
+  if (intent.status === "succeeded") {
+    if (order.payment_status !== "paid") {
+      // Stripe has the money but our order was never marked paid (webhook
+      // missed or delayed). Report it; never charge again.
+      console.error(`[create-payment-intent] ${intent.id} succeeded but order ${order.id} is '${order.payment_status}'`);
+      await supabase.from("order_status_logs").insert([{
+        order_id: order.id,
+        status: "paid",
+        note: `Stripe reports ${intent.id} succeeded but the order was not marked paid; no new charge was made. Check the payment webhook.`,
+        changed_by: "system",
+      }]);
+    }
+    return {
+      statusCode: 409,
+      response: { error: "This order is already paid.", status: "already_paid", order_id: order.id, payment_intent_id: intent.id },
+    };
+  }
+
+  if (IN_FLIGHT.has(intent.status)) {
+    return {
+      statusCode: 409,
+      response: { error: "A payment for this order is already being processed. Please wait a moment, then check your order status.", status: "in_progress", order_id: order.id, payment_intent_id: intent.id },
+    };
+  }
+
+  if (MODIFIABLE.has(intent.status)) {
+    if (intent.amount === amountCents && intent.currency === CURRENCY) {
+      return intentReply(intent, order, amountCents, "existing");
+    }
+    try {
+      const updated = await stripe.paymentIntents.update(intent.id, { amount: amountCents, currency: CURRENCY });
+      return intentReply(updated, order, amountCents, "updated");
+    } catch (err) {
+      console.warn(`[create-payment-intent] could not update ${intent.id}; canceling it before creating a new one`);
+      // If this cancel fails (e.g. it just started processing), we stop here
+      // rather than risk two payable intents for one order.
+      await stripe.paymentIntents.cancel(intent.id);
+      return { replaced: intent.id };
+    }
+  }
+
+  if (intent.status === "canceled") return { replaced: intent.id };
+
+  throw new Error(`Unexpected PaymentIntent status '${intent.status}' for ${intent.id}`);
+}
+
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
 
@@ -141,28 +229,21 @@ exports.handler = async (event) => {
       };
     }
 
+    // An order that already has a PaymentIntent: look before reusing or replacing.
+    let replacedIntentId = null;
     if (order.stripe_payment_intent_id) {
-      const existingIntent = await stripe.paymentIntents.retrieve(order.stripe_payment_intent_id);
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          client_secret: existingIntent.client_secret,
-          payment_intent_id: existingIntent.id,
-          order_id: orderId,
-          amount: amountCents / 100,
-          currency: "usd",
-          status: "existing",
-        }),
-      };
+      const decision = await reconcileExistingIntent(stripe, supabase, order, amountCents);
+      if (decision.response) {
+        return { statusCode: decision.statusCode, headers, body: JSON.stringify(decision.response) };
+      }
+      replacedIntentId = decision.replaced;
     }
 
     const customerId = await resolveStripeCustomer(stripe, supabase, order, customerEmail);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
-      currency: "usd",
+      currency: CURRENCY,
       customer: customerId,
       receipt_email: customerEmail,
       metadata: {
@@ -172,6 +253,10 @@ exports.handler = async (event) => {
       },
       automatic_payment_methods: { enabled: true },
       capture_method: "automatic",
+    }, {
+      // Changes with amount and with the intent being replaced, so a retry of
+      // the same attempt dedupes but a replacement never gets the old one back.
+      idempotencyKey: `cdd-pi-${orderId}-${amountCents}-${replacedIntentId || "first"}`,
     });
 
     const { error: updateError } = await supabase
@@ -192,7 +277,9 @@ exports.handler = async (event) => {
       {
         order_id: orderId,
         status: "pending",
-        note: `PaymentIntent created: ${paymentIntent.id}`,
+        note: replacedIntentId
+          ? `PaymentIntent created: ${paymentIntent.id} (replaces ${replacedIntentId})`
+          : `PaymentIntent created: ${paymentIntent.id}`,
         changed_by: "system",
       },
     ]);
@@ -206,7 +293,7 @@ exports.handler = async (event) => {
         payment_intent_id: paymentIntent.id,
         order_id: orderId,
         amount: amountCents / 100,
-        currency: "usd",
+        currency: CURRENCY,
         status: "created",
       }),
     };

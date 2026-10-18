@@ -10,6 +10,32 @@ const { headers: corsHeaders } = require("./_cors");
 const { constructWebhookEvent } = require("./_stripe");
 const { offerNext } = require("./dispatch");
 
+/**
+ * Events are matched to the order by metadata.order_id. create-payment-intent
+ * can replace an order's PaymentIntent (cancel old, create new), so a late
+ * "canceled"/"failed"/"requires_action" from the OLD intent must not flip the
+ * order back after the new one was created or paid.
+ * Returns true when this intent is no longer the order's current one, or the
+ * order is already paid.
+ */
+async function staleForOrder(supabase, orderId, intentId) {
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select("id, stripe_payment_intent_id, payment_status")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!order) return false;
+  if (order.payment_status === "paid") return true;
+  return !!(order.stripe_payment_intent_id && order.stripe_payment_intent_id !== intentId);
+}
+
+const IGNORED_STALE = (headers, eventType) => ({
+  statusCode: 200,
+  headers,
+  body: JSON.stringify({ received: true, ignored: "superseded_or_paid", event: eventType }),
+});
+
 exports.handler = async (event) => {
   // Stripe server-to-server; still avoid wildcard CORS.
   const headers = corsHeaders(event);
@@ -42,6 +68,13 @@ exports.handler = async (event) => {
           body: JSON.stringify({ received: true, warning: "No order_id in metadata" }),
         };
       }
+      // Money was received, so the order is paid whichever intent it was. If it
+      // was not the order's current intent, say so loudly (possible 2nd payment).
+      const { data: current } = await supabase
+        .from("orders").select("stripe_payment_intent_id").eq("id", orderId).maybeSingle();
+      const currentId = current && current.stripe_payment_intent_id;
+      const otherIntent = currentId && currentId !== paymentIntent.id ? currentId : null;
+      if (otherIntent) console.error(`[payment-webhook] ${paymentIntent.id} succeeded but order ${orderId} points at ${otherIntent}`);
       const { error: updateError } = await supabase
         .from("orders")
         .update({
@@ -59,7 +92,10 @@ exports.handler = async (event) => {
           status: "paid",
           note:
             "Payment succeeded via Stripe. Amount: $" +
-            (paymentIntent.amount_received / 100).toFixed(2),
+            (paymentIntent.amount_received / 100).toFixed(2) +
+            (otherIntent
+              ? ` (WARNING: ${paymentIntent.id} is not the order's current PaymentIntent ${otherIntent}; check Stripe for a second payment)`
+              : ""),
           changed_by: "stripe_webhook",
         },
       ]);
@@ -78,6 +114,7 @@ exports.handler = async (event) => {
     }
 
     if (eventType === "payment_intent.payment_failed" && orderId) {
+      if (await staleForOrder(supabase, orderId, paymentIntent.id)) return IGNORED_STALE(headers, eventType);
       const failureMessage =
         (paymentIntent.last_payment_error && paymentIntent.last_payment_error.message) ||
         "Payment failed";
@@ -101,6 +138,7 @@ exports.handler = async (event) => {
     }
 
     if (eventType === "payment_intent.requires_action" && orderId) {
+      if (await staleForOrder(supabase, orderId, paymentIntent.id)) return IGNORED_STALE(headers, eventType);
       await supabase.from("orders").update({ payment_status: "pending" }).eq("id", orderId);
       return {
         statusCode: 200,
@@ -110,6 +148,7 @@ exports.handler = async (event) => {
     }
 
     if (eventType === "payment_intent.canceled" && orderId) {
+      if (await staleForOrder(supabase, orderId, paymentIntent.id)) return IGNORED_STALE(headers, eventType);
       await supabase.from("orders").update({ payment_status: "failed" }).eq("id", orderId);
       await supabase.from("order_status_logs").insert([
         {
