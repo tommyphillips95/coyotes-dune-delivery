@@ -29,6 +29,22 @@ const ORDER_SELECT = `
   status_logs:order_status_logs(*)
 `;
 
+/**
+ * Phone as comparable digits: "(361) 555-0100", "361.555.0100" and
+ * "+1 361 555 0100" all become "3615550100". The order form stores the phone
+ * as typed, so the track lookup must not depend on punctuation or a +1.
+ */
+function phoneKey(value) {
+  let d = String(value == null ? "" : value).replace(/\D/g, "");
+  if (d.length === 11 && d[0] === "1") d = d.slice(1);
+  return d;
+}
+
+function samePhone(a, b) {
+  const ka = phoneKey(a);
+  return ka.length >= 10 && ka === phoneKey(b);
+}
+
 async function mintTrackingToken(event, headers) {
   let body;
   try {
@@ -60,7 +76,7 @@ async function mintTrackingToken(event, headers) {
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
   }
   const custPhone = order.customer && order.customer.phone;
-  if (!custPhone || String(custPhone).trim() !== phone) {
+  if (!custPhone || !samePhone(custPhone, phone)) {
     // Same message as not-found to avoid phone enumeration of order numbers.
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
   }
@@ -155,3 +171,5 @@ exports.handler = async (event) => {
     return serverError(headers, err, "Failed to fetch orders", "get-orders");
   }
 };
+
+exports._phone = { phoneKey, samePhone };
