@@ -185,14 +185,65 @@
         });
     }
 
-    function currentQuote() {
+    // ── ZIP 78418 + Corpus Christi: island or Flour Bluff? ──
+    // Asked on the Review step before the order is created. "island" prices as
+    // Padre Island (create-order does the same with <end>_zip_area).
+    const ZIP_AREA_ENDS = ['pickup', 'dropoff'];
+    function endTownZip(end) {
+        const town = document.getElementById(end + 'City').value || (end === 'dropoff' ? document.getElementById('pickupCity').value : '');
+        return { town, zip: document.getElementById(end + 'Zip').value };
+    }
+    function zipAreaQuestion(end) {
+        const C = window.CoyoteCoastal;
+        if (!C || typeof C.zipAreaQuestion !== 'function') return null;
+        const tz = endTownZip(end);
+        return C.zipAreaQuestion(tz.town, tz.zip);
+    }
+    function zipAreaAnswer(end) {
+        if (!zipAreaQuestion(end)) return null;
+        const r = document.querySelector(`input[name="${end}ZipArea"]:checked`);
+        return r ? r.value : null;
+    }
+    function pricedTown(end, assume) {
+        const tz = endTownZip(end);
+        const C = window.CoyoteCoastal;
+        const answer = (assume && assume[end]) || zipAreaAnswer(end);
+        return C && typeof C.zipAreaTown === 'function' ? C.zipAreaTown(tz.town, tz.zip, answer) : tz.town;
+    }
+    function setZipAreaError(end, show) {
+        const group = document.getElementById(end + 'ZipAreaGroup');
+        const msg = document.getElementById(end + 'ZipAreaError');
+        if (msg) msg.hidden = !show;
+        if (group) group.classList.toggle('cc-invalid', !!show);
+        document.querySelectorAll(`input[name="${end}ZipArea"]`).forEach(r => r.setAttribute('aria-invalid', show ? 'true' : 'false'));
+    }
+    function updateZipAreaQuestions() {
+        ZIP_AREA_ENDS.forEach(end => {
+            const group = document.getElementById(end + 'ZipAreaGroup');
+            if (!group) return;
+            const q = zipAreaQuestion(end);
+            group.hidden = !q;
+            if (q) { const z = group.querySelector('.cc-zip-area-zip'); if (z) z.textContent = q.zip; }
+            else setZipAreaError(end, false);
+        });
+    }
+    /** Ends still waiting for an answer (focus target first). */
+    function unansweredZipAreas() {
+        return ZIP_AREA_ENDS.filter(end => zipAreaQuestion(end) && !zipAreaAnswer(end));
+    }
+    function focusZipArea(end) {
+        const first = document.querySelector(`input[name="${end}ZipArea"]`);
+        if (first) { first.focus(); const g = document.getElementById(end + 'ZipAreaGroup'); if (g && g.scrollIntoView) g.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }
+
+    function currentQuote(assume) {
         if (typeof CoyoteZones === 'undefined' || !CoyoteZones.priceQuote) {
             console.error('CoyoteZones not loaded — include ../js/zones.js before order.js');
             return { miles: 0, beach: false, requiredClass: '2wd', total: 0 };
         }
         const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
-        const pickupCity = document.getElementById('pickupCity').value;
-        const dropoffCity = document.getElementById('dropoffCity').value || pickupCity;
+        const pickupCity = pricedTown('pickup', assume);
+        const dropoffCity = pricedTown('dropoff', assume) || pickupCity;
         const passengerCount = parseInt(document.querySelector('input[name="passengers"]:checked')?.value, 10) || 1;
         const packageSize = document.querySelector('input[name="packageSize"]:checked')?.value;
         return CoyoteZones.priceQuote(pickupCity, dropoffCity, {
@@ -231,6 +282,7 @@
             const size = document.querySelector('input[name="packageSize"]:checked').value;
             details = `${size.charAt(0).toUpperCase() + size.slice(1)} package`;
         }
+        updateZipAreaQuestions();
         const priced = currentQuote();
         const estimatedTotal = priced.total;
         document.getElementById('reviewService').textContent = serviceLabels[serviceType] || serviceType;
@@ -240,7 +292,14 @@
         document.getElementById('reviewDetails').textContent = priced.beach
             ? `${details} · ${priced.miles} mi · 4x4 + $8 sand`
             : `${details} · ${priced.miles} mi`;
-        document.getElementById('reviewTotal').textContent = `$${estimatedTotal.toFixed(2)}`;
+        const pending = unansweredZipAreas();
+        if (pending.length) {
+            // Not answered yet: show both possible totals until they choose.
+            const islandTotal = currentQuote(Object.fromEntries(pending.map(e => [e, 'island']))).total;
+            document.getElementById('reviewTotal').textContent = `$${estimatedTotal.toFixed(2)} (Flour Bluff) or $${islandTotal.toFixed(2)} (Padre Island) · choose above`;
+        } else {
+            document.getElementById('reviewTotal').textContent = `$${estimatedTotal.toFixed(2)}`;
+        }
         const tbody = document.getElementById('summaryBody');
         const firstName = document.getElementById('customerFirstName').value;
         const lastName = document.getElementById('customerLastName').value;
@@ -316,6 +375,15 @@
     const SERVER_FIELDS = { pickup_city: 'pickupCity', pickup_zip: 'pickupZip', dropoff_city: 'dropoffCity', dropoff_zip: 'dropoffZip' };
     function markServerField(result) {
         const f = result && result.data && result.data.field;
+        const zipArea = /^(pickup|dropoff)_zip_area$/.exec(f || '');
+        if (zipArea) {
+            // Server needs the island/mainland answer: show the question here.
+            updateZipAreaQuestions();
+            const group = document.getElementById(zipArea[1] + 'ZipAreaGroup');
+            if (group) group.hidden = false;
+            setZipAreaError(zipArea[1], true);
+            return;
+        }
         const id = Object.prototype.hasOwnProperty.call(SERVER_FIELDS, f) ? SERVER_FIELDS[f] : null;
         const el = id && document.getElementById(id);
         if (!el) return;
@@ -363,6 +431,12 @@
             return;
         }
         setTermsError(false);
+        const needArea = unansweredZipAreas();
+        if (needArea.length) {
+            needArea.forEach(end => setZipAreaError(end, true));
+            focusZipArea(needArea[0]);
+            return;
+        }
         submitting = true;
         submitBtn.disabled = true;
         if (retryBtn) retryBtn.disabled = true;
@@ -387,6 +461,9 @@
             dropoff_address: document.getElementById('dropoffAddress').value.trim() || null,
             dropoff_city: document.getElementById('dropoffCity').value || null,
             dropoff_zip: document.getElementById('dropoffZip').value.trim() || null,
+            // Only set for ZIP 78418 with Corpus Christi ('island' | 'mainland').
+            pickup_zip_area: zipAreaAnswer('pickup'),
+            dropoff_zip_area: zipAreaAnswer('dropoff'),
             schedule: isAsap ? 'asap' : 'later',
             scheduled_date: isAsap ? null : dateVal,
             scheduled_time: isAsap ? null : timeVal,
@@ -411,8 +488,8 @@
                 checkoutPayload = null;
                 lastBooking = {
                     asap: isAsap, date: dateVal, time: timeVal,
-                    pickupAddress: orderData.pickup_address, pickupCity: orderData.pickup_city,
-                    dropoffAddress: orderData.dropoff_address, dropoffCity: orderData.dropoff_city,
+                    pickupAddress: orderData.pickup_address, pickupCity: pricedTown('pickup'),
+                    dropoffAddress: orderData.dropoff_address, dropoffCity: orderData.dropoff_city ? pricedTown('dropoff') : null,
                     amount: Number(result.data.estimatedPrice) || 0,
                     phone: orderData.phone, smsSent: result.data.smsSent === true,
                 };
@@ -447,6 +524,10 @@
             } else {
                 markServerField(result);
                 showSubmitError(orderErrorMessage(result));
+                if (result.data && result.data.code === 'zip_area_required') {
+                    const m = /^(pickup|dropoff)/.exec(result.data.field || '');
+                    if (m) focusZipArea(m[1]);
+                }
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
                 submitting = false;
@@ -591,9 +672,10 @@
         const pickupCity = document.getElementById('pickupCity').value;
         if (!pickupCity || typeof CoyoteZones === 'undefined') { box.hidden = true; return; }
         const q = currentQuote();
-        const dropoffCity = document.getElementById('dropoffCity').value || pickupCity;
+        const dropoffCity = pricedTown('dropoff') || pricedTown('pickup');
+        const ask = unansweredZipAreas().length ? ' · ZIP 78418: confirm island or Flour Bluff on Review' : '';
         document.getElementById('ccLiveQuoteText').textContent =
-            `${pickupCity} → ${dropoffCity} · ${q.miles} mi${q.beach ? ' · 4x4 beach access' : ''}`;
+            `${pricedTown('pickup')} → ${dropoffCity} · ${q.miles} mi${q.beach ? ' · 4x4 beach access' : ''}${ask}`;
         document.getElementById('ccLiveQuoteTotal').textContent = `$${q.total.toFixed(2)}`;
         box.hidden = false;
     }
@@ -658,13 +740,19 @@
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => showError(el, false));
         });
-        ['pickupCity', 'dropoffCity'].forEach(id => {
+        ['pickupCity', 'dropoffCity', 'pickupZip', 'dropoffZip'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', updateLiveQuote);
         });
         document.querySelectorAll('input[name="serviceType"], input[name="passengers"], input[name="packageSize"]').forEach(r => r.addEventListener('change', updateLiveQuote));
         document.querySelectorAll('#rideDetails .detail-card, #deliveryDetails .detail-card').forEach(c => c.addEventListener('click', updateLiveQuote));
         updateLiveQuote();
+        ZIP_AREA_ENDS.forEach(end => document.querySelectorAll(`input[name="${end}ZipArea"]`).forEach(r => r.addEventListener('change', () => {
+            setZipAreaError(end, false);
+            buildReviewSummary();
+            updateLiveQuote();
+            announce(`Estimated total updated: ${document.getElementById('reviewTotal').textContent}`);
+        })));
         const termsBox = document.getElementById('termsAgree');
         if (termsBox) termsBox.addEventListener('change', () => { if (termsBox.checked) setTermsError(false); });
         form.addEventListener('submit', submitOrder);

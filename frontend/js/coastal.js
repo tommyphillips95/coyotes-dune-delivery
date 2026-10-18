@@ -74,6 +74,27 @@
     return /^\d{5}(-?\d{4})?$/.test(String(zip == null ? "" : zip).trim());
   }
 
+  // ZIP 78418 covers both North Padre Island and Flour Bluff (mainland Corpus
+  // Christi), per Census 2020 ZCTA-to-place data (see
+  // netlify/functions/_service-area.js). With a non-beach town picked, the
+  // customer must say which side; the server requires the same answer
+  // (<end>_zip_area) and prices "island" as Padre Island.
+  var ZIP_AREAS = { "78418": { island: "Padre Island", mainland: "Corpus Christi" } };
+  var BEACH_TOWNS = ["Port Aransas", "Mustang Island", "Padre Island"];
+
+  function zipAreaQuestion(town, zip) {
+    var z = /^(\d{5})/.exec(String(zip == null ? "" : zip).trim());
+    var sides = z && ZIP_AREAS[z[1]];
+    if (!sides || !isCity(town) || BEACH_TOWNS.indexOf(String(town)) !== -1) return null;
+    return { zip: z[1], island: sides.island, mainland: sides.mainland };
+  }
+
+  // Town to price an end as, given the customer's answer ("island"/"mainland").
+  function zipAreaTown(town, zip, answer) {
+    var q = zipAreaQuestion(town, zip);
+    return q && answer === "island" ? q.island : town;
+  }
+
   function categoryById(id) {
     for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].id === id) return CATEGORIES[i];
     return null;
@@ -468,6 +489,9 @@
     PARTNERS: PARTNERS,
     partnerBySlug: partnerBySlug,
     isCity: isCity,
+    ZIP_AREAS: ZIP_AREAS,
+    zipAreaQuestion: zipAreaQuestion,
+    zipAreaTown: zipAreaTown,
     isValidZip: isValidZip,
     categoryById: categoryById,
     matchCategory: matchCategory,

@@ -781,6 +781,21 @@
                             </div>
                         </div>
 
+                        <fieldset class="cc-zip-area" id="pickupZipAreaGroup" data-end="pickup" hidden aria-describedby="pickupZipAreaHelp pickupZipAreaError">
+                            <legend>Where is your pickup? <span class="required">*</span></legend>
+                            <p class="cc-zip-area-help" id="pickupZipAreaHelp">ZIP <span class="cc-zip-area-zip">78418</span> covers both Padre Island and Flour Bluff. Island trips need a 4x4 and include the beach surcharge. Your total updates when you choose.</p>
+                            <label class="cc-zip-area-option"><input type="radio" name="pickupZipArea" value="island"> <span>On Padre Island (beach)</span></label>
+                            <label class="cc-zip-area-option"><input type="radio" name="pickupZipArea" value="mainland"> <span>Flour Bluff / mainland Corpus Christi</span></label>
+                            <p class="order-inline-error" id="pickupZipAreaError" hidden>Choose one so we can price your trip.</p>
+                        </fieldset>
+                        <fieldset class="cc-zip-area" id="dropoffZipAreaGroup" data-end="dropoff" hidden aria-describedby="dropoffZipAreaHelp dropoffZipAreaError">
+                            <legend>Where is your drop-off? <span class="required">*</span></legend>
+                            <p class="cc-zip-area-help" id="dropoffZipAreaHelp">ZIP <span class="cc-zip-area-zip">78418</span> covers both Padre Island and Flour Bluff. Island trips need a 4x4 and include the beach surcharge. Your total updates when you choose.</p>
+                            <label class="cc-zip-area-option"><input type="radio" name="dropoffZipArea" value="island"> <span>On Padre Island (beach)</span></label>
+                            <label class="cc-zip-area-option"><input type="radio" name="dropoffZipArea" value="mainland"> <span>Flour Bluff / mainland Corpus Christi</span></label>
+                            <p class="order-inline-error" id="dropoffZipAreaError" hidden>Choose one so we can price your trip.</p>
+                        </fieldset>
+
                         <div id="summaryContainer">
                             <table class="summary-table" id="summaryTable">
                                 <tbody id="summaryBody"></tbody>
