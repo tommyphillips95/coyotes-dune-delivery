@@ -141,6 +141,13 @@ test("tracking refreshes status, guards overlap, and sends the token", () => {
   assert.ok(html.indexOf("js/coastal.js") < html.indexOf("track.js"));
 });
 
+test("CoyoteAPI surfaces a 4xx body's error text so validation messages reach the page", () => {
+  const main = read("frontend/js/main.js");
+  assert.ok(/new Error\(\(data && \(data\.message \|\| data\.error\)\) \|\| 'Request failed'\)/.test(main));
+  // create-order 400s use { error: "..." }; orderErrorMessage passes 4xx text through.
+  assert.strictEqual(C.orderErrorMessage({ ok: false, status: 400, error: "Please enter a 5-digit ZIP code for pickup." }), "Please enter a 5-digit ZIP code for pickup.");
+});
+
 test("every page loads the coastal design system", () => {
   for (const p of ["index.html", "order/index.html", "track/index.html", "driver/index.html", "admin/index.html", "apply/index.html"]) {
     assert.ok(read("frontend/" + p).includes("css/coastal.css"), p);
