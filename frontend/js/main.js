@@ -237,8 +237,18 @@
                 config.body = JSON.stringify(config.body);
             }
 
+            // Optional timeout (order + payment calls): abort after timeoutMs and
+            // report { status: 0, timedOut / offline } so callers can offer Retry.
+            const timeoutMs = config.timeoutMs;
+            delete config.timeoutMs;
+            const C = window.CoyoteCoastal;
             try {
-                const response = await fetch(url, config);
+                if (timeoutMs && C && typeof C.isOffline === 'function' && C.isOffline()) {
+                    const off = new Error('offline'); off.offline = true; off.network = true; throw off;
+                }
+                const response = (timeoutMs && C && typeof C.timedFetch === 'function')
+                    ? await C.timedFetch(fetch, url, config, timeoutMs)
+                    : await fetch(url, config);
                 const contentType = response.headers.get('content-type') || '';
                 let data = null;
                 if (contentType.includes('application/json')) {
@@ -261,7 +271,8 @@
                 console.error('API request failed:', err);
                 // Keep the JSON body (e.g. { code: "already_paid" }) so callers
                 // can branch on machine-readable codes, not message text.
-                return { ok: false, error: err.message, status: err.status || 0, data: err.data };
+                return { ok: false, error: err.message, status: err.status || 0, data: err.data,
+                    timedOut: !!err.timedOut, offline: !!err.offline, network: !!err.network || !err.status };
             }
         },
 
@@ -280,8 +291,8 @@
         /**
          * POST helper
          */
-        async post(url, body) {
-            return this.request(url, { method: 'POST', body: body });
+        async post(url, body, opts) {
+            return this.request(url, Object.assign({ method: 'POST', body: body }, opts || {}));
         },
 
         /**

@@ -297,3 +297,8 @@ a:hover { color: var(--cc-coral-dark); }
 .cc-confirm-summary dt { color: var(--cc-muted); font-weight: 600; }
 .cc-confirm-summary dd { margin: 0; color: var(--cc-text); overflow-wrap: anywhere; }
 .cc-next-steps { margin: 14px auto 0; max-width: 420px; font-size: 0.92rem; color: var(--cc-ink-2); }
+
+/* Retry after a slow / dropped connection (order + payment) */
+.cc-retry-btn { display: block; width: 100%; min-height: 48px; margin: 0 0 16px; }
+.cc-retry-btn[hidden] { display: none; }
+.cc-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

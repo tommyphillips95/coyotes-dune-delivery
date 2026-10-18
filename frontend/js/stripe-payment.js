@@ -216,7 +216,9 @@
             <p class="payment-subtitle">Your card information is encrypted and secure.</p>
             <span class="payment-amount" id="paymentAmount">$0.00</span>
             <div class="card-element-wrapper" id="cardElement"></div>
-            <div class="payment-error" id="paymentError"></div>
+            <div class="payment-error" id="paymentError" role="alert" aria-live="assertive"></div>
+            <button type="button" class="btn btn-secondary cc-retry-btn" id="paymentRetryBtn" hidden>Retry</button>
+            <p class="cc-sr-only" id="paymentStatusLive" role="status" aria-live="polite"></p>
             <div class="payment-actions">
                 <button type="button" class="btn-pay" id="paymentSubmitBtn">
                     <span id="paymentBtnText">Pay Now</span>
@@ -260,6 +262,8 @@
 
         paymentSubmitBtn = document.getElementById('paymentSubmitBtn');
         paymentErrorDisplay = document.getElementById('paymentError');
+        const retry = document.getElementById('paymentRetryBtn');
+        if (retry) retry.addEventListener('click', handlePaymentSubmit);
         paymentSpinner = document.getElementById('paymentBtnText');
 
         // Bind events
@@ -313,15 +317,32 @@
         paying = true;
         setPaymentLoading(true);
         clearPaymentError();
+        const C = window.CoyoteCoastal;
+        const retryBtn = document.getElementById('paymentRetryBtn');
+        const live = document.getElementById('paymentStatusLive');
+        const say = (t) => { if (live) live.textContent = t || ''; };
+        if (retryBtn) retryBtn.disabled = true;
+        say('Setting up your payment…');
 
         try {
-            // 1. Create PaymentIntent on the server
+            // 1. Create PaymentIntent on the server. Safe to retry: #53's
+            //    create-payment-intent reuses/updates the open PaymentIntent and
+            //    answers 409 already_paid / payment_processing instead of charging twice.
             const customerEmail = document.getElementById('customerEmail')?.value?.trim() || '';
             const piResult = await CoyoteAPI.post('/api/create-payment-intent', {
                 order_id: currentOrderId,
                 amount: currentAmount,
                 customer_email: customerEmail,
-            });
+            }, { timeoutMs: C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000 });
+
+            const netKind = C && C.networkFailureKind ? C.networkFailureKind(piResult) : null;
+            if (netKind) {
+                showPaymentError(C.paymentNetworkMessage(netKind));
+                if (retryBtn) retryBtn.hidden = false;
+                say('');
+                return;
+            }
+            if (retryBtn) retryBtn.hidden = true;
 
             // 409 + code: the order must not be charged again (#53).
             const conflict = window.CoyoteCoastal ? window.CoyoteCoastal.paymentConflictKind(piResult) : null;
@@ -334,6 +355,7 @@
 
             const clientSecret = piResult.data.client_secret;
 
+            say('Confirming your card…');
             // 2. Confirm the card payment with Stripe.js
             const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
                 payment_method: {
@@ -347,7 +369,16 @@
             });
 
             if (confirmError) {
-                // Card was declined or there was an error
+                // Card was declined or there was an error. Never re-run
+                // confirmCardPayment automatically; a connection error offers
+                // Retry, which starts again at create-payment-intent (#53 checks
+                // whether the order is already paid/processing before charging).
+                if (confirmError.type === 'api_connection_error' && C) {
+                    showPaymentError(C.paymentNetworkMessage(C.isOffline() ? 'offline' : 'network'));
+                    if (retryBtn) retryBtn.hidden = false;
+                    say('');
+                    return;
+                }
                 throw new Error(confirmError.message);
             }
 
@@ -370,6 +401,7 @@
         } finally {
             paying = false;
             setPaymentLoading(false);
+            if (retryBtn) retryBtn.disabled = false;
         }
     }
 

@@ -35,7 +35,7 @@ test("paymentStatusKind maps the order row for the read-only status check", () =
 });
 
 test("CoyoteAPI keeps the JSON body on errors so the code is readable", () => {
-  assert.ok(/return \{ ok: false, error: err\.message, status: err\.status \|\| 0, data: err\.data \}/.test(read("frontend/js/main.js")));
+  assert.ok(/return \{ ok: false, error: err\.message, status: err\.status \|\| 0, data: err\.data[,\s}]/.test(read("frontend/js/main.js")));
 });
 
 const sp = read("frontend/js/stripe-payment.js");
