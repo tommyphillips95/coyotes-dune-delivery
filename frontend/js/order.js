@@ -211,6 +211,31 @@
         tbody.innerHTML = rows.map(([label, val]) => `<tr><th>${label}</th><td>${escapeHtml(val)}</td></tr>`).join('');
     }
 
+    // One idempotency key per checkout attempt. A retry after a failure (e.g. a
+    // dropped connection) reuses it, so create-order returns the order it may
+    // already have made instead of a duplicate. Editing any order field starts
+    // a new attempt; success clears it.
+    let checkoutKey = null;
+
+    function newIdempotencyKey() {
+        const c = window.crypto;
+        if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+        const bytes = new Uint8Array(16);
+        if (c && typeof c.getRandomValues === 'function') c.getRandomValues(bytes);
+        else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function checkoutIdempotencyKey() {
+        if (!checkoutKey) checkoutKey = newIdempotencyKey();
+        return checkoutKey;
+    }
+
+    function resetCheckoutKey(e) {
+        if (e && e.target && e.target.id === 'termsAgree') return;
+        checkoutKey = null;
+    }
+
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -252,10 +277,12 @@
             package_size: serviceType === 'package_delivery' ? document.querySelector('input[name="packageSize"]:checked').value : null,
             package_description: document.getElementById('itemDescription')?.value.trim() || null,
             special_instructions: document.getElementById('specialInstructions').value.trim() || null,
+            idempotency_key: checkoutIdempotencyKey(),
         };
         try {
             const result = await CoyoteAPI.post('/api/create-order', orderData);
             if (result.ok) {
+                checkoutKey = null;
                 const ctx = {
                     orderId: result.data.orderId,
                     orderNumber: result.data.orderNumber,
@@ -427,6 +454,11 @@
         document.querySelectorAll('.prev-step').forEach(btn => btn.addEventListener('click', () => goToStep(parseInt(btn.dataset.prev, 10))));
         setupCardSelection('#rideDetails', 'passengers');
         setupCardSelection('#deliveryDetails', 'packageSize');
+        form.addEventListener('input', resetCheckoutKey);
+        form.addEventListener('change', resetCheckoutKey);
+        document.querySelectorAll('.detail-card').forEach(c => c.addEventListener('click', resetCheckoutKey));
+        const swapForKey = document.getElementById('swapLocations');
+        if (swapForKey) swapForKey.addEventListener('click', resetCheckoutKey); // swap sets .value, no input event
         ['pickupAddress', 'pickupCity', 'pickupZip', 'dropoffAddress', 'dropoffCity', 'dropoffZip', 'customerFirstName', 'customerLastName', 'customerPhone', 'customerEmail'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => showError(el, false));
