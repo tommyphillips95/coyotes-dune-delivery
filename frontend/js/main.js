@@ -259,7 +259,9 @@
                 return { ok: true, data, status: response.status };
             } catch (err) {
                 console.error('API request failed:', err);
-                return { ok: false, error: err.message, status: err.status || 0 };
+                // Keep the JSON body (e.g. { code: "already_paid" }) so callers
+                // can branch on machine-readable codes, not message text.
+                return { ok: false, error: err.message, status: err.status || 0, data: err.data };
             }
         },
 

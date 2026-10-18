@@ -77,8 +77,8 @@ async function resolveStripeCustomer(stripe, supabase, order, customerEmail) {
 /**
  * Reuse, update, or replace the order's existing PaymentIntent without ever
  * risking a second charge.
- *   succeeded                     -> no new intent; "already paid" (409)
- *   processing / requires_capture -> no new intent; "in progress" (409)
+ *   succeeded                     -> no new intent; 409 code "already_paid"
+ *   processing / requires_capture -> no new intent; 409 code "payment_processing"
  *   requires_payment_method / requires_confirmation / requires_action
  *       right amount + currency   -> reuse it
  *       wrong amount or currency  -> paymentIntents.update; if that fails,
@@ -130,14 +130,14 @@ async function reconcileExistingIntent(stripe, supabase, order, amountCents) {
     }
     return {
       statusCode: 409,
-      response: { error: "This order is already paid.", status: "already_paid", order_id: order.id, payment_intent_id: intent.id },
+      response: { error: "This order is already paid.", code: "already_paid", status: "already_paid", order_id: order.id, payment_intent_id: intent.id },
     };
   }
 
   if (IN_FLIGHT.has(intent.status)) {
     return {
       statusCode: 409,
-      response: { error: "A payment for this order is already being processed. Please wait a moment, then check your order status.", status: "in_progress", order_id: order.id, payment_intent_id: intent.id },
+      response: { error: "A payment for this order is already being processed. Please wait a moment, then check your order status.", code: "payment_processing", status: "in_progress", order_id: order.id, payment_intent_id: intent.id },
     };
   }
 
@@ -215,7 +215,9 @@ exports.handler = async (event) => {
     }
 
     if (order.payment_status === "paid") {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Order is already paid" }) };
+      // Same machine-readable code as a succeeded PaymentIntent, so the
+      // checkout shows the "already paid" screen instead of an error.
+      return { statusCode: 409, headers, body: JSON.stringify({ error: "This order is already paid.", code: "already_paid", status: "already_paid", order_id: order.id }) };
     }
 
     let amountCents;

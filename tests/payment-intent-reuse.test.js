@@ -93,10 +93,22 @@ test("succeeded: no new intent; 409 already_paid; unpaid order is reported, not 
   assert.strictEqual(res.statusCode, 409, res.body);
   const out = JSON.parse(res.body);
   assert.strictEqual(out.status, "already_paid");
+  assert.strictEqual(out.code, "already_paid", "machine-readable code for the checkout");
+  assert.strictEqual(out.error, "This order is already paid.", "human message kept");
   assert.ok(!out.client_secret, "no secret handed out");
   assert.deepStrictEqual(ops(), ["retrieve:pi_old"]);
   assert.ok(/succeeded but the order was not marked paid/.test(fake.db.order_status_logs[0].note));
   assert.strictEqual(fake.db.orders[0].payment_status, "pending", "status left to the webhook");
+});
+
+test("order already marked paid in our DB: 409 code already_paid, Stripe never called", async () => {
+  fake = db({ payment_status: "paid" }); S = mockStripe({ intents: { pi_old: pi("pi_old", "succeeded") } });
+  const res = await pay();
+  assert.strictEqual(res.statusCode, 409);
+  const out = JSON.parse(res.body);
+  assert.strictEqual(out.code, "already_paid");
+  assert.ok(!out.client_secret);
+  assert.deepStrictEqual(S.calls, []);
 });
 
 test("processing and requires_capture: no new intent; 409 in_progress", async () => {
@@ -105,6 +117,8 @@ test("processing and requires_capture: no new intent; 409 in_progress", async ()
     const res = await pay();
     assert.strictEqual(res.statusCode, 409, status);
     assert.strictEqual(JSON.parse(res.body).status, "in_progress", status);
+    assert.strictEqual(JSON.parse(res.body).code, "payment_processing", status);
+    assert.ok(/already being processed/.test(JSON.parse(res.body).error), status);
     assert.deepStrictEqual(ops(), ["retrieve:pi_old"], status);
   }
 });

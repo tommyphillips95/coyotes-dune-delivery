@@ -44,6 +44,7 @@
     let currentOrderId = null;
     let currentOrderNumber = null;
     let currentAmount = 0;
+    let currentTrackingToken = null;
 
     // ── DOM References ────────────────────────────────────────
     const form = document.getElementById('orderForm');
@@ -322,6 +323,11 @@
                 customer_email: customerEmail,
             });
 
+            // 409 + code: the order must not be charged again (#53).
+            const conflict = window.CoyoteCoastal ? window.CoyoteCoastal.paymentConflictKind(piResult) : null;
+            if (conflict === 'already_paid') { showAlreadyPaid(); return; }
+            if (conflict === 'payment_processing') { showPaymentProcessing(); return; }
+
             if (!piResult.ok || !piResult.data?.client_secret) {
                 throw new Error(piResult.data?.error || piResult.error || 'Failed to initialize payment');
             }
@@ -345,9 +351,11 @@
                 throw new Error(confirmError.message);
             }
 
-            if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
-                // processing = bank still confirming; the webhook marks it paid.
+            if (paymentIntent.status === 'succeeded') {
                 showPaymentSuccess();
+            } else if (paymentIntent.status === 'processing') {
+                // Bank still confirming; the webhook marks it paid.
+                showPaymentProcessing();
             } else if (paymentIntent.status === 'requires_action') {
                 // 3D Secure or additional authentication required
                 // Stripe.js handles this automatically in confirmCardPayment
@@ -394,6 +402,152 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    // ── Already paid / processing screens (#53 409 codes) ──
+    function focusHeading(el) {
+        if (!el) return;
+        el.setAttribute('tabindex', '-1');
+        try { el.focus({ preventScroll: true }); } catch (_) { el.focus(); }
+    }
+
+    function trackUrl() {
+        return window.CoyoteCoastal && currentOrderNumber
+            ? window.CoyoteCoastal.buildTrackUrl(currentOrderNumber)
+            : '/track/';
+    }
+
+    function showAlreadyPaid(title) {
+        const panel = document.getElementById('paymentStatusPanel');
+        if (panel) panel.remove();
+        finish({
+            title: title || 'Already Paid',
+            message: "This order is already paid, so you won't be charged again. Your driver will be assigned shortly.",
+        });
+        const ps = orderSuccess.querySelectorAll('p');
+        if (ps[0]) ps[0].textContent = 'Thank you! Your payment went through.';
+        orderSuccess.setAttribute('data-payment-state', 'already_paid');
+        focusHeading(orderSuccess.querySelector('h2'));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showPaymentProcessing() {
+        if (paymentFormContainer) paymentFormContainer.remove();
+        const old = document.getElementById('paymentStatusPanel');
+        if (old) old.remove();
+        if (form) form.style.display = 'none';
+        if (progressBar) progressBar.style.display = 'none';
+
+        const panel = document.createElement('section');
+        panel.id = 'paymentStatusPanel';
+        panel.className = 'payment-status-panel';
+        panel.setAttribute('aria-labelledby', 'paymentStatusTitle');
+        panel.setAttribute('data-payment-state', 'payment_processing');
+        panel.innerHTML = `
+            <style>
+                .payment-status-panel {
+                    background: var(--warm-white);
+                    border: 1.5px solid var(--border);
+                    border-radius: var(--radius-lg);
+                    padding: 32px 24px;
+                    margin-top: 24px;
+                    text-align: center;
+                    animation: fadeInUp 0.4s ease;
+                }
+                .payment-status-panel h2 {
+                    font-family: var(--font-display);
+                    color: var(--navy);
+                    font-size: 1.4rem;
+                    margin: 12px 0 8px;
+                }
+                .payment-status-panel h2:focus { outline: none; }
+                .payment-status-panel p { color: var(--muted); margin-bottom: 12px; }
+                .payment-status-panel .status-icon {
+                    width: 56px; height: 56px; margin: 0 auto;
+                    border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    background: rgba(201, 168, 124, 0.15); color: var(--sand);
+                }
+                .payment-status-panel .order-id { margin: 8px 0 16px; }
+                .payment-status-panel .payment-status-msg { color: var(--navy); font-weight: 500; min-height: 1.5em; }
+                .payment-status-panel .status-actions {
+                    display: flex; flex-direction: column; gap: 12px; margin-top: 8px;
+                }
+                .payment-status-panel .status-actions .btn,
+                .payment-status-panel .status-actions button {
+                    min-height: 48px; width: 100%; font-size: 1rem;
+                }
+                .payment-status-panel .btn-check {
+                    background: var(--navy); color: var(--pure-white); border: none;
+                    border-radius: var(--radius); font-weight: 600; cursor: pointer;
+                }
+                .payment-status-panel .btn-check:disabled { opacity: 0.6; cursor: not-allowed; }
+                @media (min-width: 560px) {
+                    .payment-status-panel .status-actions { flex-direction: row; }
+                    .payment-status-panel .status-actions > * { flex: 1; }
+                }
+            </style>
+            <div class="status-icon" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+            </div>
+            <h2 id="paymentStatusTitle">Payment Processing</h2>
+            <p>Your bank is still confirming this payment. <strong>Please don't pay again.</strong> This usually takes a minute or two.</p>
+            <div class="order-id" id="paymentStatusOrder"></div>
+            <p class="payment-status-msg" id="paymentStatusMsg" role="status" aria-live="polite"></p>
+            <div class="status-actions">
+                <button type="button" class="btn-check" id="paymentCheckBtn">Check payment status</button>
+                <a class="btn btn-secondary" id="paymentStatusTrack" href="/track/">Track this order</a>
+            </div>
+        `;
+        if (form && form.parentNode) form.parentNode.insertBefore(panel, form.nextSibling);
+        panel.querySelector('#paymentStatusOrder').textContent = currentOrderNumber || '';
+        panel.querySelector('#paymentStatusTrack').href = trackUrl();
+        panel.querySelector('#paymentCheckBtn').addEventListener('click', checkPaymentStatus);
+        focusHeading(panel.querySelector('h2'));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Read-only: looks at the order (customer tracking token), never creates
+    // or touches a payment.
+    let checking = false;
+    async function checkPaymentStatus() {
+        if (checking) return;
+        const msg = document.getElementById('paymentStatusMsg');
+        const btn = document.getElementById('paymentCheckBtn');
+        const say = (t) => { if (msg) msg.textContent = t; };
+        if (!currentTrackingToken) {
+            say('Use "Track this order" to see the latest status.');
+            return;
+        }
+        checking = true;
+        if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
+        say('');
+        try {
+            const result = await CoyoteAPI.request('/api/get-orders', {
+                method: 'GET',
+                headers: { Authorization: 'Bearer ' + currentTrackingToken },
+            });
+            const rows = result.ok && result.data ? result.data.data : null;
+            const order = Array.isArray(rows) ? rows[0] : rows;
+            if (!order) {
+                say("We couldn't check right now. Try again in a moment, or use Track this order.");
+                return;
+            }
+            const kind = window.CoyoteCoastal ? window.CoyoteCoastal.paymentStatusKind(order) : 'processing';
+            if (kind === 'paid') { showAlreadyPaid('Payment Confirmed'); return; }
+            if (kind === 'failed') {
+                say("This payment didn't go through, and you haven't been charged twice. You can pay your driver in cash or card.");
+                return;
+            }
+            say('Still processing. Please check again in a minute. No need to pay again.');
+        } catch (err) {
+            say("We couldn't check right now. Try again in a moment, or use Track this order.");
+        } finally {
+            checking = false;
+            if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = 'Check payment status'; }
+        }
+    }
+
     // ── Payment UI Helpers ──────────────────────────────────
     function showPaymentError(message) {
         if (paymentErrorDisplay) {
@@ -431,6 +585,7 @@
         currentOrderId = ctx.orderId;
         currentOrderNumber = ctx.orderNumber;
         currentAmount = Number(ctx.amount) || 0;
+        currentTrackingToken = ctx.trackingToken || null;
         const idEl = document.getElementById('orderIdDisplay');
         if (idEl) idEl.textContent = currentOrderNumber;
         if (!currentOrderId || !currentAmount) return false;

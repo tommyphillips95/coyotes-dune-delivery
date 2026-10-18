@@ -44,7 +44,62 @@ Also set `NODE_VERSION=22` for builds (Netlify build/runtime). Template: root `.
 
 **Live Netlify check (2026-10-11 CT):** production context on `coyote-dune-delivery` still only has `SITE_ORIGIN` and `NODE_VERSION`. Payments, auth, and DB-backed booking stay dark until the required rows above are filled. Code-side security pass (#12 PRs #27–#29) is merged on this branch; remaining Tommy gate is issue #9 (rotate `ADMIN_PASSWORD` / `JWT_SECRET`, set Supabase + Stripe, add `ANTHROPIC_API_KEY` Actions secret).
 
-Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/payment-webhook`.
+Webhook URL once Stripe is wired: see [Stripe (card payments)](#stripe-card-payments) below.
+
+## Stripe (card payments)
+Card checkout stays off until `STRIPE_PUBLISHABLE_KEY` is set; without it, customers see "pay the driver". Do everything in **test mode** first.
+
+### Env vars the code reads (Netlify)
+| Name | Read by | Value |
+|------|---------|-------|
+| `STRIPE_SECRET_KEY` | `_stripe.js` (create-payment-intent, payment-webhook) | `sk_test_...` (later `sk_live_...`) |
+| `STRIPE_PUBLISHABLE_KEY` | `public-config.js` (sent to the browser) | `pk_test_...` (later `pk_live_...`) |
+| `STRIPE_WEBHOOK_SECRET` | `_stripe.js` `constructWebhookEvent` | `whsec_...` from the webhook endpoint (below) |
+
+Set them in Netlify: **Site configuration → Environment variables → Add a variable**, scoped to **Functions** (the publishable key also only needs Functions, because the browser gets it from `/api/public-config`). Env changes only apply after the next deploy. Trigger one deploy after all three are set, so you use one build credit instead of three.
+
+### Webhook endpoint
+- **Endpoint URL:** `https://coyote-dune-delivery.netlify.app/.netlify/functions/payment-webhook`. That is the function `netlify/functions/payment-webhook.js`. `/api/payment-webhook` is the same function through the `/api/*` rewrite in `netlify.toml`; either works, but use the direct one. If a custom domain is added later, use that host.
+- **Events to send.** Select exactly these. They are the event types `payment-webhook.js` handles; anything else is acknowledged and ignored.
+
+<!-- stripe-webhook-events:start -->
+- `payment_intent.succeeded`: marks the order `paid`, stores `final_price`, and starts driver dispatch
+- `payment_intent.payment_failed`: marks the order `failed` (only for the order's current PaymentIntent)
+- `payment_intent.requires_action`: keeps the order `pending` (3-D Secure in progress)
+- `payment_intent.canceled`: marks the order `failed` (only for the order's current PaymentIntent)
+- `charge.refunded`: marks the order `refunded`
+<!-- stripe-webhook-events:end -->
+
+- **Signing secret:**
+  1. In Stripe Dashboard (test mode on), go to **Developers → Webhooks → Add endpoint**.
+  2. Paste the URL, select the five events, and save.
+  3. On the endpoint page, under **Signing secret**, click **Reveal** and copy the `whsec_...` value into Netlify as `STRIPE_WEBHOOK_SECRET`.
+  4. Test mode and live mode endpoints have **different** secrets. Create the live endpoint separately at go-live and replace the value.
+
+### Test-mode checklist
+Stripe test cards take any future expiry, any 3-digit CVC, and any ZIP.
+
+1. **Keys:** Dashboard → toggle **Test mode** → Developers → API keys. Set `pk_test_...` and `sk_test_...` in Netlify, plus the test `whsec_...`, then deploy once.
+2. **Successful card:** book an order on `/order/` and pay with `4242 4242 4242 4242`. Expect the "Payment Successful!" screen.
+3. **3-D Secure:** new order, pay with `4000 0025 0000 3155`. Complete the test authentication pop-up; it should succeed. Repeat and click **Fail** in the pop-up; expect an error, and the card form stays so the customer can try again.
+4. **Declined:** new order, pay with `4000 0000 0000 0002` (generic decline). Expect a decline message and no charge. The order shows `failed` until a retry succeeds. Retry on the same screen with `4242...`: it reuses the same PaymentIntent, and the order becomes `paid`.
+5. **Retry after paying:** the checkout page removes the card form after success, so ask for the payment again from a terminal for the step-2 order. Copy its `id` from Supabase `orders`:
+   ```bash
+   curl -s -X POST https://coyote-dune-delivery.netlify.app/api/create-payment-intent \
+     -H 'Content-Type: application/json' \
+     -d '{"order_id":"<order id>","customer_email":"test@example.com"}'
+   ```
+   Expect HTTP 409 with `"code":"already_paid"`, which is what makes the checkout show the **Already Paid** screen (track button, no card form). No new payment should appear in Stripe. Both screens were rendered on the agent box with mocked responses (see the PR that added this section).
+6. **Refund:** Dashboard → Payments → open the step-2 payment → **Refund**. The order should become `refunded`. Any refund, including a partial one, marks the whole order `refunded`.
+7. **What to check in the Stripe dashboard:**
+   - **Payments:** one payment per paid order, with metadata `order_id` and `order_number`.
+   - **Customers:** one customer per repeat customer, not one per payment (#52).
+   - **Developers → Webhooks → endpoint → Event deliveries:** every event answered `200`. A `400` means the signing secret is wrong.
+8. **What to check in Supabase** (Table Editor, read-only):
+   - `orders` for each test order: `payment_status` (`paid` / `failed` / `refunded`), `final_price`, `stripe_payment_intent_id` and `stripe_customer_id` set.
+   - `order_status_logs`: a "Payment succeeded via Stripe" row per paid order, and "Refund issued" after step 6. A row containing "WARNING" or "not marked paid" means investigate before go-live.
+
+Go-live: repeat the endpoint and secret steps in live mode, swap the three env vars to live values, deploy once, and do one small real payment and refund.
 
 ## SQL review
 
