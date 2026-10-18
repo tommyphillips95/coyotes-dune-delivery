@@ -60,14 +60,11 @@ test("island-only ZIP with a mainland town -> 400 zip_town_mismatch (no silent r
   assert.strictEqual(d.status, 400); assert.strictEqual(d.body.field, "dropoff_city");
 });
 
-test("ambiguous 78418 with Corpus Christi: accepted at the quoted price, 4x4 + dispatch note", async () => {
+test("ambiguous 78418 with Corpus Christi and no island/mainland answer -> 400 zip_area_required", async () => {
   const r = await post(base({ pickup_city: "Corpus Christi", pickup_zip: "78418", dropoff_city: "Corpus Christi", dropoff_zip: "78418" }));
-  assert.strictEqual(r.status, 201, JSON.stringify(r.body));
-  const row = r.db.orders[0];
-  assert.strictEqual(row.estimated_price, priceQuote("Corpus Christi", "Corpus Christi", { service_type: "ride", passenger_count: 1 }).total);
-  assert.strictEqual(row.required_vehicle_class, "4x4");
-  assert.strictEqual(r.body.requiredClass, "4x4");
-  assert(/Address check: .*78418 covers Flour Bluff/.test(r.db.order_status_logs[0].note), r.db.order_status_logs[0].note);
+  assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+  assert.strictEqual(r.body.code, "zip_area_required");
+  assert.strictEqual(r.db.orders.length, 0);
 });
 
 test("legit orders unchanged: beach towns with their ZIPs, CC, Rockport, ZIP+4, no ZIP", async () => {

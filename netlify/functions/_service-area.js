@@ -42,6 +42,9 @@ const ZIP_TOWNS = {
   .forEach((z) => { ZIP_TOWNS[z] = ["Corpus Christi"]; });
 
 const AMBIGUOUS_ZIPS = ["78418"];
+// Which priced town each answer means for an ambiguous ZIP.
+const ZIP_AREAS = { "78418": { island: "Padre Island", mainland: "Corpus Christi" } };
+const ZIP_AREA_VALUES = ["island", "mainland"];
 const REGION_PREFIXES = ["783", "784"];
 
 function isBeachTown(t) { return ZONES.beachCities.includes(t); }
@@ -51,21 +54,28 @@ function townList(conj) { return TOWNS.slice(0, -1).join(", ") + " " + (conj || 
 /**
  * Check one end of a trip. Returns:
  *   { ok: false, status, code, field, error }       -> refuse the order
- *   { ok: true, town, zip, flag?, forceBeach? }      -> accept (flag = note for dispatch)
+ *   { ok: true, town, zip, priceTown, flag?, note? } -> accept (priceTown = town we
+ *                                                       price/dispatch as; flag = address
+ *                                                       check for dispatch; note = info)
  * Rules (safest for the customer first):
  *   - unknown town                       -> 400 unknown_town
  *   - ZIP outside 783xx/784xx            -> 400 zip_outside_area
  *   - ZIP only maps to beach towns, non-beach town picked -> 400 zip_town_mismatch
  *       (refuse rather than silently re-price: the customer sees the right quote
  *        before paying, and the order gets a 4x4)
- *   - ambiguous ZIP (78418) with a non-beach town -> accept as picked, but
- *       forceBeach (4x4 driver class, no price change) + flag for dispatch.
- *       Flour Bluff is a large mainland area, so refusing would block real orders;
- *       sending a 4x4 never strands an island customer.
+ *   - ambiguous ZIP (78418) with a non-beach town -> the customer must say which
+ *       side it is: body.<end>_zip_area = "island" | "mainland".
+ *         missing/other -> 400 zip_area_required (the order page turns it into
+ *                          a question on the Review step, before payment)
+ *         "island"      -> priced AND dispatched as Padre Island (beach
+ *                          surcharge + 4x4), whatever town was picked
+ *         "mainland"    -> Corpus Christi pricing, normal vehicle (Flour Bluff)
+ *       The client asks the same question first (frontend/js/coastal.js
+ *       zipAreaQuestion) so the quote they confirm matches what we charge.
  *   - ZIP in the region but not mapped, or a beach town with another beach town's
  *       ZIP -> accept + flag (no price downgrade possible)
  */
-function checkEnd(townRaw, zipRaw, field) {
+function checkEnd(townRaw, zipRaw, field, areaRaw) {
   const town = String(townRaw == null ? "" : townRaw).trim();
   const label = field === "dropoff" ? "drop-off" : "pickup";
   if (!TOWNS.includes(town)) {
@@ -73,37 +83,51 @@ function checkEnd(townRaw, zipRaw, field) {
       error: `We don't serve "${town.slice(0, 40)}" yet. Choose a ${label} town: ${townList("or")}.` };
   }
   const zip = zip5(zipRaw);
-  if (!zip) return { ok: true, town, zip: null };
+  if (!zip) return { ok: true, town, zip: null, priceTown: town };
   if (!REGION_PREFIXES.includes(zip.slice(0, 3))) {
     return { ok: false, status: 400, code: "zip_outside_area", field: field + "_zip",
       error: `ZIP ${zip} is outside our service area. We serve ${townList()}. Please check the ${label} ZIP.` };
   }
   const towns = ZIP_TOWNS[zip];
-  if (!towns) return { ok: true, town, zip, flag: `${label} ZIP ${zip} isn't mapped to ${town}; please confirm the address.` };
+  if (!towns) return { ok: true, town, zip, priceTown: town, flag: `${label} ZIP ${zip} isn't mapped to ${town}; please confirm the address.` };
   if (towns.includes(town)) {
     if (AMBIGUOUS_ZIPS.includes(zip) && !isBeachTown(town)) {
-      return { ok: true, town, zip, forceBeach: true,
-        flag: `${label} ZIP ${zip} covers Flour Bluff and North Padre/Mustang Island; ${town} picked, 4x4 assigned. Confirm the address is on the mainland.` };
+      const area = String(areaRaw == null ? "" : areaRaw).trim().toLowerCase();
+      const sides = ZIP_AREAS[zip];
+      if (!ZIP_AREA_VALUES.includes(area)) {
+        return { ok: false, status: 400, code: "zip_area_required", field: field + "_zip_area", zip,
+          error: `ZIP ${zip} covers both ${sides.island} and ${sides.mainland === "Corpus Christi" ? "Flour Bluff (mainland Corpus Christi)" : sides.mainland}. Tell us which one your ${label} is on so we can price it correctly.` };
+      }
+      if (area === "island") {
+        return { ok: true, town, zip, priceTown: sides.island, area,
+          note: `Customer picked ${town}, ${label} ZIP ${zip}, and said it is on ${sides.island}; priced and dispatched as ${sides.island}.` };
+      }
+      return { ok: true, town, zip, priceTown: town, area,
+        note: `Customer said the ${label} (ZIP ${zip}) is in Flour Bluff / mainland ${town}.` };
     }
-    return { ok: true, town, zip };
+    return { ok: true, town, zip, priceTown: town };
   }
   const allBeach = towns.every(isBeachTown);
   if (allBeach && !isBeachTown(town)) {
     return { ok: false, status: 400, code: "zip_town_mismatch", field: field + "_city",
       error: `ZIP ${zip} is on the island (${towns.join(" / ")}), but the ${label} town is ${town}. Go back to the Route step and pick ${towns.join(" or ")} so we price beach access and send a 4x4.` };
   }
-  return { ok: true, town, zip, flag: `${label} ZIP ${zip} is usually ${towns.join(" / ")}, but ${town} was picked; please confirm the address.` };
+  return { ok: true, town, zip, priceTown: town, flag: `${label} ZIP ${zip} is usually ${towns.join(" / ")}, but ${town} was picked; please confirm the address.` };
 }
 
 function checkTrip(body) {
-  const pickup = checkEnd(body.pickup_city, body.pickup_zip, "pickup");
+  const pickup = checkEnd(body.pickup_city, body.pickup_zip, "pickup", body.pickup_zip_area);
   if (!pickup.ok) return pickup;
-  const dropTown = body.dropoff_city != null && String(body.dropoff_city).trim() !== "" ? body.dropoff_city : body.pickup_city;
-  const dropZip = body.dropoff_city != null && String(body.dropoff_city).trim() !== "" ? body.dropoff_zip : (body.dropoff_zip || null);
-  const dropoff = checkEnd(dropTown, dropZip, "dropoff");
+  const hasDrop = body.dropoff_city != null && String(body.dropoff_city).trim() !== "";
+  const dropoff = hasDrop
+    ? checkEnd(body.dropoff_city, body.dropoff_zip, "dropoff", body.dropoff_zip_area)
+    : checkEnd(body.pickup_city, body.dropoff_zip || null, "dropoff", body.dropoff_zip_area);
   if (!dropoff.ok) return dropoff;
   const flags = [pickup.flag, dropoff.flag].filter(Boolean);
-  return { ok: true, forceBeach: !!(pickup.forceBeach || dropoff.forceBeach), flags };
+  const notes = [pickup.note, dropoff.note].filter(Boolean);
+  // No dropoff given = same place as pickup (create-order's existing rule).
+  const dropoffPriceTown = hasDrop ? dropoff.priceTown : pickup.priceTown;
+  return { ok: true, pickupTown: pickup.priceTown, dropoffTown: dropoffPriceTown, flags, notes };
 }
 
-module.exports = { TOWNS, ZIP_TOWNS, AMBIGUOUS_ZIPS, REGION_PREFIXES, checkEnd, checkTrip, zip5 };
+module.exports = { TOWNS, ZIP_TOWNS, AMBIGUOUS_ZIPS, ZIP_AREAS, ZIP_AREA_VALUES, REGION_PREFIXES, checkEnd, checkTrip, zip5 };

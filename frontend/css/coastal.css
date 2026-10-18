@@ -302,3 +302,14 @@ a:hover { color: var(--cc-coral-dark); }
 .cc-retry-btn { display: block; width: 100%; min-height: 48px; margin: 0 0 16px; }
 .cc-retry-btn[hidden] { display: none; }
 .cc-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* 78418 island-or-mainland question on the Review step */
+.cc-zip-area { border: 2px solid #f0b429; border-radius: 12px; padding: 12px 16px 8px; margin: 0 0 16px; background: #fffbea; }
+.cc-zip-area[hidden] { display: none; }
+.cc-zip-area legend { font-weight: 700; padding: 0 4px; }
+.cc-zip-area-help { margin: 0 0 8px; font-size: 0.95rem; }
+.cc-zip-area-option { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; margin: 0 0 8px; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; cursor: pointer; }
+.cc-zip-area-option input { width: 22px; height: 22px; flex: 0 0 auto; margin: 0; }
+.cc-zip-area-option:has(input:checked) { border-color: #1d6fa5; box-shadow: 0 0 0 2px rgba(29, 111, 165, 0.25); }
+.cc-zip-area-option:has(input:focus-visible) { outline: 3px solid #1d6fa5; outline-offset: 2px; }
+.cc-zip-area.cc-invalid { border-color: #c0392b; }

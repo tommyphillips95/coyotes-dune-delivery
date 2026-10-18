@@ -124,8 +124,16 @@ function normalizeField(field, value) {
 }
 
 /** sha256 hex of the order-defining fields, stored next to the idempotency key. */
+// The 78418 island/mainland answers count too, but only when sent, so hashes
+// stored before they existed (no answer) still match a retry of that checkout.
+const OPTIONAL_PAYLOAD_FIELDS = ["pickup_zip_area", "dropoff_zip_area"];
+
 function orderPayloadHash(body) {
   const canon = PAYLOAD_FIELDS.map((f) => [f, normalizeField(f, body && body[f])]);
+  OPTIONAL_PAYLOAD_FIELDS.forEach((f) => {
+    const v = normalizeField(f, body && body[f]);
+    if (v != null) canon.push([f, v.toLowerCase()]);
+  });
   return crypto.createHash("sha256").update(JSON.stringify(canon)).digest("hex");
 }
 
@@ -281,7 +289,7 @@ exports.handler = async (event) => {
     // Towns must be ones we price; ZIPs must fit the town (see _service-area.js).
     const area = checkTrip(body);
     if (!area.ok) {
-      return { statusCode: area.status, headers, body: JSON.stringify({ error: area.error, code: area.code, field: area.field }) };
+      return { statusCode: area.status, headers, body: JSON.stringify({ error: area.error, code: area.code, field: area.field, zip: area.zip || undefined }) };
     }
     // scheduled_at (explicit offset) first, else Central date/time; "later" without them is ASAP.
     const schedule = resolveSchedule(body);
@@ -347,8 +355,10 @@ exports.handler = async (event) => {
       scheduledTime = schedule.time;
     }
 
-    const pickupCity = body.pickup_city.trim();
-    const dropoffCity = (body.dropoff_city || body.pickup_city).trim();
+    // Priced town per end: the picked town, except a 78418 "island" answer,
+    // which prices and dispatches as Padre Island (see _service-area.js).
+    const pickupCity = area.pickupTown;
+    const dropoffCity = area.dropoffTown;
     const priced = priceQuote(pickupCity, dropoffCity, {
       service_type: body.service_type,
       passenger_count: body.passenger_count,
@@ -356,9 +366,7 @@ exports.handler = async (event) => {
     });
     const miles = priced.miles;
     const estimatedPrice = priced.total;
-    // Ambiguous island/mainland ZIP (78418) with a mainland town: keep the price
-    // the customer was quoted, but send a 4x4 so an island address isn't stranded.
-    const vehicle = area.forceBeach ? "4x4" : priced.requiredClass;
+    const vehicle = priced.requiredClass;
 
     const orderData = {
       order_number: orderNumber,
@@ -369,7 +377,7 @@ exports.handler = async (event) => {
       pickup_city: pickupCity,
       pickup_zip: body.pickup_zip ? body.pickup_zip.trim() : null,
       dropoff_address: body.dropoff_address ? body.dropoff_address.trim() : null,
-      dropoff_city: body.dropoff_city ? body.dropoff_city.trim() : null,
+      dropoff_city: body.dropoff_city ? dropoffCity : null,
       dropoff_zip: body.dropoff_zip ? body.dropoff_zip.trim() : null,
       scheduled_date: scheduledDate,
       scheduled_time: scheduledTime,
@@ -407,7 +415,7 @@ exports.handler = async (event) => {
     await supabase.from("order_status_logs").insert([{
       order_id: order.id,
       status: "pending",
-      note: "Order received. " + miles + " mi. Required class " + vehicle + "." + (area.flags.length ? " Address check: " + area.flags.join(" ") : ""),
+      note: "Order received. " + miles + " mi. Required class " + vehicle + "." + (area.notes.length ? " " + area.notes.join(" ") : "") + (area.flags.length ? " Address check: " + area.flags.join(" ") : ""),
       changed_by: "system",
     }]);
 
