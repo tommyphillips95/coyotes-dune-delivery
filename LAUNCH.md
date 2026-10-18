@@ -214,3 +214,26 @@ Tick before merging `[dune] Launch v1` into `main`:
 
    North Padre Island (Corpus Christi ZIP 78418) is priced as the existing "Padre Island" zone (beach surcharge, 4x4). Pricing is by town name.
 5. **Service-area checks (create-order, `netlify/functions/_service-area.js`).** Unknown towns and ZIPs outside 783xx/784xx are refused; an island-only ZIP (78373) with a mainland town is refused with a "pick Port Aransas or Mustang Island" message; 78418 (Flour Bluff mainland + North Padre/Mustang) with Corpus Christi is accepted at the quoted price but gets a 4x4 and an "Address check" note in the order log; other Coastal Bend ZIPs we haven't mapped (e.g. Fulton 78358, Aransas Pass 78336, Ingleside 78362) are accepted and flagged. **Tommy:** say if Fulton/Aransas Pass/Ingleside should become towns (they'd need a price-table entry) or be refused.
+
+## Post-deploy smoke test (after each production deploy, ~15 min)
+
+Run on a real phone against `https://coyote-dune-delivery.netlify.app` (`SITE=` below). Use test data only: your own phone number, a name like "Smoke Test", and Stripe **test mode**. Write down each order number (`CDD-…`) you create for the cleanup step. Console errors: iPhone → Safari Web Inspector on a Mac; Android → `chrome://inspect` on a desktop.
+
+**Before you start:** one approved driver application for a test driver (your own phone) with `vehicle_class` = `4x4`. The apply form and admin don't set vehicle class yet, so set it once in Supabase Table Editor → `applications`.
+
+- [ ] **Old tracking links:** open `SITE/order/?track=CDD-TEST1`. Expect a 301 to `SITE/track/?order=CDD-TEST1` with the order number filled in. `SITE/order/?service=ride` should still open the order form (no redirect).
+- [ ] **Pages load:** open `SITE/`, `SITE/order/`, `SITE/track/`. Each renders with no console errors. A `/favicon.ico` 404 means the site-icons change isn't deployed yet.
+- [ ] **Pay Later order:** on `SITE/order/`, book Port Aransas → Mustang Island and tap **Place Order**. If the card form shows, tap **Pay Later**. Expect **Order Confirmed** with your `CDD-…` number, When / Pickup / Drop-off, "Estimated total … (pay your driver)" and **Track this order**.
+- [ ] **78418:** new order, Corpus Christi, ZIP `78418`. Expect "Where is your pickup?" with **On Padre Island (beach)** / **Flour Bluff / mainland Corpus Christi**; the total updates when you choose. Pick island, place it (Pay Later). Admin later shows the zip-area note on that order.
+- [ ] **Timeout / Retry:** fill an order, turn on airplane mode, tap **Place Order**. Expect "You're offline. Reconnect, then tap Retry. Nothing was charged." Turn airplane mode off and tap **Retry**: one order is created, not two (check admin).
+- [ ] **Card payments:** run [Test-mode checklist](#test-mode-checklist) steps 2–5 (4242 success, 3-D Secure pass/fail, 4000 0000 0000 0002 decline then retry, already-paid retry → **Already Paid** screen). Skip until Stripe test keys are set.
+- [ ] **Admin:** log in at `SITE/admin/`. Under **Orders & Weather Hold**, the declined-card order (or any flagged one) shows the "⚠ … need attention" banner and its flag.
+- [ ] **Assign + status:** on the 78418 island order, pick the 4x4 test driver and tap **Assign**. Expect status **Assigned**, the driver name, and a history line "Admin <you>: status pending → assigned; driver … (4x4)." Then tap **Mark in progress** and **Mark completed**; each adds a "status … → …" history line. Any 2wd driver in the list is disabled for this order.
+- [ ] **Customer tracking:** keep `SITE/track/?order=<that CDD-…>` open on the phone while doing the step above (refreshes every 15 s). Expect status Pending → Assigned → On the Way → Completed, and the driver card "Driver assigned" → "Driver on the way" → "Trip completed".
+- [ ] **SMS (only once Twilio is configured):**
+  - after Place Order, the customer phone gets "Your order CDD-… has been received. We'll assign a driver shortly. — Coyote's Dune Delivery"
+  - the test driver gets "Coyote's Dune Delivery: dispatch assigned you CDD-… (…). Call dispatch if you can't take it." when you assign from admin
+  - when a driver accepts an auto-offer (paid orders), the customer gets "… accepted CDD-…. Track: SITE/track/?order=CDD-… — Coyote's Dune Delivery". The link has no token: opening it on another phone asks for the order's phone number.
+  - every send appears in Supabase `sms_logs`
+- [ ] **Refunds:** [Test-mode checklist](#test-mode-checklist) step 6 on the paid 4242 order (partial, then full). Admin shows "Paid, partly refunded", then "Refunded".
+- [ ] **Cleanup:** in admin, **Cancel order** on every test order still open (confirm the prompt). Paid test orders were refunded above. Stripe test-mode data never charges anyone. Note the test order numbers in the deploy notes so they aren't mistaken for real customers.
