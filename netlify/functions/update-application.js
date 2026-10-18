@@ -4,13 +4,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'PUT, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -69,7 +70,6 @@ exports.handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, data }) };
   } catch (err) {
-    console.error('Error updating application:', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, 'Failed to update application', 'update-application');
   }
 };

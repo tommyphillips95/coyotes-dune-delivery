@@ -4,15 +4,16 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { errorResponse } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 const CHECKR_API_BASE = 'https://api.checkr.com/v1';
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -150,11 +151,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Error creating Checkr candidate:', err);
-    return {
-      statusCode: err.status || 500,
-      headers,
-      body: JSON.stringify({ error: err.message || 'Failed to initiate background check' }),
-    };
+    return errorResponse(headers, err, 'Failed to initiate background check', 'checkr-create-candidate');
   }
 };

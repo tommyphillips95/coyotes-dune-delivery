@@ -4,13 +4,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -55,11 +56,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ applications: applications || [] }),
     };
   } catch (err) {
-    console.error('Error fetching applications:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to fetch applications', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to fetch applications', 'get-applications');
   }
 };

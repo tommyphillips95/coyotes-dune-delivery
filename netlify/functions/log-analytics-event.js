@@ -15,13 +15,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -69,11 +70,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, id: data.id }),
     };
   } catch (err) {
-    console.error('Error logging analytics event:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to log event', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to log event', 'log-analytics-event');
   }
 };

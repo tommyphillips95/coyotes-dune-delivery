@@ -9,6 +9,8 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 /**
  * Helper: Send SMS via Twilio
@@ -53,11 +55,10 @@ async function logSMS(supabase, { order_id, phone_number, message, status, twili
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'PATCH, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -244,11 +245,6 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, data: order }),
     };
   } catch (err) {
-    console.error('Error updating order:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to update order', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to update order', 'update-order');
   }
 };

@@ -7,6 +7,8 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 // Lazy-load Twilio SDK
 let twilioClient = null;
@@ -22,11 +24,10 @@ function getTwilioClient() {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -149,7 +150,8 @@ exports.handler = async (event) => {
         phone: driver.phone,
         status: status,
         messageSid: messageSid,
-        error: error,
+        // Twilio detail stays in sms_logs.error and the function log.
+        error: error ? 'SMS send failed' : null,
       });
     }
 
@@ -165,14 +167,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Error in driver-sms-alert function:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: 'Internal server error',
-        message: err.message,
-      }),
-    };
+    return serverError(headers, err, 'Internal server error', 'driver-sms-alert');
   }
 };

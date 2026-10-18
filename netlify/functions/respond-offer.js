@@ -1,5 +1,6 @@
 /** POST /api/respond-offer { offer_id, action } — driver_id from JWT */
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { offerNext, sendSMS, logSMS } = require("./dispatch");
 const { requireAdminOrDriver, jsonError } = require("./_auth");
@@ -57,6 +58,6 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, action: "accepted", orderId: offer.order_id }) };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, "Failed to respond to offer", "respond-offer");
   }
 };

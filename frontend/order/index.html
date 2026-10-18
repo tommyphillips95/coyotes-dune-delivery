@@ -374,11 +374,41 @@
         .payment-status-badge.failed { background: rgba(196, 90, 62, 0.1); color: #C45A3E; }
         .payment-status-badge.refunded { background: rgba(100, 100, 100, 0.1); color: #666; }
 
+        .order-inline-error {
+            color: #C45A3E;
+            font-size: 0.85rem;
+            margin: 8px 0 0;
+        }
+
+        .track-message {
+            margin: 12px 0 0;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(196, 90, 62, 0.08);
+            color: #9E3F27;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .order-submit-error {
+            margin-top: 16px;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(196, 90, 62, 0.08);
+            border: 1px solid rgba(196, 90, 62, 0.35);
+            color: #9E3F27;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
         @media (max-width: 768px) {
             .service-selector { grid-template-columns: 1fr; }
             .location-group { flex-direction: column; gap: 0; }
             .location-icon { display: none; }
-            .route-connector { display: none; }
+            /* Swap stays available on phones: centered, full 44px tap target. */
+            .route-connector { justify-content: center; padding: 0 0 14px; }
+            .route-line { display: none; }
+            .route-swap { min-height: 44px; min-width: 44px; padding: 10px 18px; font-size: 0.9rem; }
             .datetime-row { grid-template-columns: 1fr; }
             .detail-cards { grid-template-columns: repeat(2, 1fr); }
             .contact-grid { grid-template-columns: 1fr; }
@@ -386,6 +416,12 @@
             .order-success { padding: 40px 24px; }
             .tracking-section { padding: 22px 24px; }
             .tracking-detail { grid-template-columns: 1fr; }
+            /* iOS Safari zooms the page on focus when a field is under 16px. */
+            .form-group input, .form-group select, .form-group textarea,
+            .tracking-form input { font-size: 16px; }
+            /* 44px minimum tap targets for the small controls. */
+            .tracking-form .btn { min-height: 44px; }
+            .detail-card { min-height: 48px; display: flex; align-items: center; justify-content: center; }
         }
     </style>
 </head>
@@ -490,10 +526,11 @@
                                     <input type="date" id="serviceDate" name="serviceDate" required>
                                 </div>
                                 <div>
-                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time</label>
+                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time (Central)</label>
                                     <input type="time" id="serviceTime" name="serviceTime" required>
                                 </div>
                             </div>
+                            <span class="hint" id="serviceTzHint">Times are Central Time (Port Aransas), even if your phone is set to another time zone.</span>
                             <span class="error-message" id="dateTimeError">Please select a valid future date and time.</span>
                         </div>
 
@@ -538,8 +575,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="pickupZip">ZIP Code <span class="required">*</span></label>
-                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code">
-                                        <span class="error-message">Please enter a ZIP code.</span>
+                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{5}(-?[0-9]{4})?">
+                                        <span class="error-message">Please enter a 5-digit ZIP code.</span>
                                     </div>
                                 </div>
                             </div>
@@ -547,8 +584,8 @@
 
                         <div class="route-connector">
                             <div class="route-line"></div>
-                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff" aria-label="Swap pickup and dropoff">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="17 1 21 5 17 9"/>
                                     <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
                                     <polyline points="7 23 3 19 7 15"/>
@@ -586,8 +623,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="dropoffZip">ZIP Code <span class="required">*</span></label>
-                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off">
-                                        <span class="error-message">Please enter a ZIP code.</span>
+                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off" inputmode="numeric" pattern="[0-9]{5}(-?[0-9]{4})?">
+                                        <span class="error-message">Please enter a 5-digit ZIP code.</span>
                                     </div>
                                 </div>
                             </div>
@@ -751,9 +788,12 @@
                         </div>
 
                         <div class="checkbox-group order-terms">
-                            <input type="checkbox" id="termsAgree" name="termsAgree" required>
+                            <input type="checkbox" id="termsAgree" name="termsAgree" required aria-describedby="termsError">
                             <label for="termsAgree">I confirm that all information provided is accurate. I agree to the <a href="#">Terms of Service</a> and understand that cancellation within 15 minutes of pickup may incur a fee. <span class="required">*</span></label>
                         </div>
+                        <p class="order-inline-error" id="termsError" hidden>Please check the box above to agree before placing your order.</p>
+
+                        <div class="order-submit-error" id="orderSubmitError" role="alert" aria-live="assertive" hidden></div>
 
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="4">Back</button>
@@ -785,10 +825,11 @@
                 <div class="tracking-section" id="trackingSection">
                     <h3>Track an Existing Order</h3>
                     <div class="tracking-form">
-                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)">
-                        <input type="tel" id="trackPhone" placeholder="Phone number">
+                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)" aria-label="Order number" autocapitalize="characters" autocomplete="off" spellcheck="false">
+                        <input type="tel" id="trackPhone" placeholder="Phone number" aria-label="Phone number used for the order" autocomplete="tel" inputmode="tel">
                         <button class="btn btn-secondary" id="trackBtn">Track Order</button>
                     </div>
+                    <p class="track-message" id="trackMessage" role="status" aria-live="polite" hidden></p>
                     <div class="tracking-result" id="trackingResult">
                         <div class="tracking-result-header">
                             <h4 id="trackingOrderNum">Order #CDD-XXX</h4>
@@ -871,7 +912,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>2025 Coyote's Dune Delivery. All rights reserved.</p>
+                <p>&copy; <span data-current-year>2026</span> Coyote's Dune Delivery. All rights reserved.</p>
                 <p class="footer-tagline">Born on the beach. Built for the coast.</p>
             </div>
         </div>

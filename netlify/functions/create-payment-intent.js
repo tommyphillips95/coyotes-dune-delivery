@@ -6,6 +6,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { getStripe, resolveChargeAmountCents } = require("./_stripe");
 
@@ -162,11 +163,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error("Error creating PaymentIntent:", err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Failed to create payment intent", message: err.message }),
-    };
+    return serverError(headers, err, "Failed to create payment intent", "create-payment-intent");
   }
 };

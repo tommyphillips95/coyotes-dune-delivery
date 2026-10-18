@@ -53,6 +53,51 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 2. `schema/launch_2026_09_22.sql` (drop legacy SSN/bank if present, add vehicle/weather fields, delete placeholder admin, tighten driver_locations policies)
 3. `schema/dispatch_offers.sql` (auto-offer table + service-role-only RLS)
 4. `schema/issue_13_constraints.sql` (beach permit flags + `last_location_at` heartbeat)
+5. `schema/order_idempotency.sql` (`orders.idempotency_key` + partial unique index + `orders.idempotency_payload_hash`; `create-order` dedupes checkout retries on it, and creates orders normally with a log warning until this is applied). Exact steps: [Step 5 on Supabase](#step-5-on-supabase-order_idempotencysql).
+
+### Step 5 on Supabase: `order_idempotency.sql`
+Run this once, after `orders` exists (steps 1–4). It is re-runnable: every statement is `IF NOT EXISTS`, so a second run makes no changes and raises no error. It only adds two nullable columns and one partial unique index, so no data is changed or deleted. Existing orders keep `NULL` in both columns.
+
+1. Open the Supabase dashboard for the project, then go to **SQL Editor** and click **New query**.
+2. Paste the full contents of `schema/order_idempotency.sql` (copied below, same text) and click **Run**. Expected result: "Success. No rows returned".
+
+```sql
+-- One order per checkout attempt: create-order dedupes on orders.idempotency_key.
+-- Safe to re-run. Run after schema/issue_13_constraints.sql.
+-- Rollback: DROP INDEX IF EXISTS orders_idempotency_key_uidx;
+--           ALTER TABLE orders DROP COLUMN IF EXISTS idempotency_payload_hash;
+--           ALTER TABLE orders DROP COLUMN IF EXISTS idempotency_key;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+-- Unique only when set, so old rows (NULL) and callers that send no key are unaffected.
+CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx
+    ON orders (idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+-- sha256 (hex) of the order-defining request fields, saved with the key. A
+-- repeated key whose payload hash differs is refused (422) instead of replayed.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT;
+```
+
+3. Verify it worked. In a new query, paste and run the query below. Expect one row with all three values `true`:
+
+```sql
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'orders'
+            AND column_name = 'idempotency_key' AND data_type = 'text') AS has_idempotency_key,
+  EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'orders'
+            AND column_name = 'idempotency_payload_hash' AND data_type = 'text') AS has_payload_hash,
+  EXISTS (SELECT 1 FROM pg_indexes
+          WHERE schemaname = 'public' AND tablename = 'orders'
+            AND indexname = 'orders_idempotency_key_uidx'
+            AND indexdef ILIKE 'CREATE UNIQUE INDEX%'
+            AND indexdef ILIKE '%WHERE (idempotency_key IS NOT NULL)%') AS has_unique_index;
+```
+
+If any value is `false`, run step 2 again; it is safe to repeat. Until this is applied, `create-order` still creates orders, but without duplicate protection, and logs a warning. To undo it, use the rollback lines at the top of the file.
 
 ### Idempotency
 - Tables/indexes/extensions: mostly `IF NOT EXISTS` — safe to re-run.
@@ -89,7 +134,7 @@ Webhook URL once Stripe is wired: `https://coyote-dune-delivery.netlify.app/api/
 Tick before merging `[dune] Launch v1` into `main`:
 
 - [ ] Required Netlify env set on production: `SUPABASE_*`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `STRIPE_*`, `SITE_ORIGIN` (Twilio/Checkr/Firebase optional until those features go live)
-- [ ] Three SQL files run in order on the live Supabase project (after a backup)
+- [ ] SQL files run in order (see Run order above) on the live Supabase project (after a backup)
 - [ ] Admin password is not the placeholder / old default
 - [ ] `/apply` does not collect SSN or bank (Checkr + Stripe Connect)
 - [ ] Smoke: quote Port A → Mustang still $35; create-order stores matching `estimated_price`
@@ -98,5 +143,5 @@ Tick before merging `[dune] Launch v1` into `main`:
 
 ## To go live this week (ops)
 1. Fill the required Netlify env rows above (live site already has `SITE_ORIGIN` + `NODE_VERSION` only).
-2. Run the three SQL files on Supabase in order.
+2. Run the SQL files on Supabase in order (see Run order above).
 3. Twilio A2P 10DLC, Stripe live keys, Checkr live, privacy + terms, insurance note when ready for real traffic.

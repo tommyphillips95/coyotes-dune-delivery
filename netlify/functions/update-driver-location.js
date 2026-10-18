@@ -5,6 +5,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { requireAdminOrDriver, jsonError } = require("./_auth");
 
@@ -94,11 +95,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    console.error("Error updating driver location:", err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Failed to update driver location", message: err.message }),
-    };
+    return serverError(headers, err, "Failed to update driver location", "update-driver-location");
   }
 };

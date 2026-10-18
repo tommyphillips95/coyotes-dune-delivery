@@ -18,6 +18,8 @@
  */
 
 const admin = require('firebase-admin');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const { createClient } = require('@supabase/supabase-js');
 
 let firebaseAppInitialized = false;
@@ -51,12 +53,11 @@ function initFirebase() {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -187,15 +188,7 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('[send-push-notification] Error:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: 'Failed to send push notification',
-        message: err.message,
-      }),
-    };
+    return serverError(headers, err, 'Failed to send push notification', 'send-push-notification');
   }
 };
 

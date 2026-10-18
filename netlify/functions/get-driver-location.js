@@ -1,4 +1,5 @@
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { requireLocationCaller, assertLocationAccess, jsonError } = require("./_auth");
 
@@ -72,7 +73,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    console.error("Error fetching driver location:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to fetch driver location", message: err.message }) };
+    return serverError(headers, err, "Failed to fetch driver location", "get-driver-location");
   }
 };

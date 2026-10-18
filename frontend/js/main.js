@@ -6,6 +6,11 @@
 (function() {
     'use strict';
 
+    // ── Footer year (static fallback in the HTML) ───────────
+    document.querySelectorAll('[data-current-year]').forEach(el => {
+        el.textContent = String(new Date().getFullYear());
+    });
+
     // ── Mobile Navigation ───────────────────────────────────
     const navToggle = document.getElementById('navToggle');
     const navMenu = document.getElementById('navMenu');
@@ -243,7 +248,9 @@
                 }
 
                 if (!response.ok) {
-                    const error = new Error((data && data.message) || 'Request failed');
+                    // Our functions put the human message in `message` (e.g. weather hold) or
+                    // `error` (400 validation); surface whichever is there.
+                    const error = new Error((data && (data.message || data.error)) || 'Request failed');
                     error.status = response.status;
                     error.data = data;
                     throw error;

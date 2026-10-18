@@ -50,6 +50,37 @@ test("planRoute rejects unknown cities", () => {
   assert.strictEqual(C.planRoute("Atlantis", "Port Aransas", "ride"), null);
 });
 
+test("isValidZip accepts 5-digit / ZIP+4 and rejects junk", () => {
+  for (const ok of ["78373", " 78418 ", "78373-1234", "783731234"]) assert.ok(C.isValidZip(ok), ok);
+  for (const bad of ["", null, undefined, "7837", "783735", "abcde", "78373-12", "Port A"]) assert.ok(!C.isValidZip(bad), String(bad));
+});
+
+test("order form mobile inputs: numeric ZIP keypad, 16px fields, labelled tracking inputs", () => {
+  const html = read("frontend/order/index.html");
+  for (const id of ["pickupZip", "dropoffZip"]) {
+    const tag = (html.match(new RegExp('<input[^>]*id="' + id + '"[^>]*>')) || [""])[0];
+    assert.ok(/inputmode="numeric"/.test(tag), id + " numeric keypad");
+    assert.ok(/pattern="/.test(tag), id + " pattern");
+  }
+  assert.ok(/\.tracking-form input \{ font-size: 16px; \}/.test(html), "no iOS focus zoom");
+  assert.ok(/min-height: 44px/.test(html), "44px tap targets");
+  assert.ok(/id="trackOrderNumber"[^>]*aria-label=/.test(html));
+  assert.ok(/id="trackPhone"[^>]*aria-label=/.test(html));
+  const order = read("frontend/js/order.js");
+  assert.ok(/isValidZip\(el\.value\)/.test(order), "route step validates ZIP format");
+  assert.ok(/aria-invalid/.test(order), "errors set aria-invalid");
+});
+
+test("pickup/dropoff Swap stays visible on mobile with a 44px target", () => {
+  const html = read("frontend/order/index.html");
+  const mobile = html.slice(html.indexOf("@media (max-width: 768px)"), html.indexOf("</style>"));
+  assert.ok(!/\.route-connector\s*\{\s*display:\s*none/.test(mobile), "route-connector must not be hidden on mobile");
+  assert.ok(/\.route-swap\s*\{[^}]*min-height:\s*44px/.test(mobile), "swap has a 44px min-height");
+  assert.ok(/id="swapLocations"[^>]*aria-label=/.test(html));
+  // Programmatic .value swaps fire no change events; the live quote must refresh.
+  assert.ok(/swapLocations\(\); updateLiveQuote\(\);/.test(read("frontend/js/order.js")));
+});
+
 test("Port A -> Mustang ride is $35 with beach access (matches quote-parity)", () => {
   const p = C.planRoute("Port Aransas", "Mustang Island", "ride", { passenger_count: 1 });
   assert.strictEqual(p.total, 35);
@@ -111,6 +142,16 @@ test("terminal statuses stop tracking", () => {
   assert.ok(!C.isTerminalStatus("in_progress"));
 });
 
+test("footers show the current year (2026 fallback, main.js keeps it current)", () => {
+  for (const p of ["index.html", "order/index.html"]) {
+    const html = read("frontend/" + p);
+    assert.ok(/<span data-current-year>2026<\/span> Coyote's Dune Delivery/.test(html), p);
+    assert.ok(!/>\s*20(24|25) Coyote's/.test(html), p + " stale year");
+  }
+  assert.ok(read("frontend/404.html").includes("&copy; 2026"));
+  assert.ok(/\[data-current-year\][\s\S]{0,120}getFullYear\(\)/.test(read("frontend/js/main.js")));
+});
+
 // ── Static regression guards ──
 test("order page loads zones.js + coastal.js before order.js and offers Mustang Island", () => {
   const html = read("frontend/order/index.html");
@@ -141,10 +182,86 @@ test("tracking refreshes status, guards overlap, and sends the token", () => {
   assert.ok(html.indexOf("js/coastal.js") < html.indexOf("track.js"));
 });
 
+test("CoyoteAPI surfaces a 4xx body's error text so validation messages reach the page", () => {
+  const main = read("frontend/js/main.js");
+  assert.ok(/new Error\(\(data && \(data\.message \|\| data\.error\)\) \|\| 'Request failed'\)/.test(main));
+  // create-order 400s use { error: "..." }; orderErrorMessage passes 4xx text through.
+  assert.strictEqual(C.orderErrorMessage({ ok: false, status: 400, error: "Please enter a 5-digit ZIP code for pickup." }), "Please enter a 5-digit ZIP code for pickup.");
+});
+
 test("every page loads the coastal design system", () => {
   for (const p of ["index.html", "order/index.html", "track/index.html", "driver/index.html", "admin/index.html", "apply/index.html"]) {
     assert.ok(read("frontend/" + p).includes("css/coastal.css"), p);
   }
+});
+
+// ── Checkout error states (/order/): inline, announced, no leaked 5xx text ──
+const { weatherShutdownPayload } = require(path.join(ROOT, "netlify/functions/_weather.js"));
+
+test("network failure (status 0) tells the customer to retry, nothing charged", () => {
+  const m = C.orderErrorMessage({ ok: false, error: "Failed to fetch", status: 0 });
+  assert.ok(/signal/i.test(m) && /Nothing was charged/.test(m), m);
+});
+
+test("weather hold 503 shows the hold reason create-order sends", () => {
+  // CoyoteAPI surfaces body.message as result.error.
+  const payload = weatherShutdownPayload({ WEATHER_SHUTDOWN: "1", WEATHER_SHUTDOWN_REASON: "Tropical storm hold until Tuesday." });
+  const m = C.orderErrorMessage({ ok: false, error: payload.message, status: 503 });
+  assert.strictEqual(m, "Tropical storm hold until Tuesday.");
+  assert.ok(/paused/i.test(C.orderErrorMessage({ ok: false, status: 503 })));
+});
+
+test("400 validation messages pass through", () => {
+  const m = C.orderErrorMessage({ ok: false, error: "Pickup address and city are required", status: 400 });
+  assert.strictEqual(m, "Pickup address and city are required");
+});
+
+test("500 never leaks internal error text", () => {
+  const m = C.orderErrorMessage({ ok: false, error: 'duplicate key value violates unique constraint "customers_phone_key"', status: 500 });
+  assert.ok(!/duplicate key|constraint/.test(m), m);
+  assert.ok(/\(361\) 555-1234/.test(m));
+});
+
+test("missing / generic result falls back to the support line", () => {
+  assert.ok(/try again/i.test(C.orderErrorMessage()));
+  assert.ok(/try again/i.test(C.orderErrorMessage({ ok: false, error: "Request failed", status: 404 })));
+});
+
+test("order page has inline terms + submit error regions", () => {
+  const html = read("frontend/order/index.html");
+  assert.ok(/id="termsError"[^>]*hidden/.test(html), "termsError starts hidden");
+  assert.ok(/id="termsAgree"[^>]*aria-describedby="termsError"/.test(html));
+  assert.ok(/id="orderSubmitError"[^>]*role="alert"/.test(html), "submit error is announced");
+});
+
+test("order.js uses the inline errors, not alert(), on checkout failure", () => {
+  const src = read("frontend/js/order.js");
+  const submit = src.slice(src.indexOf("async function submitOrder"), src.indexOf("const trackBtn"));
+  assert.ok(submit.length > 0);
+  assert.ok(!/alert\(/.test(submit), "submitOrder must not alert()");
+  assert.ok(/setTermsError\(true\)/.test(submit), "unchecked terms shows a message");
+  assert.ok(/showSubmitError\(orderErrorMessage\(result\)\)/.test(submit));
+  assert.ok(/submitting = false/.test(submit), "failure re-enables the button");
+});
+
+// ── Track an Existing Order box: inline messages, no alert() ──
+test("trackErrorMessage: missing fields, offline, server error, not found", () => {
+  assert.ok(/order number and the phone number/.test(C.trackErrorMessage("missing")));
+  assert.ok(/signal/.test(C.trackErrorMessage({ ok: false, status: 0, error: "Failed to fetch" })));
+  assert.ok(/right now/.test(C.trackErrorMessage({ ok: false, status: 500 })));
+  const nf = C.trackErrorMessage({ ok: false, status: 401, error: "Invalid order number or phone" });
+  assert.ok(/couldn't find that order/.test(nf), nf);
+  assert.ok(/couldn't find that order/.test(C.trackErrorMessage({ ok: true, status: 404 })));
+});
+
+test("track box uses an inline status message, not alert()", () => {
+  const html = read("frontend/order/index.html");
+  assert.ok(/id="trackMessage"[^>]*role="status"[^>]*hidden/.test(html));
+  const src = read("frontend/js/order.js");
+  const track = src.slice(src.indexOf("async function trackOrder"), src.indexOf("function displayTrackingResult"));
+  assert.ok(track.length > 0);
+  assert.ok(!/alert\(/.test(track), "trackOrder must not alert()");
+  assert.ok(/aria-invalid/.test(track));
 });
 
 console.log(`coastal: ${passed} passed`);

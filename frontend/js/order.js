@@ -20,24 +20,34 @@
     // Do not keep a second mile table here — it will drift from create-order.
 
     function initDateTime() {
-        const now = new Date();
-        now.setMinutes(now.getMinutes() + 30);
         const dateInput = document.getElementById('serviceDate');
         const timeInput = document.getElementById('serviceTime');
+        const C = window.CoyoteCoastal;
+        let slot;
+        if (C && typeof C.defaultServiceSlot === 'function') {
+            slot = C.defaultServiceSlot(new Date(), 30);
+        } else {
+            // Local wall-clock fallback (never toISOString: that is UTC).
+            const pad = n => String(n).padStart(2, '0');
+            const now = new Date();
+            const later = new Date(now.getTime() + 30 * 60000);
+            const day = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            slot = { date: day(later), time: `${pad(later.getHours())}:${pad(later.getMinutes())}`, minDate: day(now) };
+        }
         if (dateInput) {
-            dateInput.value = now.toISOString().split('T')[0];
-            dateInput.min = new Date().toISOString().split('T')[0];
+            dateInput.value = slot.date;
+            dateInput.min = slot.minDate;
         }
-        if (timeInput) {
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            timeInput.value = `${hours}:${minutes}`;
-        }
+        if (timeInput) timeInput.value = slot.time;
     }
 
     function goToStep(step) {
         if (step < 1 || step > totalSteps) return;
-        if (step > currentStep && !validateStep(currentStep)) return;
+        if (step > currentStep && !validateStep(currentStep)) {
+            const firstBad = document.querySelector(`.form-step[data-step="${currentStep}"] .error`);
+            if (firstBad && typeof firstBad.focus === 'function') firstBad.focus();
+            return;
+        }
         currentStep = step;
         document.querySelectorAll('.form-step').forEach(el => {
             el.classList.toggle('active', parseInt(el.dataset.step, 10) === step);
@@ -58,14 +68,35 @@
         const err = group.querySelector('.error-message');
         if (err) err.classList.toggle('visible', show);
         input.classList.toggle('error', show);
+        input.setAttribute('aria-invalid', show ? 'true' : 'false');
     }
 
     function validateEmail(email) {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     }
 
+    function isValidZip(zip) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.isValidZip === 'function') return C.isValidZip(zip);
+        return /^\d{5}(-?\d{4})?$/.test(String(zip || '').trim());
+    }
+
     function validatePhone(phone) {
         return phone.replace(/\D/g, '').length >= 10;
+    }
+
+    // Date/time inputs are Central (Port Aransas) wall-clock, whatever zone the
+    // phone is in. Falls back to device-local parsing if coastal.js is missing.
+    function serviceInstant(date, time) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.centralInstant === 'function') return C.centralInstant(date, time);
+        return new Date(`${date}T${time}`);
+    }
+
+    function serviceIso(date, time) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.centralIso === 'function') return C.centralIso(date, time);
+        return null;
     }
 
     function validateStep(step) {
@@ -78,8 +109,8 @@
                 if (dateTimeError) dateTimeError.classList.add('visible');
                 valid = false;
             } else {
-                const selected = new Date(`${date.value}T${time.value}`);
-                if (selected <= new Date()) {
+                const selected = serviceInstant(date.value, time.value);
+                if (!selected || selected <= new Date()) {
                     if (dateTimeError) dateTimeError.classList.add('visible');
                     valid = false;
                 } else if (dateTimeError) {
@@ -90,7 +121,8 @@
         if (step === 2) {
             ['pickupAddress', 'pickupCity', 'pickupZip', 'dropoffAddress', 'dropoffCity', 'dropoffZip'].forEach(id => {
                 const el = document.getElementById(id);
-                if (!el.value.trim()) { showError(el, true); valid = false; }
+                const bad = !el.value.trim() || (/Zip$/.test(id) && !isValidZip(el.value));
+                if (bad) { showError(el, true); valid = false; }
                 else showError(el, false);
             });
         }
@@ -172,11 +204,11 @@
         const time = document.getElementById('serviceTime').value;
         const pickup = `${document.getElementById('pickupAddress').value}, ${document.getElementById('pickupCity').value} ${document.getElementById('pickupZip').value}`;
         const dropoff = `${document.getElementById('dropoffAddress').value}, ${document.getElementById('dropoffCity').value} ${document.getElementById('dropoffZip').value}`;
-        const dateObj = new Date(`${date}T${time}`);
-        const dateTimeStr = dateObj.toLocaleString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric',
-            hour: 'numeric', minute: '2-digit'
-        });
+        const dateObj = serviceInstant(date, time);
+        const C = window.CoyoteCoastal;
+        const dateTimeStr = !dateObj ? '--' : (C && typeof C.formatCentral === 'function')
+            ? C.formatCentral(dateObj)
+            : dateObj.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
         let details = '';
         if (serviceType === 'ride') {
             const passengers = document.querySelector('input[name="passengers"]:checked').value;
@@ -205,6 +237,43 @@
         tbody.innerHTML = rows.map(([label, val]) => `<tr><th>${label}</th><td>${escapeHtml(val)}</td></tr>`).join('');
     }
 
+    // One idempotency key per checkout attempt. A retry after a failure (e.g. a
+    // dropped connection) reuses it, so create-order returns the order it may
+    // already have made instead of a duplicate. Editing any order field starts
+    // a new attempt; success clears it.
+    let checkoutKey = null;
+
+    function newIdempotencyKey() {
+        const c = window.crypto;
+        if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+        const bytes = new Uint8Array(16);
+        if (c && typeof c.getRandomValues === 'function') c.getRandomValues(bytes);
+        else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function checkoutIdempotencyKey() {
+        if (!checkoutKey) checkoutKey = newIdempotencyKey();
+        return checkoutKey;
+    }
+
+    function resetCheckoutKey(e) {
+        if (e && e.target && e.target.id === 'termsAgree') return;
+        checkoutKey = null;
+        checkoutPayload = null;
+    }
+
+    // A retry resends exactly what the first try sent (the server refuses a
+    // reused key with different details). Derived fields like ASAP-vs-later can
+    // otherwise drift as the clock moves between the two taps.
+    let checkoutPayload = null;
+    function attemptPayload(orderData) {
+        if (!checkoutPayload || checkoutPayload.idempotency_key !== orderData.idempotency_key) {
+            checkoutPayload = orderData;
+        }
+        return checkoutPayload;
+    }
+
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -213,11 +282,44 @@
 
     let submitting = false;
 
+    function orderErrorMessage(result) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.orderErrorMessage === 'function') return C.orderErrorMessage(result);
+        return 'Something went wrong placing your order. Please try again or call (361) 555-1234.';
+    }
+
+    // Inline, screen-reader-announced errors instead of alert() popups.
+    function showSubmitError(message) {
+        const box = document.getElementById('orderSubmitError');
+        if (!box) { alert(message); return; }
+        box.textContent = message;
+        box.hidden = false;
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function clearSubmitError() {
+        const box = document.getElementById('orderSubmitError');
+        if (box) { box.textContent = ''; box.hidden = true; }
+    }
+
+    function setTermsError(show) {
+        const terms = document.getElementById('termsAgree');
+        const msg = document.getElementById('termsError');
+        if (msg) msg.hidden = !show;
+        if (terms) terms.setAttribute('aria-invalid', show ? 'true' : 'false');
+    }
+
     async function submitOrder(e) {
         e.preventDefault();
         if (submitting) return; // guard double clicks / Enter-key resubmits
         const terms = document.getElementById('termsAgree');
-        if (!terms.checked) { terms.focus(); return; }
+        clearSubmitError();
+        if (!terms.checked) {
+            setTermsError(true);
+            terms.focus();
+            return;
+        }
+        setTermsError(false);
         submitting = true;
         submitBtn.disabled = true;
         const originalText = submitBtn.textContent;
@@ -226,7 +328,8 @@
         const dateVal = document.getElementById('serviceDate').value;
         const timeVal = document.getElementById('serviceTime').value;
         const now = new Date();
-        const isAsap = new Date(`${dateVal}T${timeVal}`) <= new Date(now.getTime() + 60 * 60 * 1000);
+        const chosen = serviceInstant(dateVal, timeVal);
+        const isAsap = !chosen || chosen <= new Date(now.getTime() + 60 * 60 * 1000);
         const orderData = {
             first_name: document.getElementById('customerFirstName').value.trim(),
             last_name: document.getElementById('customerLastName').value.trim(),
@@ -242,14 +345,19 @@
             schedule: isAsap ? 'asap' : 'later',
             scheduled_date: isAsap ? null : dateVal,
             scheduled_time: isAsap ? null : timeVal,
+            // Explicit offset so the server never guesses the zone (e.g. "2026-10-18T21:30:00-05:00").
+            scheduled_at: isAsap ? null : serviceIso(dateVal, timeVal),
             passenger_count: serviceType === 'ride' ? parseInt(document.querySelector('input[name="passengers"]:checked').value) : null,
             package_size: serviceType === 'package_delivery' ? document.querySelector('input[name="packageSize"]:checked').value : null,
             package_description: document.getElementById('itemDescription')?.value.trim() || null,
             special_instructions: document.getElementById('specialInstructions').value.trim() || null,
+            idempotency_key: checkoutIdempotencyKey(),
         };
         try {
-            const result = await CoyoteAPI.post('/api/create-order', orderData);
+            const result = await CoyoteAPI.post('/api/create-order', attemptPayload(orderData));
             if (result.ok) {
+                checkoutKey = null;
+                checkoutPayload = null;
                 const ctx = {
                     orderId: result.data.orderId,
                     orderNumber: result.data.orderNumber,
@@ -279,14 +387,14 @@
                 if (typeof trackConversion === 'function') trackConversion('purchase', { value: estimatedTotal, currency: 'USD', service_type: serviceType });
                 if (typeof logAnalyticsEvent === 'function') logAnalyticsEvent('order_submitted', { category: 'order', service_type: serviceType, estimated_price: estimatedTotal, order_number: result.data.orderNumber });
             } else {
-                alert('Failed to place order: ' + (result.error || result.data?.message || 'Unknown error'));
+                showSubmitError(orderErrorMessage(result));
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
                 submitting = false;
             }
         } catch (err) {
             console.error('Order submission failed:', err);
-            alert('Something went wrong. Please try again or call (361) 555-1234.');
+            showSubmitError(orderErrorMessage({ ok: false, status: 500 }));
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
             submitting = false;
@@ -298,17 +406,42 @@
     const trackOrderNumber = document.getElementById('trackOrderNumber');
     if (trackOrderNumber) trackOrderNumber.addEventListener('keydown', e => { if (e.key === 'Enter') trackOrder(); });
 
+    function trackMessage(text) {
+        const box = document.getElementById('trackMessage');
+        if (!box) { if (text) alert(text); return; }
+        box.textContent = text || '';
+        box.hidden = !text;
+    }
+
+    function trackErrorMessage(kind) {
+        const C = window.CoyoteCoastal;
+        if (C && typeof C.trackErrorMessage === 'function') return C.trackErrorMessage(kind);
+        return kind === 'missing'
+            ? 'Enter both your order number and the phone number used for the order.'
+            : "We couldn't find that order. Check the order number and phone number.";
+    }
+
     async function trackOrder() {
-        const orderNum = document.getElementById('trackOrderNumber').value.trim().toUpperCase();
-        const phone = document.getElementById('trackPhone').value.trim();
-        if (!orderNum || !phone) { alert('Please enter both order number and phone number'); return; }
+        const numEl = document.getElementById('trackOrderNumber');
+        const phoneEl = document.getElementById('trackPhone');
+        const orderNum = numEl.value.trim().toUpperCase();
+        const phone = phoneEl.value.trim();
+        numEl.setAttribute('aria-invalid', orderNum ? 'false' : 'true');
+        phoneEl.setAttribute('aria-invalid', phone ? 'false' : 'true');
+        if (!orderNum || !phone) {
+            trackMessage(trackErrorMessage('missing'));
+            (orderNum ? phoneEl : numEl).focus();
+            return;
+        }
+        trackMessage('');
+        document.getElementById('trackingResult').classList.remove('active');
         const btn = document.getElementById('trackBtn');
         btn.disabled = true;
         btn.textContent = 'Tracking...';
         try {
             const auth = await CoyoteAPI.post('/api/get-orders', { order_number: orderNum, phone: phone });
             if (!auth.ok || !auth.data || !auth.data.token) {
-                alert('Order not found. Please check your order number and phone number.');
+                trackMessage(trackErrorMessage(auth));
                 return;
             }
             const result = await CoyoteAPI.request('/api/get-orders', {
@@ -319,11 +452,11 @@
                 const order = Array.isArray(result.data.data) ? result.data.data[0] : result.data.data;
                 displayTrackingResult(order);
             } else {
-                alert('Order not found. Please check your order number and phone number.');
+                trackMessage(trackErrorMessage(result.ok ? { ok: true, status: 404 } : result));
             }
         } catch (err) {
             console.error('Tracking failed:', err);
-            alert('Unable to track order right now. Please try again.');
+            trackMessage(trackErrorMessage({ ok: false, status: 500 }));
         } finally {
             btn.disabled = false;
             btn.textContent = 'Track Order';
@@ -338,7 +471,7 @@
         statusEl.textContent = order.status.replace('_', ' ');
         statusEl.className = 'status-badge-track ' + order.status;
         document.getElementById('trackingService').textContent = serviceLabels[order.service_type] || order.service_type;
-        document.getElementById('trackingScheduled').textContent = order.is_asap ? 'ASAP' : `${order.scheduled_date} at ${order.scheduled_time}`;
+        document.getElementById('trackingScheduled').textContent = order.is_asap ? 'ASAP' : `${order.scheduled_date} at ${String(order.scheduled_time || '').slice(0, 5)} Central`;
         document.getElementById('trackingPickup').textContent = `${order.pickup_address}, ${order.pickup_city}`;
         document.getElementById('trackingDropoff').textContent = order.dropoff_address ? `${order.dropoff_address}, ${order.dropoff_city || order.pickup_city}` : 'Same as pickup';
         document.getElementById('trackingPrice').textContent = order.estimated_price ? `$${parseFloat(order.estimated_price).toFixed(2)}` : '—';
@@ -416,11 +549,16 @@
         updateServiceType();
         document.querySelectorAll('input[name="serviceType"]').forEach(radio => radio.addEventListener('change', updateServiceType));
         const swapBtn = document.getElementById('swapLocations');
-        if (swapBtn) swapBtn.addEventListener('click', swapLocations);
+        if (swapBtn) swapBtn.addEventListener('click', () => { swapLocations(); updateLiveQuote(); });
         document.querySelectorAll('.next-step').forEach(btn => btn.addEventListener('click', () => goToStep(parseInt(btn.dataset.next, 10))));
         document.querySelectorAll('.prev-step').forEach(btn => btn.addEventListener('click', () => goToStep(parseInt(btn.dataset.prev, 10))));
         setupCardSelection('#rideDetails', 'passengers');
         setupCardSelection('#deliveryDetails', 'packageSize');
+        form.addEventListener('input', resetCheckoutKey);
+        form.addEventListener('change', resetCheckoutKey);
+        document.querySelectorAll('.detail-card').forEach(c => c.addEventListener('click', resetCheckoutKey));
+        const swapForKey = document.getElementById('swapLocations');
+        if (swapForKey) swapForKey.addEventListener('click', resetCheckoutKey); // swap sets .value, no input event
         ['pickupAddress', 'pickupCity', 'pickupZip', 'dropoffAddress', 'dropoffCity', 'dropoffZip', 'customerFirstName', 'customerLastName', 'customerPhone', 'customerEmail'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => showError(el, false));
@@ -432,6 +570,8 @@
         document.querySelectorAll('input[name="serviceType"], input[name="passengers"], input[name="packageSize"]').forEach(r => r.addEventListener('change', updateLiveQuote));
         document.querySelectorAll('#rideDetails .detail-card, #deliveryDetails .detail-card').forEach(c => c.addEventListener('click', updateLiveQuote));
         updateLiveQuote();
+        const termsBox = document.getElementById('termsAgree');
+        if (termsBox) termsBox.addEventListener('change', () => { if (termsBox.checked) setTermsError(false); });
         form.addEventListener('submit', submitOrder);
         window.CoyoteOrder = { showSuccess: showSuccess, goToStep: goToStep, currentQuote: currentQuote };
     }
