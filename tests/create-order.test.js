@@ -310,6 +310,79 @@ test("concurrent duplicate (unique violation on insert) returns the winning orde
   assert.strictEqual(body.replayed, true);
 });
 
+test("reused key with a different order payload is refused (422), nothing created", async () => {
+  currentFake = freshDb();
+  const first = await post(Object.assign(base(), { idempotency_key: KEY }));
+  assert.strictEqual(first.statusCode, 201);
+  assert.match(currentFake.db.orders[0].idempotency_payload_hash, /^[0-9a-f]{64}$/);
+  for (const change of [{ dropoff_city: "Padre Island" }, { passenger_count: 3 }, { special_instructions: "Gate 4" }, { service_type: "package_delivery", package_size: "large" }]) {
+    const res = await post(Object.assign(base(), { idempotency_key: KEY }, change));
+    assert.strictEqual(res.statusCode, 422, JSON.stringify(change) + " " + res.body);
+    const body = JSON.parse(res.body);
+    assert.ok(/changed after it was sent/.test(body.error));
+    assert.ok(!/order|CDD-|token/i.test(JSON.stringify(Object.keys(body))) && !body.orderId && !body.trackingToken);
+  }
+  assert.strictEqual(currentFake.db.orders.length, 1);
+});
+
+test("payload hash ignores whitespace/phone formatting/email case and missing-vs-empty", async () => {
+  const h = createOrder._validation.orderPayloadHash;
+  const a = base();
+  const b = Object.assign(base(), { phone: "(361) 555-0100", first_name: " Test ", email: null, passenger_count: "1" });
+  a.email = "";
+  assert.strictEqual(h(a), h(b));
+  assert.strictEqual(h(Object.assign(base(), { email: "T@X.com" })), h(Object.assign(base(), { email: "t@x.com " })));
+  assert.notStrictEqual(h(base()), h(Object.assign(base(), { pickup_zip: "78418" })));
+  // Formatting-only differences still replay over HTTP
+  currentFake = freshDb();
+  await post(Object.assign(base(), { idempotency_key: KEY }));
+  const res = await post(Object.assign(base(), { idempotency_key: KEY, phone: "361-555-0100", pickup_address: "1 Beach Access Rd  " }));
+  assert.strictEqual(res.statusCode, 200, res.body);
+});
+
+test("legacy keyed row without a hash still replays for the same phone", async () => {
+  currentFake = freshDb();
+  await post(Object.assign(base(), { idempotency_key: KEY }));
+  delete currentFake.db.orders[0].idempotency_payload_hash;
+  const res = await post(Object.assign(base(), { idempotency_key: KEY, special_instructions: "x" }));
+  assert.strictEqual(res.statusCode, 200, res.body);
+});
+
+test("race winner with a different payload is refused, not returned", async () => {
+  const fake = freshDb();
+  fake.db.customers.push({ id: "c-win", phone: "3615550100" });
+  const winner = { id: "o-win", order_number: "CDD-WIN-2", customer_id: "c-win", idempotency_key: KEY, service_type: "ride",
+    pickup_city: "Port Aransas", dropoff_city: "Padre Island", passenger_count: 1, estimated_price: 40, status: "pending",
+    idempotency_payload_hash: createOrder._validation.orderPayloadHash(Object.assign(base(), { dropoff_city: "Padre Island" })) };
+  let lookups = 0;
+  currentFake = withOrdersHook(fake, (st) => {
+    if ("idempotency_key" in st.eqs) { lookups++; return { data: lookups === 1 ? null : Object.assign({}, winner), error: null }; }
+    if (st.insert) return { data: null, error: { code: "23505", message: "duplicate key" } };
+    return null;
+  });
+  const res = await post(Object.assign(base(), { idempotency_key: KEY }));
+  assert.strictEqual(res.statusCode, 422, res.body);
+  assert.ok(!res.body.includes("CDD-WIN-2"));
+});
+
+test("hash column missing (partial migration): insert retried without both idempotency columns", async () => {
+  const missing = { data: null, error: { code: "PGRST204", message: "Could not find the 'idempotency_payload_hash' column of 'orders'" } };
+  currentFake = withOrdersHook(freshDb(), (st) => (st.insert && st.insert[0] && "idempotency_payload_hash" in st.insert[0] ? missing : null));
+  const origWarn = console.warn; console.warn = () => {};
+  let res;
+  try { res = await post(Object.assign(base(), { idempotency_key: KEY })); } finally { console.warn = origWarn; }
+  assert.strictEqual(res.statusCode, 201, res.body);
+  assert.strictEqual(currentFake.db.orders[0].idempotency_payload_hash, undefined);
+});
+
+test("order form resends the frozen payload on retry; edits drop it", () => {
+  const src = require("fs").readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
+  assert.ok(/CoyoteAPI\.post\('\/api\/create-order', attemptPayload\(orderData\)\)/.test(src));
+  assert.ok(/function resetCheckoutKey[\s\S]{0,200}checkoutPayload = null/.test(src));
+  const sql = require("fs").readFileSync(path.join(__dirname, "..", "schema/order_idempotency.sql"), "utf8");
+  assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT/.test(sql));
+});
+
 test("order form sends one key per attempt and reuses it on retry", () => {
   const fs = require("fs");
   const src = fs.readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
@@ -324,6 +397,23 @@ test("order form sends one key per attempt and reuses it on retry", () => {
   const sql = fs.readFileSync(path.join(__dirname, "..", "schema/order_idempotency.sql"), "utf8");
   assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_key TEXT/.test(sql));
   assert.ok(/CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx[\s\S]*WHERE idempotency_key IS NOT NULL/.test(sql));
+});
+
+test("LAUNCH.md step 5 pastes exactly schema/order_idempotency.sql, and every statement is re-runnable", () => {
+  const fs = require("fs");
+  const root = path.join(__dirname, "..");
+  const sql = fs.readFileSync(path.join(root, "schema/order_idempotency.sql"), "utf8");
+  const statements = sql.split("\n").filter((l) => !/^\s*--/.test(l)).join("\n").split(";").map((t) => t.trim()).filter(Boolean);
+  assert.strictEqual(statements.length, 3);
+  for (const st of statements) assert.ok(/IF NOT EXISTS/.test(st), "re-runnable: " + st.split("\n")[0]);
+  assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT/.test(sql));
+  const md = fs.readFileSync(path.join(root, "LAUNCH.md"), "utf8");
+  const section = md.split("### Step 5 on Supabase")[1];
+  assert.ok(section, "LAUNCH.md has the Step 5 section");
+  const blocks = [...section.split("\n### ")[0].matchAll(/```sql\n([\s\S]*?)```/g)].map((m) => m[1].trim());
+  assert.strictEqual(blocks[0], sql.trim(), "pasted SQL matches the file");
+  assert.ok(/SQL Editor/.test(section));
+  for (const want of ["idempotency_key", "idempotency_payload_hash", "orders_idempotency_key_uidx"]) assert.ok(blocks[1].includes(want), "verify query checks " + want);
 });
 
 (async () => {

@@ -3,6 +3,7 @@
  * POST /api/create-order
  */
 
+const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
 const { priceQuote } = require("./zones");
@@ -57,7 +58,7 @@ const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
 function isMissingIdempotencyColumn(err) {
   if (!err) return false;
   const msg = String(err.message || "");
-  return err.code === "42703" || err.code === "PGRST204" || (/idempotency_key/.test(msg) && /column/i.test(msg));
+  return err.code === "42703" || err.code === "PGRST204" || (/idempotency_/.test(msg) && /column/i.test(msg));
 }
 
 function isUniqueViolation(err) {
@@ -65,6 +66,32 @@ function isUniqueViolation(err) {
 }
 
 const digits = (p) => String(p || "").replace(/\D/g, "");
+
+// Fields that define "the same order". A reused key must come with the same
+// values (after trimming; phone as digits, email lowercased) or it is refused.
+// scheduled_at is listed so an explicit-offset schedule is covered once sent.
+const PAYLOAD_FIELDS = [
+  "first_name", "last_name", "phone", "email", "service_type",
+  "pickup_address", "pickup_city", "pickup_zip",
+  "dropoff_address", "dropoff_city", "dropoff_zip",
+  "schedule", "scheduled_date", "scheduled_time", "scheduled_at",
+  "passenger_count", "package_size", "package_description", "special_instructions", "tip_amount",
+];
+
+function normalizeField(field, value) {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (field === "phone") return digits(s);
+  if (field === "email") return s.toLowerCase();
+  return s;
+}
+
+/** sha256 hex of the order-defining fields, stored next to the idempotency key. */
+function orderPayloadHash(body) {
+  const canon = PAYLOAD_FIELDS.map((f) => [f, normalizeField(f, body && body[f])]);
+  return crypto.createHash("sha256").update(JSON.stringify(canon)).digest("hex");
+}
 
 /** { order } when the key was seen, { order: null } when not, { unsupported: true } before the migration. */
 async function findOrderByIdempotencyKey(supabase, key) {
@@ -80,11 +107,17 @@ async function findOrderByIdempotencyKey(supabase, key) {
 }
 
 /** Same response shape as a fresh create, for a repeated key from the same customer. */
-async function replayResponse(supabase, headers, order, phone) {
+async function replayResponse(supabase, headers, order, body) {
+  const phone = body.phone;
   const { data: customer, error } = await supabase.from("customers").select("id, phone").eq("id", order.customer_id).maybeSingle();
   if (error) throw error;
   if (!customer || digits(customer.phone) !== digits(phone)) {
     return { statusCode: 409, headers, body: JSON.stringify({ error: "This checkout was already used. Please refresh the page and try again." }) };
+  }
+  // Same key, different order details: refuse rather than hand back the old order.
+  // (Rows saved before the hash column existed have no hash; the phone check above still applies.)
+  if (order.idempotency_payload_hash && order.idempotency_payload_hash !== orderPayloadHash(body)) {
+    return { statusCode: 422, headers, body: JSON.stringify({ error: "This checkout changed after it was sent. Please refresh the page and try again." }) };
   }
   const priced = priceQuote(order.pickup_city, order.dropoff_city || order.pickup_city, {
     service_type: order.service_type,
@@ -183,7 +216,7 @@ exports.handler = async (event) => {
     if (idempotencyKey) {
       const seen = await findOrderByIdempotencyKey(supabase, idempotencyKey);
       if (seen.unsupported) idempotencySupported = false;
-      else if (seen.order) return await replayResponse(supabase, headers, seen.order, body.phone);
+      else if (seen.order) return await replayResponse(supabase, headers, seen.order, body);
     }
 
     if (weatherShutdownActive()) {
@@ -258,18 +291,22 @@ exports.handler = async (event) => {
       weather_hold: false,
     };
 
-    if (idempotencyKey && idempotencySupported) orderData.idempotency_key = idempotencyKey;
+    if (idempotencyKey && idempotencySupported) {
+      orderData.idempotency_key = idempotencyKey;
+      orderData.idempotency_payload_hash = orderPayloadHash(body);
+    }
 
     let { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single();
     if (orderError && orderData.idempotency_key && isMissingIdempotencyColumn(orderError)) {
-      console.warn("[create-order] orders.idempotency_key missing on insert; creating without it");
+      console.warn("[create-order] orders.idempotency_* columns missing on insert; creating without them");
       delete orderData.idempotency_key;
+      delete orderData.idempotency_payload_hash;
       ({ data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single());
     }
     if (orderError && idempotencyKey && isUniqueViolation(orderError)) {
       // Two requests with the same key raced; the other one won. Return its order.
       const seen = await findOrderByIdempotencyKey(supabase, idempotencyKey);
-      if (seen.order) return await replayResponse(supabase, headers, seen.order, body.phone);
+      if (seen.order) return await replayResponse(supabase, headers, seen.order, body);
     }
     if (orderError) throw orderError;
 
@@ -319,4 +356,4 @@ exports.handler = async (event) => {
 };
 
 // Exposed for unit tests.
-exports._validation = { isValidZip, chicagoWallClock, scheduleError, isMissingIdempotencyColumn, IDEMPOTENCY_KEY_RE };
+exports._validation = { isValidZip, chicagoWallClock, scheduleError, isMissingIdempotencyColumn, IDEMPOTENCY_KEY_RE, orderPayloadHash };

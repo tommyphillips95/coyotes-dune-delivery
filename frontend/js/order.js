@@ -234,6 +234,18 @@
     function resetCheckoutKey(e) {
         if (e && e.target && e.target.id === 'termsAgree') return;
         checkoutKey = null;
+        checkoutPayload = null;
+    }
+
+    // A retry resends exactly what the first try sent (the server refuses a
+    // reused key with different details). Derived fields like ASAP-vs-later can
+    // otherwise drift as the clock moves between the two taps.
+    let checkoutPayload = null;
+    function attemptPayload(orderData) {
+        if (!checkoutPayload || checkoutPayload.idempotency_key !== orderData.idempotency_key) {
+            checkoutPayload = orderData;
+        }
+        return checkoutPayload;
     }
 
     function escapeHtml(text) {
@@ -280,9 +292,10 @@
             idempotency_key: checkoutIdempotencyKey(),
         };
         try {
-            const result = await CoyoteAPI.post('/api/create-order', orderData);
+            const result = await CoyoteAPI.post('/api/create-order', attemptPayload(orderData));
             if (result.ok) {
                 checkoutKey = null;
+                checkoutPayload = null;
                 const ctx = {
                     orderId: result.data.orderId,
                     orderNumber: result.data.orderNumber,
