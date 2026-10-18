@@ -239,6 +239,18 @@
     return "processing";
   }
 
+  // Payment badge on the track box. A partial refund keeps payment_status
+  // 'paid' and adds a 'partial_refund' status log (payment-webhook).
+  function paymentBadge(order) {
+    var s = String((order && order.payment_status) || "pending").toLowerCase();
+    var logs = (order && (order.status_logs || order.order_status_logs)) || [];
+    var partial = Array.isArray(logs) && logs.some(function (l) { return l && l.status === "partial_refund"; });
+    if (s === "paid") return { cls: "paid", label: partial ? "Paid (partly refunded)" : "Paid" };
+    if (s === "refunded") return { cls: "refunded", label: "Refunded" };
+    if (s === "failed") return { cls: "failed", label: "Not paid" };
+    return { cls: "pending", label: "Pending" };
+  }
+
   var TERMINAL = ["completed", "cancelled", "delivered"];
   function isTerminalStatus(status) {
     return TERMINAL.indexOf(String(status || "").toLowerCase()) !== -1;
@@ -356,6 +368,7 @@
   api.trackErrorMessage = trackErrorMessage;
   api.paymentConflictKind = paymentConflictKind;
   api.paymentStatusKind = paymentStatusKind;
+  api.paymentBadge = paymentBadge;
   root.CoyoteCoastal = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

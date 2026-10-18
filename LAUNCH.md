@@ -67,7 +67,7 @@ Set them in Netlify: **Site configuration → Environment variables → Add a va
 - `payment_intent.payment_failed`: marks the order `failed` (only for the order's current PaymentIntent)
 - `payment_intent.requires_action`: keeps the order `pending` (3-D Secure in progress)
 - `payment_intent.canceled`: marks the order `failed` (only for the order's current PaymentIntent)
-- `charge.refunded`: marks the order `refunded`
+- `charge.refunded`: a full refund marks the order `refunded`; a partial refund keeps it `paid` and adds a `partial_refund` row to `order_status_logs` with the running total
 <!-- stripe-webhook-events:end -->
 
 - **Signing secret:**
@@ -90,7 +90,7 @@ Stripe test cards take any future expiry, any 3-digit CVC, and any ZIP.
      -d '{"order_id":"<order id>","customer_email":"test@example.com"}'
    ```
    Expect HTTP 409 with `"code":"already_paid"`, which is what makes the checkout show the **Already Paid** screen (track button, no card form). No new payment should appear in Stripe. Both screens were rendered on the agent box with mocked responses (see the PR that added this section).
-6. **Refund:** Dashboard → Payments → open the step-2 payment → **Refund**. The order should become `refunded`. Any refund, including a partial one, marks the whole order `refunded`.
+6. **Refund:** Dashboard → Payments → open the step-2 payment → **Refund**. Do a **partial** refund first, for example $10: the order stays `paid`, `order_status_logs` gets "Partial refund: $10.00 of $XX.XX refunded so far", and the track box shows "Paid (partly refunded)". Then refund the rest: the order becomes `refunded` ("Refund issued ... (full)"). Use **Resend** on the webhook delivery to confirm a repeat event adds no extra rows.
 7. **What to check in the Stripe dashboard:**
    - **Payments:** one payment per paid order, with metadata `order_id` and `order_number`.
    - **Customers:** one customer per repeat customer, not one per payment (#52).
