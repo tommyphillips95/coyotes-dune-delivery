@@ -156,12 +156,34 @@ async function replayResponse(supabase, headers, order, body) {
   const { data: customer, error } = await supabase.from("customers").select("id, phone").eq("id", order.customer_id).maybeSingle();
   if (error) throw error;
   if (!customer || digits(customer.phone) !== digits(phone)) {
-    return { statusCode: 409, headers, body: JSON.stringify({ error: "This checkout was already used. Please refresh the page and try again." }) };
+    // Not the same customer: reveal nothing about the order.
+    return { statusCode: 409, headers, body: JSON.stringify({ code: "checkout_used", error: "This checkout was already used with a different phone number. Start a new order to continue." }) };
   }
-  // Same key, different order details: refuse rather than hand back the old order.
+  // Same key, different order details: never create a second order or apply
+  // the edits. The first attempt DID create this order (e.g. its response was
+  // lost to a timeout), so tell the customer about it. Safe to return: the key
+  // is a random UUID only the browser that made it holds, and the phone above
+  // matched the order's customer. Only this order's own summary is returned.
   // (Rows saved before the hash column existed have no hash; the phone check above still applies.)
   if (order.idempotency_payload_hash && order.idempotency_payload_hash !== orderPayloadHash(body)) {
-    return { statusCode: 422, headers, body: JSON.stringify({ error: "This checkout changed after it was sent. Please refresh the page and try again." }) };
+    const trackingToken = issueTrackingToken(order);
+    return { statusCode: 422, headers, body: JSON.stringify({
+      code: "checkout_changed",
+      error: "This checkout changed after it was sent. Your first order already went through with the details you sent first.",
+      existingOrder: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        status: order.status,
+        paymentStatus: order.payment_status || null,
+        estimatedPrice: order.estimated_price,
+        pickupCity: order.pickup_city,
+        dropoffCity: order.dropoff_city || null,
+        isAsap: order.is_asap !== false,
+        scheduledDate: order.scheduled_date || null,
+        scheduledTime: order.scheduled_time || null,
+        trackingToken: trackingToken || undefined,
+      },
+    }) };
   }
   const priced = priceQuote(order.pickup_city, order.dropoff_city || order.pickup_city, {
     service_type: order.service_type,

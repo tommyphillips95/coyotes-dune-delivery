@@ -190,6 +190,56 @@
     return out;
   }
 
+  // ── Checkout idempotency key (one per order, kept across edits/reloads) ──
+  // Kept in sessionStorage until an order succeeds, so an edit or a reload
+  // after a timeout reuses it. create-order then either creates the order
+  // (the first try never arrived) or, if the first try DID arrive, refuses the
+  // changed details (422 checkout_changed) and names the order it made.
+  var CHECKOUT_KEY_STORE = "cdd_checkout_key";
+  var CHECKOUT_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
+  function sessionStore() {
+    try { return root.sessionStorage || null; } catch (e) { return null; }
+  }
+  function checkoutSession(store, makeKey) {
+    var s = store === undefined ? sessionStore() : store;
+    var key = null, payload = null;
+    function read() {
+      try { var k = s && s.getItem(CHECKOUT_KEY_STORE); return k && CHECKOUT_KEY_RE.test(k) ? k : null; } catch (e) { return null; }
+    }
+    function write(k) {
+      try { if (s) { if (k) s.setItem(CHECKOUT_KEY_STORE, k); else s.removeItem(CHECKOUT_KEY_STORE); } } catch (e) { /* private mode: memory only */ }
+    }
+    return {
+      key: function () {
+        if (!key) key = read();
+        if (!key) { key = makeKey(); write(key); }
+        return key;
+      },
+      // A plain retry resends exactly what was sent (clock-derived fields such
+      // as ASAP-vs-later can't drift); an edit drops it so the new details go.
+      attemptPayload: function (data) {
+        if (!payload || payload.idempotency_key !== data.idempotency_key) payload = data;
+        return payload;
+      },
+      edited: function () { payload = null; },
+      clear: function () { key = null; payload = null; write(null); }
+    };
+  }
+  /**
+   * create-order refusal that means "this checkout already made an order":
+   *   { kind: "changed", order }  422 checkout_changed: the first try went through
+   *   { kind: "used" }            409 checkout_used: made with another phone (no details)
+   */
+  function checkoutConflict(result) {
+    var d = result && result.data;
+    if (!result || result.ok || !d) return null;
+    if (result.status === 422 && d.code === "checkout_changed" && d.existingOrder && d.existingOrder.orderNumber) {
+      return { kind: "changed", order: d.existingOrder };
+    }
+    if (result.status === 409 && d.code === "checkout_used") return { kind: "used" };
+    return null;
+  }
+
   // ── Tracking token storage (customer JWT minted by create-order / get-orders) ──
   var TOKEN_KEY = "cdd_tracking_tokens";
 
@@ -502,6 +552,9 @@
     getTrackingToken: getTrackingToken,
     clearTrackingToken: clearTrackingToken,
     buildTrackUrl: buildTrackUrl,
+    CHECKOUT_KEY_STORE: CHECKOUT_KEY_STORE,
+    checkoutSession: checkoutSession,
+    checkoutConflict: checkoutConflict,
     DEFAULT_TIMEOUT_MS: DEFAULT_TIMEOUT_MS,
     requestTimeoutMs: requestTimeoutMs,
     isOffline: isOffline,

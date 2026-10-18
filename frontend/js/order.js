@@ -310,12 +310,12 @@
         tbody.innerHTML = rows.map(([label, val]) => `<tr><th>${label}</th><td>${escapeHtml(val)}</td></tr>`).join('');
     }
 
-    // One idempotency key per checkout attempt. A retry after a failure (e.g. a
-    // dropped connection) reuses it, so create-order returns the order it may
-    // already have made instead of a duplicate. Editing any order field starts
-    // a new attempt; success clears it.
-    let checkoutKey = null;
-
+    // One idempotency key per order, kept (sessionStorage) across edits and
+    // reloads until an order succeeds; see CoyoteCoastal.checkoutSession.
+    // A retry reuses the key and the exact payload; an edit reuses the key
+    // with the new details. create-order then makes the order (first try never
+    // arrived) or answers 422 checkout_changed naming the order the first try
+    // made, so an edit after a timeout can never create a second order.
     function newIdempotencyKey() {
         const c = window.crypto;
         if (c && typeof c.randomUUID === 'function') return c.randomUUID();
@@ -325,26 +325,26 @@
         return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    function checkoutIdempotencyKey() {
-        if (!checkoutKey) checkoutKey = newIdempotencyKey();
-        return checkoutKey;
-    }
+    const checkoutState = (window.CoyoteCoastal && typeof window.CoyoteCoastal.checkoutSession === 'function')
+        ? window.CoyoteCoastal.checkoutSession(undefined, newIdempotencyKey)
+        : (function () { // memory-only fallback if coastal.js is missing
+            let key = null, payload = null;
+            return {
+                key: () => key || (key = newIdempotencyKey()),
+                attemptPayload: (d) => (payload && payload.idempotency_key === d.idempotency_key ? payload : (payload = d)),
+                edited: () => { payload = null; },
+                clear: () => { key = null; payload = null; },
+            };
+        })();
 
-    function resetCheckoutKey(e) {
+    function checkoutIdempotencyKey() { return checkoutState.key(); }
+    function attemptPayload(orderData) { return checkoutState.attemptPayload(orderData); }
+
+    // Editing keeps the key (so the server can tell us if the first try went
+    // through) but sends the new details instead of the frozen payload.
+    function checkoutEdited(e) {
         if (e && e.target && e.target.id === 'termsAgree') return;
-        checkoutKey = null;
-        checkoutPayload = null;
-    }
-
-    // A retry resends exactly what the first try sent (the server refuses a
-    // reused key with different details). Derived fields like ASAP-vs-later can
-    // otherwise drift as the clock moves between the two taps.
-    let checkoutPayload = null;
-    function attemptPayload(orderData) {
-        if (!checkoutPayload || checkoutPayload.idempotency_key !== orderData.idempotency_key) {
-            checkoutPayload = orderData;
-        }
-        return checkoutPayload;
+        checkoutState.edited();
     }
 
     function escapeHtml(text) {
@@ -410,7 +410,7 @@
 
     // Slow/dropped connection: inline message + Retry. Retry goes through
     // submitOrder() again, which reuses the same idempotency key and payload
-    // (checkoutKey/attemptPayload), so the server returns the order it may
+    // (checkoutState.key/attemptPayload), so the server returns the order it may
     // already have made instead of creating a second one.
     const retryBtn = document.getElementById('orderRetryBtn');
     const submitStatus = document.getElementById('orderSubmitStatus');
@@ -420,11 +420,85 @@
     if (retryBtn) retryBtn.addEventListener('click', () => submitOrder({ preventDefault() {} }));
     window.addEventListener('online', () => { if (lastFailureWasNetwork && retryBtn && !retryBtn.hidden) announce("You're back online. Tap Retry to finish your order."); });
 
+    // ── "Your first order went through" (edit/reload after a lost response) ──
+    let firstOrder = null;
+    // While the panel is up, Place Order is hidden: resending would only get
+    // the same answer. "Place a different order" brings it back.
+    function setOrderNavHidden(hide) {
+        const nav = submitBtn && submitBtn.closest ? submitBtn.closest('.form-nav') : null;
+        if (nav) nav.hidden = !!hide;
+    }
+    function hideCheckoutConflict() {
+        const panel = document.getElementById('firstOrderPanel');
+        if (panel) panel.hidden = true;
+        setOrderNavHidden(false);
+        firstOrder = null;
+    }
+    /** Handles 422 checkout_changed / 409 checkout_used. Returns true if shown. */
+    function showCheckoutConflict(result) {
+        const C = window.CoyoteCoastal;
+        const conflict = C && typeof C.checkoutConflict === 'function' ? C.checkoutConflict(result) : null;
+        const panel = document.getElementById('firstOrderPanel');
+        if (!conflict || !panel) return false;
+        lastFailureWasNetwork = false;
+        showRetry(false);
+        const known = conflict.kind === 'changed';
+        const o = known ? conflict.order : null;
+        firstOrder = o;
+        document.getElementById('firstOrderTitle').textContent = known ? 'Your first order went through' : 'This checkout was already used';
+        const text = document.getElementById('firstOrderText');
+        if (known) {
+            const when = o.isAsap ? 'ASAP' : `${o.scheduledDate || ''} ${String(o.scheduledTime || '').slice(0, 5)} Central`.trim();
+            const route = o.dropoffCity && o.dropoffCity !== o.pickupCity ? `${o.pickupCity} → ${o.dropoffCity}` : o.pickupCity;
+            const price = Number(o.estimatedPrice) ? ` · $${Number(o.estimatedPrice).toFixed(2)}` : '';
+            text.textContent = `Order ${o.orderNumber} was placed with the details you sent first (${route} · ${when}${price}), before your changes. We did not place a second order.`;
+            if (o.trackingToken && C.saveTrackingToken) C.saveTrackingToken(o.orderNumber, o.trackingToken);
+        } else {
+            text.textContent = 'An earlier try from this page used a different phone number, so we can\'t show that order here. If you placed it, use the text or order number you got to track it.';
+        }
+        const track = document.getElementById('firstOrderTrack');
+        if (track) { track.hidden = !known; if (known) track.href = C.buildTrackUrl(o.orderNumber); }
+        const pay = document.getElementById('firstOrderPay');
+        if (pay) pay.hidden = !(known && window.CoyoteCheckout && o.paymentStatus !== 'paid' && o.orderId && Number(o.estimatedPrice) > 0);
+        panel.hidden = false;
+        setOrderNavHidden(true);
+        announce(document.getElementById('firstOrderTitle').textContent + '. ' + text.textContent);
+        if (panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const heading = document.getElementById('firstOrderTitle');
+        if (heading) { try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); } }
+        return true;
+    }
+    // Explicit choice: a second, separate order with the current details.
+    function startDifferentOrder() {
+        checkoutState.clear();
+        hideCheckoutConflict();
+        clearSubmitError();
+        announce('Started a new order. Check your details, then tap Place Order.');
+        if (submitBtn && submitBtn.focus) submitBtn.focus();
+    }
+    // Finish the order that already exists: card checkout when it's on (amount
+    // comes from the server), otherwise the normal confirmation (pay driver).
+    async function payFirstOrder() {
+        const o = firstOrder;
+        if (!o || !window.CoyoteCheckout) return;
+        lastBooking = {
+            asap: o.isAsap, date: o.scheduledDate, time: String(o.scheduledTime || '').slice(0, 5),
+            pickupCity: o.pickupCity, dropoffCity: o.dropoffCity,
+            amount: Number(o.estimatedPrice) || 0, phone: document.getElementById('customerPhone').value.trim(), smsSent: false,
+        };
+        const ctx = { orderId: o.orderId, orderNumber: o.orderNumber, amount: Number(o.estimatedPrice) || 0, trackingToken: o.trackingToken || null };
+        checkoutState.clear(); // this order is the one we are finishing
+        let handled = false;
+        try { handled = await window.CoyoteCheckout.afterOrderCreated(ctx); } catch (err) { console.error(err); }
+        if (!handled) showSuccess(ctx);
+    }
+
     async function submitOrder(e) {
         e.preventDefault();
         if (submitting) return; // guard double clicks / Enter-key resubmits
         const terms = document.getElementById('termsAgree');
         clearSubmitError();
+        hideCheckoutConflict();
         if (!terms.checked) {
             setTermsError(true);
             terms.focus();
@@ -483,9 +557,15 @@
             lastFailureWasNetwork = !!netKind;
             showRetry(!!netKind);
             announce(result.ok ? 'Order placed.' : '');
+            // This checkout already made an order (first try's answer was lost).
+            if (!result.ok && showCheckoutConflict(result)) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+                submitting = false;
+                return;
+            }
             if (result.ok) {
-                checkoutKey = null;
-                checkoutPayload = null;
+                checkoutState.clear();
                 lastBooking = {
                     asap: isAsap, date: dateVal, time: timeVal,
                     pickupAddress: orderData.pickup_address, pickupCity: pricedTown('pickup'),
@@ -731,11 +811,15 @@
         document.querySelectorAll('.prev-step').forEach(btn => btn.addEventListener('click', () => goToStep(parseInt(btn.dataset.prev, 10))));
         setupCardSelection('#rideDetails', 'passengers');
         setupCardSelection('#deliveryDetails', 'packageSize');
-        form.addEventListener('input', resetCheckoutKey);
-        form.addEventListener('change', resetCheckoutKey);
-        document.querySelectorAll('.detail-card').forEach(c => c.addEventListener('click', resetCheckoutKey));
+        form.addEventListener('input', checkoutEdited);
+        form.addEventListener('change', checkoutEdited);
+        document.querySelectorAll('.detail-card').forEach(c => c.addEventListener('click', checkoutEdited));
         const swapForKey = document.getElementById('swapLocations');
-        if (swapForKey) swapForKey.addEventListener('click', resetCheckoutKey); // swap sets .value, no input event
+        if (swapForKey) swapForKey.addEventListener('click', checkoutEdited); // swap sets .value, no input event
+        const newOrderBtn = document.getElementById('firstOrderNew');
+        if (newOrderBtn) newOrderBtn.addEventListener('click', startDifferentOrder);
+        const payFirstBtn = document.getElementById('firstOrderPay');
+        if (payFirstBtn) payFirstBtn.addEventListener('click', payFirstOrder);
         ['pickupAddress', 'pickupCity', 'pickupZip', 'dropoffAddress', 'dropoffCity', 'dropoffZip', 'customerFirstName', 'customerLastName', 'customerPhone', 'customerEmail'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => showError(el, false));

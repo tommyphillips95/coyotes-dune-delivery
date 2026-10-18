@@ -373,11 +373,12 @@ test("different keys (or no key) create separate orders", async () => {
   assert.strictEqual(currentFake.db.orders[2].idempotency_key, undefined, "no key -> column not set");
 });
 
-test("repeated key from a different phone is 409, nothing created", async () => {
+test("repeated key from a different phone is 409 checkout_used, nothing created or revealed", async () => {
   currentFake = freshDb();
   await post(Object.assign(base(), { idempotency_key: KEY }));
   const res = await post(Object.assign(base(), { idempotency_key: KEY, phone: "3615559999" }));
   assert.strictEqual(res.statusCode, 409, res.body);
+  assert.strictEqual(JSON.parse(res.body).code, "checkout_used");
   assert.ok(!/order_number|orderId|trackingToken/.test(res.body));
   assert.strictEqual(currentFake.db.orders.length, 1);
 });
@@ -439,7 +440,7 @@ test("concurrent duplicate (unique violation on insert) returns the winning orde
   assert.strictEqual(body.replayed, true);
 });
 
-test("reused key with a different order payload is refused (422), nothing created", async () => {
+test("reused key with a different order payload is refused (422 checkout_changed), nothing created; names only that order", async () => {
   currentFake = freshDb();
   const first = await post(Object.assign(base(), { idempotency_key: KEY }));
   assert.strictEqual(first.statusCode, 201);
@@ -449,7 +450,15 @@ test("reused key with a different order payload is refused (422), nothing create
     assert.strictEqual(res.statusCode, 422, JSON.stringify(change) + " " + res.body);
     const body = JSON.parse(res.body);
     assert.ok(/changed after it was sent/.test(body.error));
-    assert.ok(!/order|CDD-|token/i.test(JSON.stringify(Object.keys(body))) && !body.orderId && !body.trackingToken);
+    assert.strictEqual(body.code, "checkout_changed");
+    // Same browser (key) + same phone: it's this customer's own first order.
+    const o = body.existingOrder;
+    assert.strictEqual(o.orderNumber, currentFake.db.orders[0].order_number);
+    assert.strictEqual(o.orderId, currentFake.db.orders[0].id);
+    assert.strictEqual(o.pickupCity, "Port Aransas");
+    assert.ok(o.trackingToken);
+    assert.deepStrictEqual(Object.keys(body).sort(), ["code", "error", "existingOrder"]);
+    assert.ok(!/phone|email|first_name|last_name|address|customer/i.test(JSON.stringify(o)), "no contact/PII fields");
   }
   assert.strictEqual(currentFake.db.orders.length, 1);
 });
@@ -491,7 +500,9 @@ test("race winner with a different payload is refused, not returned", async () =
   });
   const res = await post(Object.assign(base(), { idempotency_key: KEY }));
   assert.strictEqual(res.statusCode, 422, res.body);
-  assert.ok(!res.body.includes("CDD-WIN-2"));
+  // Same key + same phone won the race: that order is named, not re-created or changed.
+  assert.strictEqual(JSON.parse(res.body).existingOrder.orderNumber, "CDD-WIN-2");
+  assert.strictEqual(currentFake.db.orders.length, 0);
 });
 
 test("hash column missing (partial migration): insert retried without both idempotency columns", async () => {
@@ -507,7 +518,7 @@ test("hash column missing (partial migration): insert retried without both idemp
 test("order form resends the frozen payload on retry; edits drop it", () => {
   const src = require("fs").readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
   assert.ok(/CoyoteAPI\.post\('\/api\/create-order', attemptPayload\(orderData\)[,)]/.test(src));
-  assert.ok(/function resetCheckoutKey[\s\S]{0,200}checkoutPayload = null/.test(src));
+  assert.ok(/function checkoutEdited[\s\S]{0,200}checkoutState\.edited\(\)/.test(src));
   const sql = require("fs").readFileSync(path.join(__dirname, "..", "schema/order_idempotency.sql"), "utf8");
   assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT/.test(sql));
 });
@@ -516,13 +527,13 @@ test("order form sends one key per attempt and reuses it on retry", () => {
   const fs = require("fs");
   const src = fs.readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
   assert.ok(/idempotency_key: checkoutIdempotencyKey\(\)/.test(src), "orderData carries the key");
-  assert.ok(/if \(!checkoutKey\) checkoutKey = newIdempotencyKey\(\)/.test(src), "key is created once and reused");
-  assert.ok(/if \(result\.ok\) \{\s*checkoutKey = null;/.test(src), "success clears it");
-  assert.ok(/form\.addEventListener\('input', resetCheckoutKey\)/.test(src), "edits start a new attempt");
+  assert.ok(/checkoutSession\(undefined, newIdempotencyKey\)/.test(src), "key is created once and reused (sessionStorage)");
+  assert.ok(/if \(result\.ok\) \{\s*checkoutState\.clear\(\);/.test(src), "success clears it");
+  assert.ok(/form\.addEventListener\('input', checkoutEdited\)/.test(src), "edits send new details under the same key");
   assert.ok(/randomUUID/.test(src));
   // The failure branches must not clear the key (that is what makes retry safe).
   const fail = src.slice(src.indexOf("} else {", src.indexOf("if (result.ok) {")), src.indexOf("const trackBtn"));
-  assert.ok(!/checkoutKey = null/.test(fail), "failure keeps the key for the retry");
+  assert.ok(!/checkoutState\.clear\(\)/.test(fail), "failure keeps the key for the retry");
   const sql = fs.readFileSync(path.join(__dirname, "..", "schema/order_idempotency.sql"), "utf8");
   assert.ok(/ADD COLUMN IF NOT EXISTS idempotency_key TEXT/.test(sql));
   assert.ok(/CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx[\s\S]*WHERE idempotency_key IS NOT NULL/.test(sql));

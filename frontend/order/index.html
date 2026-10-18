@@ -811,6 +811,16 @@
                         <div class="order-submit-error" id="orderSubmitError" role="alert" aria-live="assertive" hidden></div>
                         <button type="button" class="btn btn-secondary cc-retry-btn" id="orderRetryBtn" hidden>Retry</button>
                         <p class="cc-sr-only" id="orderSubmitStatus" role="status" aria-live="polite"></p>
+                        <section class="cc-first-order" id="firstOrderPanel" aria-labelledby="firstOrderTitle" hidden>
+                            <h3 id="firstOrderTitle" tabindex="-1">Your first order went through</h3>
+                            <p id="firstOrderText"></p>
+                            <a class="btn btn-primary cc-first-order-btn" id="firstOrderTrack" href="/track/">Track this order</a>
+                            <button type="button" class="btn btn-primary cc-first-order-btn" id="firstOrderPay" hidden>Continue with this order</button>
+                            <div class="cc-first-order-new">
+                                <p>Need different details? This places a <strong>second, separate order</strong>; the first one stays active.</p>
+                                <button type="button" class="btn btn-ghost cc-first-order-btn" id="firstOrderNew">Place a different order</button>
+                            </div>
+                        </section>
 
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="4">Back</button>
