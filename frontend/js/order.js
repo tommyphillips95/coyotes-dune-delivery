@@ -690,7 +690,7 @@
         const serviceLabels = { ride: 'On-Demand Ride', package_delivery: 'Package Delivery', grocery_run: 'Grocery & Supply Run', group_transport: 'Group Transport' };
         document.getElementById('trackingOrderNum').textContent = `Order #${order.order_number}`;
         const statusEl = document.getElementById('trackingStatus');
-        statusEl.textContent = order.status.replace('_', ' ');
+        statusEl.textContent = window.CoyoteCoastal && window.CoyoteCoastal.statusLabel ? window.CoyoteCoastal.statusLabel(order.status) : String(order.status || '').replace(/_/g, ' ');
         statusEl.className = 'status-badge-track ' + order.status;
         document.getElementById('trackingService').textContent = serviceLabels[order.service_type] || order.service_type;
         document.getElementById('trackingScheduled').textContent = order.is_asap ? 'ASAP' : `${order.scheduled_date} at ${String(order.scheduled_time || '').slice(0, 5)} Central`;

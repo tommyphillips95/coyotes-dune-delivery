@@ -550,12 +550,12 @@
             };
 
             tbody.innerHTML = orders.map(o => {
-                const statusClass = (o.status || 'pending').replace('_', '');
+                const statusClass = (o.status || 'pending').replace(/_/g, '');
                 return `<tr>
                     <td><strong>${escapeHtml(o.order_number || '—')}</strong></td>
                     <td>${escapeHtml(serviceLabels[o.service_type] || o.service_type)}</td>
                     <td>${escapeHtml(o.pickup_city || '—')}</td>
-                    <td><span class="status-badge-small ${statusClass}">${escapeHtml((o.status || 'pending').replace('_', ' '))}</span></td>
+                    <td><span class="status-badge-small ${statusClass}">${escapeHtml((o.status || 'pending').replace(/_/g, ' '))}</span></td>
                     <td>${o.estimated_price ? '$' + parseFloat(o.estimated_price).toFixed(2) : '—'}</td>
                 </tr>`;
             }).join('');
