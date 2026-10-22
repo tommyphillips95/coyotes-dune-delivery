@@ -230,7 +230,8 @@ test("missing / generic result falls back to the support line", () => {
 test("order page has inline terms + submit error regions", () => {
   const html = read("frontend/order/index.html");
   assert.ok(/id="termsError"[^>]*hidden/.test(html), "termsError starts hidden");
-  assert.ok(/id="termsAgree"[^>]*aria-describedby="termsError"/.test(html));
+  // Linked only while shown (aria-describedby reads hidden text): see a11y-forms.test.js.
+  assert.ok(/linkError\(terms, msg, !!show\)/.test(read("frontend/js/order.js")), "termsError linked when shown");
   assert.ok(/id="orderSubmitError"[^>]*role="alert"/.test(html), "submit error is announced");
 });
 

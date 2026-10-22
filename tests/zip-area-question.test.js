@@ -128,7 +128,8 @@ test("order page: accessible radio question on Review, sent with the order, serv
   for (const end of ["pickup", "dropoff"]) {
     const g = review.slice(review.indexOf(`id="${end}ZipAreaGroup"`) - 40, review.indexOf("</fieldset>", review.indexOf(`id="${end}ZipAreaGroup"`)));
     assert(/<fieldset class="cc-zip-area"/.test(g) && /<legend>Where is your/.test(g), end);
-    assert(new RegExp(`aria-describedby="${end}ZipAreaHelp ${end}ZipAreaError"`).test(g), end);
+    // The error id is added to aria-describedby only while it shows (setZipAreaError).
+    assert(new RegExp(`aria-describedby="${end}ZipAreaHelp"`).test(g) && new RegExp(`id="${end}ZipAreaError"`).test(g), end);
     assert(new RegExp(`type="radio" name="${end}ZipArea" value="island"`).test(g) && new RegExp(`name="${end}ZipArea" value="mainland"`).test(g), end);
   }
   const js = read("frontend/js/order.js");
