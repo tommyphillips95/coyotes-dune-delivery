@@ -59,6 +59,36 @@
     let paymentErrorDisplay = null;
     let paymentSpinner = null;
 
+    // ── Load Stripe.js on demand (kept off the critical render path) ──
+    const STRIPE_JS_URL = 'https://js.stripe.com/v3/';
+    let stripeJsPromise = null;
+    function loadStripeJs() {
+        if (typeof Stripe !== 'undefined') return Promise.resolve(true);
+        if (stripeJsPromise) return stripeJsPromise;
+        stripeJsPromise = new Promise(function (resolve) {
+            const s = document.createElement('script');
+            s.src = STRIPE_JS_URL;
+            s.async = true;
+            s.onload = function () { resolve(typeof Stripe !== 'undefined'); };
+            s.onerror = function () { stripeJsPromise = null; resolve(false); };
+            document.head.appendChild(s);
+        });
+        return stripeJsPromise;
+    }
+    // Warm it up on the customer's first interaction with the form, so the
+    // payment step doesn't wait on the network but first paint never pays for it.
+    (function warmStripeJsOnIntent() {
+        const f = document.getElementById('orderForm');
+        if (!f) return;
+        const go = function () {
+            f.removeEventListener('focusin', go);
+            f.removeEventListener('pointerdown', go);
+            loadStripeJs();
+        };
+        f.addEventListener('focusin', go);
+        f.addEventListener('pointerdown', go);
+    })();
+
     // ── Initialize Stripe ─────────────────────────────────────
     async function initStripe() {
         await ensurePublishableKey();
@@ -66,8 +96,9 @@
             console.warn('Stripe publishable key not configured. Set STRIPE_PUBLISHABLE_KEY in Netlify or window.STRIPE_PUBLISHABLE_KEY.');
             return false;
         }
+        await loadStripeJs();
         if (typeof Stripe === 'undefined') {
-            console.error('Stripe.js not loaded. Include https://js.stripe.com/v3/ before stripe-payment.js');
+            console.error('Stripe.js not loaded. Could not load https://js.stripe.com/v3/');
             return false;
         }
         try {

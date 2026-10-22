@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -166,6 +166,7 @@
         }
 
         .detail-card {
+            position: relative;
             border: 1.5px solid var(--border);
             border-radius: var(--radius);
             padding: 16px 12px;
@@ -186,7 +187,13 @@
 
         .detail-card input {
             position: absolute;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            margin: 0;
             opacity: 0;
+            pointer-events: none;
         }
 
         .detail-card-label {
@@ -427,8 +434,12 @@
             /* 44px minimum tap targets for the small controls. */
             .tracking-form .btn { min-height: 44px; }
             .detail-card { min-height: 48px; display: flex; align-items: center; justify-content: center; }
+            .cc-book-another { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; }
+            /* Keep the pay / submit buttons clear of the on-screen keyboard and the home indicator. */
+            #submitBtn, #paymentSubmitBtn, .form-nav .btn { scroll-margin-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
         }
     </style>
+    <link rel="preconnect" href="https://js.stripe.com" crossorigin>
 </head>
 <body>
     <!-- Navigation -->
@@ -735,12 +746,12 @@
                         <div class="contact-grid">
                             <div class="form-group">
                                 <label for="customerEmail">Email Address</label>
-                                <input type="email" id="customerEmail" name="customerEmail" autocomplete="email" placeholder="you@example.com">
+                                <input type="email" id="customerEmail" name="customerEmail" autocomplete="email" inputmode="email" placeholder="you@example.com">
                                 <span class="error-message">Please enter a valid email address.</span>
                             </div>
                             <div class="form-group">
                                 <label for="customerPhone">Phone Number <span class="required">*</span></label>
-                                <input type="tel" id="customerPhone" name="customerPhone" required autocomplete="tel" placeholder="(361) 555-1234">
+                                <input type="tel" id="customerPhone" name="customerPhone" required autocomplete="tel" inputmode="tel" placeholder="(361) 555-1234">
                                 <span class="error-message">Please enter a valid phone number.</span>
                             </div>
                         </div>
@@ -852,7 +863,7 @@
                     <p class="cc-next-steps" id="ccNextSteps" hidden></p>
                     <p><a href="/track/" class="btn btn-primary cc-track-link" id="ccTrackLink">Track this order</a></p>
                     <p style="margin-top: 8px;"><a href="/" class="btn btn-secondary">Back to Home</a></p>
-                    <p style="margin-top: 16px;"><a href="/order/">Book Another</a></p>
+                    <p style="margin-top: 16px;"><a href="/order/" class="cc-book-another">Book Another</a></p>
                 </div>
 
                 <!-- Tracking Section -->
@@ -952,8 +963,8 @@
         </div>
     </footer>
 
-    <!-- Stripe.js + payment UI (publishable key from /api/public-config or window.STRIPE_PUBLISHABLE_KEY) -->
-    <script src="https://js.stripe.com/v3/"></script>
+    <!-- Stripe.js is loaded on demand by stripe-payment.js (warmed on first form interaction);
+         publishable key from /api/public-config or window.STRIPE_PUBLISHABLE_KEY -->
     <script>
       // Optional override; leave empty to load from Netlify via /api/public-config
       window.STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
