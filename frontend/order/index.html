@@ -292,7 +292,7 @@
         }
 
         .checkbox-group.order-terms a {
-            color: var(--sand);
+            color: #7A5F40; /* darker sand: 4.5:1+ on warm-white */
             text-decoration: underline;
         }
 
@@ -386,8 +386,12 @@
         .payment-status-badge.failed { background: rgba(196, 90, 62, 0.1); color: #C45A3E; }
         .payment-status-badge.refunded { background: rgba(100, 100, 100, 0.1); color: #666; }
 
+        .cc-radio-group { border: 0; padding: 0; min-width: 0; }
+        fieldset.cc-radio-group:not(.form-group) { margin: 0; }
+        .cc-radio-group .cc-legend { display: block; padding: 0; margin-bottom: 7px; font-weight: 600; font-size: 0.85rem; color: var(--charcoal); }
+        .cc-legend .required { color: #9E3F27; margin-left: 2px; }
         .order-inline-error {
-            color: #C45A3E;
+            color: #9E3F27;
             font-size: 0.85rem;
             margin: 8px 0 0;
         }
@@ -507,6 +511,8 @@
                         <h2>Choose Your Service</h2>
                         <p>Select the type of service you need today.</p>
 
+                        <fieldset class="cc-radio-group">
+                        <legend class="cc-sr-only">Service type</legend>
                         <div class="service-selector">
                             <label class="service-option selected" id="optRide">
                                 <input type="radio" name="serviceType" value="ride" checked>
@@ -533,9 +539,10 @@
                                 <p>Send packages, groceries, or supplies across the islands. Tracked from pickup to dropoff.</p>
                             </label>
                         </div>
+                        </fieldset>
 
-                        <div class="form-group">
-                            <label>When do you need this service?</label>
+                        <fieldset class="form-group cc-radio-group" aria-describedby="serviceTzHint">
+                            <legend class="cc-legend">When do you need this service? <span class="required">*</span></legend>
                             <div class="datetime-row">
                                 <div>
                                     <label for="serviceDate" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Date</label>
@@ -548,7 +555,7 @@
                             </div>
                             <span class="hint" id="serviceTzHint">Times are Central Time (Port Aransas), even if your phone is set to another time zone.</span>
                             <span class="error-message" id="dateTimeError" role="alert">Please select a valid future date and time.</span>
-                        </div>
+                        </fieldset>
 
                         <div class="form-nav">
                             <span></span>
@@ -666,8 +673,8 @@
 
                         <!-- Ride details -->
                         <div id="rideDetails">
-                            <div class="form-group">
-                                <label>Number of Passengers</label>
+                            <fieldset class="form-group cc-radio-group">
+                                <legend class="cc-legend">Number of Passengers</legend>
                                 <div class="detail-cards">
                                     <label class="detail-card selected">
                                         <input type="radio" name="passengers" value="1" checked>
@@ -686,13 +693,13 @@
                                         <span class="detail-card-label">4</span>
                                     </label>
                                 </div>
-                            </div>
+                            </fieldset>
                         </div>
 
                         <!-- Delivery details -->
                         <div id="deliveryDetails" style="display: none;">
-                            <div class="form-group">
-                                <label>Package Size</label>
+                            <fieldset class="form-group cc-radio-group">
+                                <legend class="cc-legend">Package Size</legend>
                                 <div class="detail-cards">
                                     <label class="detail-card selected">
                                         <input type="radio" name="packageSize" value="small" checked>
@@ -711,7 +718,7 @@
                                         <span class="detail-card-label">Oversized</span>
                                     </label>
                                 </div>
-                            </div>
+                            </fieldset>
                             <div class="form-group">
                                 <label for="itemDescription">What are we delivering? <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
                                 <input type="text" id="itemDescription" name="itemDescription" placeholder="Groceries, documents, equipment, etc.">
@@ -797,14 +804,14 @@
                             </div>
                         </div>
 
-                        <fieldset class="cc-zip-area" id="pickupZipAreaGroup" data-end="pickup" hidden aria-describedby="pickupZipAreaHelp pickupZipAreaError">
+                        <fieldset class="cc-zip-area" id="pickupZipAreaGroup" data-end="pickup" hidden aria-describedby="pickupZipAreaHelp">
                             <legend>Where is your pickup? <span class="required">*</span></legend>
                             <p class="cc-zip-area-help" id="pickupZipAreaHelp">ZIP <span class="cc-zip-area-zip">78418</span> covers both Padre Island and Flour Bluff. Island trips need a 4x4 and include the beach surcharge. Your total updates when you choose.</p>
                             <label class="cc-zip-area-option"><input type="radio" name="pickupZipArea" value="island"> <span>On Padre Island (beach)</span></label>
                             <label class="cc-zip-area-option"><input type="radio" name="pickupZipArea" value="mainland"> <span>Flour Bluff / mainland Corpus Christi</span></label>
                             <p class="order-inline-error" id="pickupZipAreaError" hidden>Choose one so we can price your trip.</p>
                         </fieldset>
-                        <fieldset class="cc-zip-area" id="dropoffZipAreaGroup" data-end="dropoff" hidden aria-describedby="dropoffZipAreaHelp dropoffZipAreaError">
+                        <fieldset class="cc-zip-area" id="dropoffZipAreaGroup" data-end="dropoff" hidden aria-describedby="dropoffZipAreaHelp">
                             <legend>Where is your drop-off? <span class="required">*</span></legend>
                             <p class="cc-zip-area-help" id="dropoffZipAreaHelp">ZIP <span class="cc-zip-area-zip">78418</span> covers both Padre Island and Flour Bluff. Island trips need a 4x4 and include the beach surcharge. Your total updates when you choose.</p>
                             <label class="cc-zip-area-option"><input type="radio" name="dropoffZipArea" value="island"> <span>On Padre Island (beach)</span></label>
@@ -819,12 +826,12 @@
                         </div>
 
                         <div class="checkbox-group order-terms">
-                            <input type="checkbox" id="termsAgree" name="termsAgree" required aria-describedby="termsError">
+                            <input type="checkbox" id="termsAgree" name="termsAgree" required aria-required="true">
                             <label for="termsAgree">I confirm that all information provided is accurate. I agree to the <a href="#">Terms of Service</a> and understand that cancellation within 15 minutes of pickup may incur a fee. <span class="required">*</span></label>
                         </div>
                         <p class="order-inline-error" id="termsError" hidden>Please check the box above to agree before placing your order.</p>
 
-                        <div class="order-submit-error" id="orderSubmitError" role="alert" aria-live="assertive" hidden></div>
+                        <div class="order-submit-error" id="orderSubmitError" tabindex="-1" role="alert" aria-live="assertive" hidden></div>
                         <button type="button" class="btn btn-secondary cc-retry-btn" id="orderRetryBtn" hidden>Retry</button>
                         <p class="cc-sr-only" id="orderSubmitStatus" role="status" aria-live="polite"></p>
                         <section class="cc-first-order" id="firstOrderPanel" aria-labelledby="firstOrderTitle" hidden>

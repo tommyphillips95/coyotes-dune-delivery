@@ -245,9 +245,9 @@
                             <span class="error-message">Please enter a valid future expiration date.</span>
                         </div>
                         <div class="form-group">
-                            <label>Upload Insurance Card (front) <span class="required">*</span></label>
+                            <label for="insuranceCard">Upload Insurance Card (front) <span class="required">*</span></label>
                             <div class="file-upload" id="insuranceUpload">
-                                <input type="file" id="insuranceCard" name="insuranceCard" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf" required>
+                                <input type="file" id="insuranceCard" name="insuranceCard" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf" required aria-required="true">
                                 <div class="file-upload-icon">📄</div>
                                 <div class="file-upload-text">Click or drag to upload</div>
                                 <div class="file-upload-hint">JPG, PNG, HEIC or PDF up to 4 MB</div>
@@ -272,8 +272,8 @@
                         <p class="hint">Background checks run through Checkr after submit. Payouts use Stripe Connect later — we never store SSN or bank account numbers here.</p>
 
                         <p>Required for all driver applicants.</p>
-                        <div class="consent-text">
-                            <h4>Background Check Disclosure</h4>
+                        <div class="consent-text" tabindex="0" role="region" aria-label="Background check disclosure">
+                            <h3>Background Check Disclosure</h3>
                             <p>Coyote's Dune Delivery ("the Company") may obtain a consumer report and/or investigative consumer report about you for employment purposes. These reports may include information about your character, general reputation, personal characteristics, mode of living, and criminal history.</p>
                             <p>The Company will use this information solely to evaluate your suitability for a driver position, including compliance with applicable laws and safety standards.</p>
                             <p>You have the right to request a complete and accurate disclosure of the nature and scope of the investigation, and a written summary of your rights under the Fair Credit Reporting Act (FCRA).</p>
@@ -282,14 +282,17 @@
                         <div class="checkbox-group">
                             <input type="checkbox" id="bgConsent" name="bgConsent" required>
                             <label for="bgConsent">I consent to a background check and acknowledge the disclosure above. <span class="required">*</span></label>
+                            <span class="error-message" id="bgConsentError">Please consent to the background check to continue.</span>
                         </div>
                         <div class="checkbox-group">
                             <input type="checkbox" id="bgDisclosureRead" name="bgDisclosureRead" required>
                             <label for="bgDisclosureRead">I have read and understand the Background Check Disclosure and my rights under the FCRA. <span class="required">*</span></label>
+                            <span class="error-message" id="bgDisclosureReadError">Please confirm you have read the disclosure.</span>
                         </div>
                         <div class="checkbox-group">
                             <input type="checkbox" id="esignature" name="esignature" required>
                             <label for="esignature">By checking this box, I am providing my electronic signature and agreeing that this constitutes a legally binding signature. <span class="required">*</span></label>
+                            <span class="error-message" id="esignatureError">Please check this box to sign electronically.</span>
                         </div>
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="3">← Back</button>
@@ -311,8 +314,9 @@
                         <div class="checkbox-group">
                             <input type="checkbox" id="termsAgree" name="termsAgree" required>
                             <label for="termsAgree">I confirm that all information provided is accurate and complete. I agree to the <a href="#" target="_blank">Terms of Service</a> and <a href="#" target="_blank">Driver Agreement</a>. <span class="required">*</span></label>
+                            <span class="error-message" id="termsAgreeError">Please confirm your information and agree to the terms.</span>
                         </div>
-                        <div class="form-alert" id="submitError" role="alert" aria-live="assertive" hidden></div>
+                        <div class="form-alert" id="submitError" tabindex="-1" role="alert" aria-live="assertive" hidden></div>
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="4">← Back</button>
                             <div class="form-nav-right">
