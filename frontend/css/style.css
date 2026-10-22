@@ -82,6 +82,9 @@ a:hover {
     left: 0;
     right: 0;
     z-index: 1000;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
     background: rgba(250, 248, 245, 0.94);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -272,6 +275,7 @@ a:hover {
 .hero {
     position: relative;
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1020,7 +1024,9 @@ a:hover {
 .chat-widget {
     position: fixed;
     bottom: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     right: 24px;
+    right: calc(24px + env(safe-area-inset-right, 0px));
     z-index: 1001;
 }
 
@@ -1288,6 +1294,7 @@ a:hover {
     .nav-menu {
         position: fixed;
         top: 70px;
+        top: calc(70px + env(safe-area-inset-top, 0px));
         left: 0;
         right: 0;
         background: var(--warm-white);
@@ -1364,11 +1371,15 @@ a:hover {
 /* =============================================
    FORM STYLES (for apply page)
    ============================================= */
+html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
+
 .form-page {
     background: var(--warm-white);
     min-height: 100vh;
+    min-height: 100dvh;
     padding-top: 96px;
     padding-bottom: 64px;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 }
 
 .form-container {
