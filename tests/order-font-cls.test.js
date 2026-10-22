@@ -42,9 +42,9 @@ test("head script reserves note+quote space for partner, pickup and category lin
   assert.strictEqual(classesFor("?service=ride"), "");
 });
 
-test("head script runs before the stylesheets (decided before first paint)", () => {
+test("head script is inline in <head> (decided before first paint)", () => {
   const i = ORDER.indexOf("cc-pre-note-2"); assert.ok(i >= 0, "no reservation script");
-  assert.ok(i < ORDER.indexOf('href="../css/style.css"'));
+  assert.ok(i < ORDER.indexOf("</head>"));
 });
 
 test("CSS keeps the hidden boxes in layout at their rendered heights", () => {

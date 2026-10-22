@@ -16,7 +16,8 @@ const tests = [];
 const test = (n, f) => tests.push([n, f]);
 
 function fontFaces(css) {
-  return [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => {
+  // Local-only metric fallbacks ('Inter Fallback', 'DM Sans Fallback') download nothing; skip them.
+  return [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].filter((m) => /url\(/.test(m[1])).map((m) => {
     const b = m[1];
     const get = (k) => { const r = new RegExp(k + "\\s*:\\s*([^;]+);").exec(b); return r ? r[1].trim() : null; };
     return { family: (get("font-family") || "").replace(/['"]/g, ""), weight: get("font-weight"), style: get("font-style"), display: get("font-display"),
@@ -37,7 +38,7 @@ test("only Inter and DM Sans are used; Playfair Display / Outfit are gone", () =
     assert(!/font-family\s*:[^;]*(Playfair|Outfit)/i.test(s), f + " uses Playfair/Outfit");
     assert(!/--font-[a-z-]+\s*:[^;]*(Playfair|Outfit)/i.test(s), f + " defines a Playfair/Outfit stack");
     for (const m of s.matchAll(/(?:font-family|--font(?:-[a-z]+)?)\s*:\s*['"]([^'"]+)['"]/g)) {
-      assert(["Inter", "DM Sans", "SF Mono"].includes(m[1]), `${f}: unexpected web font '${m[1]}'`);
+      assert(["Inter", "DM Sans", "SF Mono", "Inter Fallback", "DM Sans Fallback"].includes(m[1]), `${f}: unexpected web font '${m[1]}'`);
     }
   }
 });
