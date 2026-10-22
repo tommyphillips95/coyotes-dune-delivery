@@ -31,7 +31,23 @@ exports.handler = async (event) => {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
     let query = supabase.from("driver_locations").select("*");
     if (driverId) query = query.eq("driver_id", driverId);
-    else query = query.eq("order_id", orderId);
+    else {
+      // Per-order lookup (/track/ and the order page box): only the driver
+      // currently assigned to the order, and only fixes recorded since they
+      // were assigned. After a reassignment the previous driver's last GPS
+      // point would otherwise show until the new driver sends one.
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .select("id, driver_id, assigned_at")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (orderError) throw orderError;
+      if (!order || !order.driver_id) {
+        return { statusCode: 404, headers, body: JSON.stringify({ success: false, error: "No location found for this driver/order" }) };
+      }
+      query = query.eq("order_id", orderId).eq("driver_id", order.driver_id);
+      if (order.assigned_at) query = query.gte("timestamp", order.assigned_at);
+    }
     query = query.order("timestamp", { ascending: false }).limit(1);
     const { data, error } = await query;
     if (error) throw error;
