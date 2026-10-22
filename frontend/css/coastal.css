@@ -206,7 +206,7 @@ a:hover { color: var(--cc-coral-dark); }
 /* ── Route planner ─────────────────────────── */
 .cc-planner {
     margin-top: 28px;
-    display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px;
+    display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px;
 }
 .cc-card {
     background: #fff; border: 1px solid var(--cc-line); border-radius: 18px; padding: 24px;
@@ -218,9 +218,10 @@ a:hover { color: var(--cc-coral-dark); }
     border: 1px solid var(--cc-line); border-radius: 12px; padding: 12px 14px;
     font-size: 1rem; /* >=16px: iOS Safari zooms the page on focus below that */
     background: var(--cc-cream); color: var(--cc-text);
+    min-width: 0; max-width: 100%;
 }
 .cc-field select:focus, .cc-field input:focus { outline: 2px solid var(--cc-seafoam); border-color: var(--cc-seafoam); }
-.cc-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }
+.cc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: end; }
 .cc-swap {
     height: 46px; width: 46px; border-radius: 12px; border: 1px solid var(--cc-line);
     background: var(--cc-seafoam-soft); color: var(--cc-seafoam-dark); cursor: pointer; margin-bottom: 14px;
@@ -278,11 +279,12 @@ a:hover { color: var(--cc-coral-dark); }
 .sidebar .logo, .sidebar-logo { color: #fff; }
 
 @media (max-width: 860px) {
-    .cc-planner { grid-template-columns: 1fr; }
+    /* minmax(0,…): a long <option> label must not widen the page on phones */
+    .cc-planner { grid-template-columns: minmax(0, 1fr); }
     .cc-hero { padding: 120px 0 72px; }
 }
 @media (max-width: 560px) {
-    .cc-row { grid-template-columns: 1fr; }
+    .cc-row { grid-template-columns: minmax(0, 1fr); }
     .cc-swap { width: 100%; }
     .cc-search { flex-wrap: wrap; }
     .cc-search .btn { width: 100%; }
