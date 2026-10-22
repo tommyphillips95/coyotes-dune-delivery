@@ -69,11 +69,23 @@
         }
     }
 
+    // Link an error element to its field only while it's showing: screen readers
+    // read aria-describedby text even when the element is hidden.
+    function linkError(input, err, show) {
+        if (!input || !err) return;
+        if (!err.id) err.id = (input.id || input.name) + 'Error';
+        const ids = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(x => x && x !== err.id);
+        if (show) ids.push(err.id);
+        if (ids.length) input.setAttribute('aria-describedby', ids.join(' '));
+        else input.removeAttribute('aria-describedby');
+    }
+
     function showError(input, show) {
         const group = input.closest('.form-group');
         if (!group) return;
         const err = group.querySelector('.error-message');
         if (err) err.classList.toggle('visible', show);
+        linkError(input, err, show);
         input.classList.toggle('error', show);
         input.setAttribute('aria-invalid', show ? 'true' : 'false');
     }
@@ -114,7 +126,11 @@
             const dateTimeError = document.getElementById('dateTimeError');
             // Mark the field to fix so goToStep() focuses it (date if missing, else time).
             const mark = (bad) => {
-                [date, time].forEach(el => { el.classList.toggle('error', el === bad); el.setAttribute('aria-invalid', el === bad ? 'true' : 'false'); });
+                [date, time].forEach(el => {
+                    el.classList.toggle('error', el === bad);
+                    el.setAttribute('aria-invalid', el === bad ? 'true' : 'false');
+                    linkError(el, dateTimeError, el === bad);
+                });
             };
             if (!date.value || !time.value) {
                 if (dateTimeError) dateTimeError.classList.add('visible');
@@ -215,6 +231,7 @@
         const msg = document.getElementById(end + 'ZipAreaError');
         if (msg) msg.hidden = !show;
         if (group) group.classList.toggle('cc-invalid', !!show);
+        if (group && msg) linkError(group, msg, !!show);
         document.querySelectorAll(`input[name="${end}ZipArea"]`).forEach(r => r.setAttribute('aria-invalid', show ? 'true' : 'false'));
     }
     function updateZipAreaQuestions() {
@@ -368,6 +385,8 @@
         box.textContent = message;
         box.hidden = false;
         box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Keyboard users land on the message (it's also role=alert for screen readers).
+        try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); }
     }
 
     // create-order names the bad route field (town/ZIP checks); highlight it on
@@ -391,7 +410,12 @@
         // the server's message is shown in the submit error box.
         el.classList.add('error');
         el.setAttribute('aria-invalid', 'true');
-        const clear = () => { el.classList.remove('error'); el.setAttribute('aria-invalid', 'false'); };
+        linkError(el, document.getElementById('orderSubmitError'), true);
+        const clear = () => {
+            el.classList.remove('error');
+            el.setAttribute('aria-invalid', 'false');
+            linkError(el, document.getElementById('orderSubmitError'), false);
+        };
         el.addEventListener('change', clear, { once: true });
         el.addEventListener('input', clear, { once: true });
     }
@@ -406,6 +430,7 @@
         const msg = document.getElementById('termsError');
         if (msg) msg.hidden = !show;
         if (terms) terms.setAttribute('aria-invalid', show ? 'true' : 'false');
+        linkError(terms, msg, !!show);
     }
 
     // Slow/dropped connection: inline message + Retry. Retry goes through

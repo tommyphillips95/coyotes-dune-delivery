@@ -123,6 +123,24 @@
         termsAgree: (v) => v === true || v === 'on',
     };
 
+    // Link an error element to its field only while it's showing: screen readers
+    // read aria-describedby text even when the element is hidden.
+    function linkError(input, err, show) {
+        if (!input || !err) return;
+        if (!err.id) err.id = (input.id || input.name) + 'Error';
+        const ids = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(x => x && x !== err.id);
+        if (show) ids.push(err.id);
+        if (ids.length) input.setAttribute('aria-describedby', ids.join(' '));
+        else input.removeAttribute('aria-describedby');
+        input.setAttribute('aria-invalid', show ? 'true' : 'false');
+    }
+
+    function focusField(el) {
+        if (!el) return;
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+        if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    }
+
     function validateField(input) {
         const name = input.name || input.id;
         const validator = validators[name];
@@ -136,15 +154,15 @@
         }
 
         if (group) {
+            const errMsg = group.querySelector('.error-message');
             if (!isValid) {
                 input.classList.add('error');
-                const errMsg = group.querySelector('.error-message');
                 if (errMsg) errMsg.classList.add('visible');
             } else {
                 input.classList.remove('error');
-                const errMsg = group.querySelector('.error-message');
                 if (errMsg) errMsg.classList.remove('visible');
             }
+            linkError(input, errMsg, !isValid);
         }
         return isValid;
     }
@@ -152,8 +170,12 @@
     function validateStep(stepNum) {
         const inputs = getStepInputEls(stepNum);
         let allValid = true;
+        let firstInvalid = null;
         inputs.forEach(input => {
-            if (!validateField(input)) allValid = false;
+            if (!validateField(input)) {
+                allValid = false;
+                if (!firstInvalid) firstInvalid = input;
+            }
         });
 
         // Special: file upload on step 3
@@ -161,12 +183,18 @@
             if (!uploadedFiles.insuranceCard) {
                 insuranceError.textContent = INSURANCE_REQUIRED_MSG;
                 insuranceError.classList.add('visible');
+                linkError(insuranceInput, insuranceError, true);
                 allValid = false;
+                if (!firstInvalid) firstInvalid = insuranceInput;
             } else {
                 insuranceError.classList.remove('visible');
+                linkError(insuranceInput, insuranceError, false);
             }
         }
 
+        // Move focus to the first field to fix so keyboard and screen-reader
+        // users hear its error instead of staying on the Next/Submit button.
+        if (firstInvalid) focusField(firstInvalid);
         return allValid;
     }
 
@@ -222,6 +250,7 @@
                     insurancePreview.style.display = 'none';
                     insuranceError.textContent = problem;
                     insuranceError.classList.add('visible');
+                    linkError(insuranceInput, insuranceError, true);
                     return;
                 }
                 insuranceError.textContent = INSURANCE_REQUIRED_MSG;
@@ -229,6 +258,7 @@
                 insuranceFileName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
                 insurancePreview.style.display = 'flex';
                 insuranceError.classList.remove('visible');
+                linkError(insuranceInput, insuranceError, false);
                 saveFormData();
             }
         });
@@ -445,6 +475,8 @@
         el.textContent = msg;
         el.hidden = false;
         if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Keyboard users land on the message (it's also role=alert for screen readers).
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
     }
 
     function hideSubmitError() {
