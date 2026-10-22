@@ -210,4 +210,17 @@
     } else {
         init();
     }
+
+    // Replay calls queued by the inline stub before this deferred script ran.
+    function replayQueued(names) {
+        const q = window.__cddAnalyticsQueue;
+        if (!Array.isArray(q)) return;
+        for (let i = 0; i < q.length; ) {
+            const item = q[i];
+            if (names.indexOf(item[0]) === -1) { i++; continue; }
+            q.splice(i, 1);
+            try { window[item[0]].apply(window, item[1]); } catch (_) { /* ignore */ }
+        }
+    }
+    replayQueued(['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent']);
 })();

@@ -13,9 +13,11 @@
     <link rel="stylesheet" href="admin.css">
     <link rel="stylesheet" href="../css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
-    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
-    <script src="../js/analytics.js"></script>
-    <script src="../js/firebase-analytics.js"></script>
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';
+    // Analytics loads deferred; until then calls queue here and are replayed on load.
+    (function (w) { var q = w.__cddAnalyticsQueue = w.__cddAnalyticsQueue || []; ['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent', 'firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties'].forEach(function (n) { if (!w[n]) w[n] = function () { q.push([n, Array.prototype.slice.call(arguments)]); }; }); })(window);</script>
+    <script defer src="../js/analytics.js"></script>
+    <script defer src="../js/firebase-analytics.js"></script>
     <style>
         /* Analytics-specific styles */
         .analytics-grid {
