@@ -101,8 +101,8 @@ test("track box payment badge: paid / partly refunded / refunded / not paid / pe
   assert.deepStrictEqual(C.paymentBadge({ payment_status: "paid" }), { cls: "paid", label: "Paid" });
   assert.deepStrictEqual(C.paymentBadge({ payment_status: "paid", status_logs: [{ status: "paid" }, { status: "partial_refund" }] }), { cls: "paid", label: "Paid (partly refunded)" });
   assert.deepStrictEqual(C.paymentBadge({ payment_status: "refunded" }), { cls: "refunded", label: "Refunded" });
-  assert.deepStrictEqual(C.paymentBadge({ payment_status: "failed" }), { cls: "failed", label: "Not paid" });
-  assert.deepStrictEqual(C.paymentBadge({}), { cls: "pending", label: "Pending" });
+  assert.deepStrictEqual(C.paymentBadge({ payment_status: "failed", stripe_payment_intent_id: "pi_1" }), { cls: "failed", label: "Card payment failed" });
+  assert.deepStrictEqual(C.paymentBadge({}), { cls: "pending", label: "Pay your driver" });
   const src = fs.readFileSync(path.join(ROOT, "frontend/js/order.js"), "utf8");
   assert.ok(/CoyoteCoastal\.paymentBadge\(order\)/.test(src), "order.js renders the real payment status (was hard-coded 'Pending')");
   assert.ok(/badge\.textContent = b\.label/.test(src), "text, not innerHTML");

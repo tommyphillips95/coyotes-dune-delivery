@@ -15,7 +15,9 @@
   const mapError = document.getElementById("mapError");
   window.initMap = function () {};
   function formatStatus(status) {
-    return ({ pending: "Pending", assigned: "Assigned", in_progress: "On the Way", completed: "Completed", cancelled: "Cancelled" })[status] || status;
+    const C = window.CoyoteCoastal;
+    if (C && C.statusLabel) return C.statusLabel(status);
+    return ({ pending: "Pending", assigned: "Assigned", in_progress: "On the Way", completed: "Completed", cancelled: "Cancelled" })[status] || String(status || "").replace(/_/g, " ");
   }
   function formatServiceType(type) {
     return ({ ride: "On-Demand Ride", package_delivery: "Package Delivery", grocery_run: "Grocery Run", group_transport: "Group Transport" })[type] || type;
