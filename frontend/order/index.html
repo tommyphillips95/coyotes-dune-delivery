@@ -10,6 +10,12 @@
     <meta name="theme-color" content="#10202E">
     <title>Book a Ride or Delivery — Coyote's Dune Delivery</title>
     <meta name="description" content="Book a ride or schedule a delivery with Coyote's Dune Delivery. Serving Port Aransas, Padre Island, and the Texas Gulf Coast.">
+    <!-- Reserve room for the prefill note + live quote that order.js fills in from the URL
+         (?restaurant=/pickup=/category=), so the form is not pushed down after first paint.
+         Heights mirror what order.js renders; order.js drops these classes once filled. -->
+    <script>(function (s, c) { if (/[?&]restaurant=[a-z0-9-]/.test(s)) c.add('cc-pre-note-2', 'cc-pre-quote');
+        else { if (/[?&](pickup|category)=./.test(s)) c.add('cc-pre-note-1'); if (/[?&]pickup=./.test(s)) c.add('cc-pre-quote'); }
+    })(location.search, document.documentElement.classList);</script>
     <link rel="preload" href="/fonts/inter-v20-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="../css/style.css">
     <link rel="stylesheet" href="../css/coastal.css">
