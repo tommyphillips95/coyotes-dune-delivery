@@ -770,6 +770,12 @@
         }
     }
 
+    // The <head> script reserved space for the note/quote; real content is in place now.
+    function releaseReservedSpace() {
+        document.documentElement.classList.remove('cc-pre-note-1', 'cc-pre-note-2', 'cc-pre-quote');
+    }
+    window.addEventListener('load', releaseReservedSpace);
+
     // Live quote chip: same numbers create-order stores as estimated_price.
     function updateLiveQuote() {
         const box = document.getElementById('ccLiveQuote');
@@ -856,6 +862,7 @@
         document.querySelectorAll('input[name="serviceType"], input[name="passengers"], input[name="packageSize"]').forEach(r => r.addEventListener('change', updateLiveQuote));
         document.querySelectorAll('#rideDetails .detail-card, #deliveryDetails .detail-card').forEach(c => c.addEventListener('click', updateLiveQuote));
         updateLiveQuote();
+        releaseReservedSpace();
         ZIP_AREA_ENDS.forEach(end => document.querySelectorAll(`input[name="${end}ZipArea"]`).forEach(r => r.addEventListener('change', () => {
             setZipAreaError(end, false);
             buildReviewSummary();
