@@ -391,7 +391,7 @@
 
     // create-order names the bad route field (town/ZIP checks); highlight it on
     // the Route step so "go back and fix" lands on the right input.
-    const SERVER_FIELDS = { pickup_city: 'pickupCity', pickup_zip: 'pickupZip', dropoff_city: 'dropoffCity', dropoff_zip: 'dropoffZip' };
+    const SERVER_FIELDS = { first_name: 'customerFirstName', last_name: 'customerLastName', phone: 'customerPhone', pickup_address: 'pickupAddress', pickup_city: 'pickupCity', pickup_zip: 'pickupZip', dropoff_city: 'dropoffCity', dropoff_zip: 'dropoffZip' };
     function markServerField(result) {
         const f = result && result.data && result.data.field;
         const zipArea = /^(pickup|dropoff)_zip_area$/.exec(f || '');
