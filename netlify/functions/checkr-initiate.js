@@ -157,7 +157,6 @@ exports.handler = async (event) => {
       email: applicant.email,
       phone: applicant.phone || undefined,
       dob: formatDob(applicant.date_of_birth),
-      ssn: applicant.ssn || undefined,
     };
 
     // Remove undefined keys

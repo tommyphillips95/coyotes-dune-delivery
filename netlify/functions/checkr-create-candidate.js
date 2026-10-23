@@ -87,7 +87,6 @@ exports.handler = async (event) => {
         last_name: app.last_name,
         email: app.email,
         phone: app.phone || undefined,
-        ssn: app.ssn || undefined,
         dob: app.date_of_birth || undefined,
         zipcode: app.zip_code || undefined,
         driver_license_number: app.driver_license_number || undefined,
