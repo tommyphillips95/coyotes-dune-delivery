@@ -9,6 +9,37 @@ const { createClient } = require("@supabase/supabase-js");
 const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { getStripe, resolveChargeAmountCents } = require("./_stripe");
+const { samePhone } = require("./_phone");
+const jwt = require("jsonwebtoken");
+
+/**
+ * Only the order's owner may start or replace its payment (and get a
+ * client_secret). Proof is either:
+ *   - the customer tracking token for THIS order (Authorization: Bearer),
+ *     which create-order and the track page hand out; or
+ *   - the phone number on the order's customer record (body.phone), which the
+ *     checkout form always has, for when no token is available.
+ * An admin token is also accepted. The typed email is never proof.
+ */
+function tokenOwnsOrder(event, orderId) {
+  const secret = process.env.JWT_SECRET;
+  const h = event.headers || {};
+  const raw = String(h.authorization || h.Authorization || "").replace(/^Bearer\s+/i, "").trim();
+  if (!secret || !raw) return false;
+  try {
+    const d = jwt.verify(raw, secret);
+    return d.role === "admin" || (d.role === "customer" && d.order_id === orderId);
+  } catch (e) {
+    return false;
+  }
+}
+
+async function phoneOwnsOrder(supabase, order, phone) {
+  if (!phone || !order.customer_id) return false;
+  const { data, error } = await supabase.from("customers").select("id, phone").eq("id", order.customer_id).maybeSingle();
+  if (error || !data || !data.phone) return false;
+  return samePhone(data.phone, phone);
+}
 
 /**
  * Stripe customer for this payment, reused per OUR customer record, never
@@ -212,6 +243,11 @@ exports.handler = async (event) => {
 
     if (orderError || !order) {
       return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+    }
+
+    const owner = tokenOwnsOrder(event, order.id) || (await phoneOwnsOrder(supabase, order, String(body.phone || "").trim()));
+    if (!owner) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: "We couldn't confirm this order is yours. Check the phone number on the form, or open the order from its tracking link.", code: "not_order_owner" }) };
     }
 
     if (order.payment_status === "paid") {

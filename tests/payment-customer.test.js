@@ -10,6 +10,7 @@ const path = require("path");
 const Module = require("module");
 const { createFakeSupabase } = require("./helpers/fake-supabase");
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-jwt-secret";
 process.env.STRIPE_SECRET_KEY = "sk_test_mocked_not_a_real_key";
 process.env.SUPABASE_URL = "https://fake.supabase.test";
 process.env.SUPABASE_SERVICE_KEY = "fake-service-key";
@@ -58,7 +59,7 @@ Module._load = function (request) {
 
 const handler = require(path.join(__dirname, "..", "netlify/functions/create-payment-intent.js")).handler;
 const pay = (order_id, customer_email) => handler({
-  httpMethod: "POST", headers: {}, body: JSON.stringify({ order_id, customer_email }),
+  httpMethod: "POST", headers: { Authorization: "Bearer " + require("jsonwebtoken").sign({ role: "customer", order_id }, process.env.JWT_SECRET) }, body: JSON.stringify({ order_id, customer_email }),
 });
 const order = (id, customer_id, extra) => Object.assign({ id, order_number: "CDD-" + id, status: "pending", estimated_price: 35, payment_status: "pending", stripe_payment_intent_id: null, customer_id }, extra || {});
 

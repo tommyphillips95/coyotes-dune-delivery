@@ -10,6 +10,7 @@ const path = require("path");
 const Module = require("module");
 const { createFakeSupabase } = require("./helpers/fake-supabase");
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-jwt-secret";
 process.env.STRIPE_SECRET_KEY = "sk_test_mocked_not_a_real_key";
 process.env.STRIPE_WEBHOOK_SECRET = "whsec_mocked";
 process.env.SUPABASE_URL = "https://fake.supabase.test";
@@ -76,7 +77,8 @@ const db = (orderExtra) => createFakeSupabase({
   orders: [Object.assign({ id: "o1", order_number: "CDD-1", status: "pending", estimated_price: 35, payment_status: "pending", stripe_payment_intent_id: "pi_old", customer_id: "cust-a" }, orderExtra || {})],
   order_status_logs: [],
 });
-const pay = () => cpi({ httpMethod: "POST", headers: {}, body: JSON.stringify({ order_id: "o1", customer_email: "a@example.com" }) });
+const OWNER = { Authorization: "Bearer " + require("jsonwebtoken").sign({ role: "customer", order_id: "o1", order_number: "CDD-1" }, process.env.JWT_SECRET) };
+const pay = () => cpi({ httpMethod: "POST", headers: OWNER, body: JSON.stringify({ order_id: "o1", customer_email: "a@example.com" }) });
 const ops = () => S.calls.map((c) => c.op + ":" + c.id);
 const created = () => S.calls.filter((c) => c.op === "create");
 const quiet = async (fn) => {
