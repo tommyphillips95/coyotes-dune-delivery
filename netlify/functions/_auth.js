@@ -177,7 +177,21 @@ function jsonError(headers, err) {
   return errorResponse(headers, err, "Server error", "auth");
 }
 
+/**
+ * A driver JWT lives 7 days; approval can be revoked sooner. Every driver
+ * request re-reads applications.status so a removed driver is rejected at once.
+ * Admin/customer callers pass through.
+ */
+async function assertDriverActive(supabase, auth) {
+  if (!auth || auth.kind !== "driver") return;
+  const id = auth.decoded && auth.decoded.driver_id;
+  const { data, error } = await supabase.from("applications").select("id, status").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data || data.status !== "approved") throw authError(403, "Your driver access is no longer active.");
+}
+
 module.exports = {
+  assertDriverActive,
   bearerToken,
   verifyToken,
   requireAdmin,

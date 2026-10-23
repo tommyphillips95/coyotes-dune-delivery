@@ -237,7 +237,7 @@ test("respond-offer: method and input validation", async () => {
   assert.strictEqual((await respondOffer.handler({ httpMethod: "OPTIONS", headers: {} })).statusCode, 204);
   assert.strictEqual((await respondOffer.handler({ httpMethod: "POST", headers: {}, body: "{}" })).statusCode, 401);
   assert.strictEqual((await respond(createFakeSupabase({}), { offer_id: "of1", driver_id: "d1", action: "maybe" })).status, 400);
-  assert.strictEqual((await respond(createFakeSupabase({}), { offer_id: "nope", driver_id: "d1", action: "accept" })).status, 404);
+  assert.strictEqual((await respond(createFakeSupabase({ applications: [driver("d1", "4x4")] }), { offer_id: "nope", driver_id: "d1", action: "accept" })).status, 404);
 });
 
 test("respond-offer: wrong driver → 403", async () => {

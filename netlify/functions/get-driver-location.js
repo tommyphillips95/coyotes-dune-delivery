@@ -1,7 +1,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
-const { requireLocationCaller, assertLocationAccess, jsonError } = require("./_auth");
+const { requireLocationCaller, assertLocationAccess, jsonError, assertDriverActive } = require("./_auth");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -29,6 +29,7 @@ exports.handler = async (event) => {
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await assertDriverActive(supabase, auth);
     let query = supabase.from("driver_locations").select("*");
     if (driverId) query = query.eq("driver_id", driverId);
     else {
