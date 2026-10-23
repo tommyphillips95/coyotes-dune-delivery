@@ -30,6 +30,12 @@ const ORDER_SELECT = `
   status_logs:order_status_logs(*)
 `;
 
+const LOOKUP_UNAVAILABLE = "Order lookup is temporarily unavailable. Please try again.";
+// PostgREST "JSON object requested, multiple (or no) rows returned" with no rows.
+function isNoRows(error) {
+  return !!error && error.code === "PGRST116" && !/\b[1-9]\d* rows\b/.test(String(error.details || ""));
+}
+
 async function mintTrackingToken(event, headers) {
   let body;
   try {
@@ -61,7 +67,7 @@ async function mintTrackingToken(event, headers) {
     // A database problem is not "not found": the track page tells the customer
     // to try again instead of suggesting their order doesn't exist.
     console.error("[get-orders] order lookup failed:", error.message || error);
-    return { statusCode: 503, headers, body: JSON.stringify({ error: "Order lookup is temporarily unavailable. Please try again." }) };
+    return { statusCode: 503, headers, body: JSON.stringify({ error: LOOKUP_UNAVAILABLE }) };
   }
   if (!order) {
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
@@ -121,7 +127,12 @@ async function fetchOrders(event, headers, auth) {
   }
 
   const { data, error } = await query;
-  if (error) throw error;
+  // .single() with zero rows is PostgREST's PGRST116: that is "not found",
+  // not an outage, so it falls through to the same 404 below.
+  if (error && !isNoRows(error)) {
+    console.error("[get-orders] order fetch failed:", error.message || error);
+    return { statusCode: 503, headers, body: JSON.stringify({ error: LOOKUP_UNAVAILABLE }) };
+  }
 
   if (!data || (Array.isArray(data) && data.length === 0)) {
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
