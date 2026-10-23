@@ -17,6 +17,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { serverError } = require('./_errors');
 const { headers: corsHeaders } = require('./_cors');
+const rateLimit = require('./_rate-limit');
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event, {
@@ -48,6 +49,9 @@ exports.handler = async (event) => {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_KEY
     );
+
+    const rl = await rateLimit.hit(supabase, event, 'log-analytics-event');
+    if (rl.limited) return rateLimit.tooMany(headers, rl.retryAfterSec);
 
     const insertData = {
       event_name: body.event_name,

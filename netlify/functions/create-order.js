@@ -6,6 +6,7 @@
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
+const rateLimit = require("./_rate-limit");
 const { phoneKey, samePhone, phoneVariants } = require("./_phone");
 const { priceQuote } = require("./zones");
 const { checkTrip } = require("./_service-area");
@@ -379,6 +380,10 @@ exports.handler = async (event) => {
       if (seen.unsupported) idempotencySupported = false;
       else if (seen.order) return await replayResponse(supabase, headers, seen.order, body);
     }
+
+    // Counted only for new orders: a retry that matched its idempotency key above never hits this.
+    const rl = await rateLimit.hit(supabase, event, "create-order");
+    if (rl.limited) return rateLimit.tooMany(headers, rl.retryAfterSec);
 
     if (weatherShutdownActive()) {
       return {
