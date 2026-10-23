@@ -13,6 +13,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { phoneKey, samePhone } = require("./_phone");
+const rateLimit = require("./_rate-limit");
 const {
   requireAdminOrCustomer,
   issueTrackingToken,
@@ -57,6 +58,16 @@ async function mintTrackingToken(event, headers) {
   }
 
   const supabase = supabaseClient();
+  // Phone guessing: too many failed lookups from one IP blocks further lookups
+  // for the rest of the 15-minute window. Polling with a token (GET) never comes here.
+  const blocked = await rateLimit.over(supabase, event, "track-lookup-fail");
+  if (blocked.limited) return rateLimit.tooMany(headers, blocked.retryAfterSec);
+  const rl = await rateLimit.hit(supabase, event, "track-lookup");
+  if (rl.limited) return rateLimit.tooMany(headers, rl.retryAfterSec);
+  const notFound = async () => {
+    await rateLimit.hit(supabase, event, "track-lookup-fail");
+    return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+  };
   const { data: order, error } = await supabase
     .from("orders")
     .select("id, order_number, customer:customers(phone)")
@@ -70,12 +81,12 @@ async function mintTrackingToken(event, headers) {
     return { statusCode: 503, headers, body: JSON.stringify({ error: LOOKUP_UNAVAILABLE }) };
   }
   if (!order) {
-    return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+    return await notFound();
   }
   const custPhone = order.customer && order.customer.phone;
   if (!custPhone || !samePhone(custPhone, phone)) {
     // Same message as not-found to avoid phone enumeration of order numbers.
-    return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+    return await notFound();
   }
 
   const token = issueTrackingToken(order);

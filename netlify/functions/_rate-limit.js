@@ -19,6 +19,11 @@ const RATE_LIMITS = {
   "create-order": 30,
   "submit-application": 20,
   "log-analytics-event": 600,
+  // Order-number + phone lookups (POST get-orders). All lookups, generously:
+  "track-lookup": 60,
+  // Failed lookups only. A customer mistyping a few times never gets near 10;
+  // guessing phone numbers needs thousands. A success does NOT reset it.
+  "track-lookup-fail": 10,
 };
 
 function isMissingTable(error) {
@@ -59,6 +64,25 @@ async function hit(supabase, event, name, now) {
   }
 }
 
+/** Is this IP already at the limit for `name`? Read-only. Never throws. */
+async function over(supabase, event, name, now) {
+  const limit = RATE_LIMITS[name];
+  if (!supabase || !limit) return { limited: false };
+  try {
+    const key = "rl:" + name + ":" + clientIp(event);
+    const t = now || Date.now();
+    const { data: row, error } = await supabase.from(TABLE).select("key, failures, first_failed_at").eq("key", key).maybeSingle();
+    if (error) { warn(name, error); return { limited: false }; }
+    const start = row && row.first_failed_at ? Date.parse(row.first_failed_at) : NaN;
+    if (!row || !Number.isFinite(start) || t - start >= WINDOW_MS) return { limited: false };
+    if ((Number(row.failures) || 0) < limit) return { limited: false };
+    return { limited: true, retryAfterSec: Math.max(1, Math.ceil((start + WINDOW_MS - t) / 1000)) };
+  } catch (e) {
+    warn(name, e);
+    return { limited: false };
+  }
+}
+
 function tooMany(headers, retryAfterSec) {
   return {
     statusCode: 429,
@@ -67,4 +91,4 @@ function tooMany(headers, retryAfterSec) {
   };
 }
 
-module.exports = { hit, tooMany, RATE_LIMITS, WINDOW_MS };
+module.exports = { hit, over, tooMany, RATE_LIMITS, WINDOW_MS };
