@@ -323,22 +323,47 @@
         renderUploadPreview();
     }
 
+    // Same rules as /api/upload-driver-document (and the apply page): 4 MB,
+    // JPG/PNG/WebP/HEIC/PDF. The server re-checks by the file's bytes.
+    const UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+    const UPLOAD_EXT = /\.(jpe?g|png|webp|heic|heif|pdf)$/i;
+
     async function onUploadSubmit() {
         if (!pendingFiles.length) return;
-        const fd = new FormData();
-        fd.append('applicantId', session.applicantId);
-        fd.append('email', session.email);
-        pendingFiles.forEach(f => fd.append('documents', f));
+        if (!session || !session.token) { clearSession(); showLogin(); loginError.textContent = 'Please log in again to upload documents.'; return; }
+        const bad = pendingFiles.find(f => !UPLOAD_EXT.test(f.name || ''));
+        if (bad) { showToast(bad.name + ': documents must be a JPG, PNG, WebP, HEIC or PDF file.', 'error'); return; }
+        const big = pendingFiles.find(f => f.size > UPLOAD_MAX_BYTES);
+        if (big) { showToast(big.name + ' is too large. The limit is 4 MB per file.', 'error'); return; }
+        uploadSubmit.disabled = true;
         try {
-            const res = await fetch(API_BASE + '/update-application/' + session.applicantId + '/documents', { method: 'POST', body: fd });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.message || 'Upload failed');
-            pendingFiles = [];
-            renderUploadPreview();
+            // One request per file keeps each under the function's size limit.
+            while (pendingFiles.length) {
+                const f = pendingFiles[0];
+                const fd = new FormData();
+                fd.append('document', f, f.name);
+                const res = await fetch(API_BASE + '/upload-driver-document', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + session.token },
+                    body: fd,
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 401 || res.status === 403) {
+                    clearSession(); showLogin();
+                    loginError.textContent = res.status === 401 ? 'Your session expired. Please log in again.' : (data.error || 'Your driver access is no longer active.');
+                    return;
+                }
+                if (!res.ok) throw new Error((f.name ? f.name + ': ' : '') + (data.error || data.message || 'Upload failed'));
+                pendingFiles.shift();
+                renderUploadPreview();
+            }
             showToast('Documents uploaded', 'success');
             loadStatus();
         } catch (err) {
+            renderUploadPreview();
             showToast(err.message || 'Upload failed', 'error');
+        } finally {
+            uploadSubmit.disabled = false;
         }
     }
 
