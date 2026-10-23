@@ -7,13 +7,15 @@
   let current = null;
 
   function ensureCard() {
-    if (document.getElementById("offer-card")) return;
+    // Styles first: the portal HTML ships the card, and without this rule
+    // .hidden does nothing, so an empty or answered card stays on screen.
     if (!document.getElementById("offer-style")) {
       const style = document.createElement("style");
       style.id = "offer-style";
       style.textContent = ".offer-card{background:#fff;border:2px solid #C9A87C;border-radius:14px;padding:20px;margin-bottom:20px}.offer-card.hidden{display:none}.offer-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.offer-timer{font-variant-numeric:tabular-nums;font-weight:700;color:#C45A3E}.offer-route{font-weight:600;margin:0 0 6px}.offer-meta{font-size:.88rem;color:#6B6B6B;margin:0 0 14px}.offer-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.offer-actions .btn{padding:12px;border:none;border-radius:8px;font-weight:600;cursor:pointer}.offer-actions .btn-primary{background:#4C8C64;color:#fff}.offer-actions .btn-danger{background:#C45A3E;color:#fff}";
       document.head.appendChild(style);
     }
+    if (document.getElementById("offer-card")) return;
     const card = document.createElement("section");
     card.id = "offer-card";
     card.className = "offer-card hidden";
@@ -46,7 +48,7 @@
 
   function hideCard() {
     const card = document.getElementById("offer-card");
-    if (card) card.classList.add("hidden");
+    if (card) { card.classList.add("hidden"); card.hidden = true; }
     current = null;
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   }
@@ -57,6 +59,7 @@
     if (!card) return;
     current = offer;
     card.classList.remove("hidden");
+    card.hidden = false;
     const order = offer.orders || {};
     const route = document.getElementById("offer-route");
     const meta = document.getElementById("offer-meta");
