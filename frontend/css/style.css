@@ -1901,3 +1901,13 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
   .navbar .logo { font-size: min(1.2rem, 24px); }
   .navbar .logo-sub { font-size: min(0.66rem, 13px); }
 }
+
+/* Large text (WCAG 1.4.4/1.4.10): checkout progress labels and footer logo must reflow at 320px. */
+@media (max-width: 768px) {
+  .progress-bar { flex-wrap: wrap; row-gap: 10px; }
+  .progress-step { min-width: max-content; }
+  .footer-grid { grid-template-columns: minmax(0, 1fr); }
+  .footer-brand .logo { min-width: 0; }
+  .footer-brand .logo-text { white-space: normal; overflow-wrap: break-word; min-width: 0; }
+  .footer-links a { overflow-wrap: anywhere; }
+}
