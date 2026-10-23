@@ -61,6 +61,7 @@ function createFakeSupabase(seed) {
       eq(col, val) { state.filters.push((r) => r[col] === val); return b; },
       lt(col, val) { state.filters.push((r) => r[col] < val); return b; },
       in(col, vals) { state.filters.push((r) => vals.includes(r[col])); return b; },
+      gte(col, v) { state.filters.push((r) => r[col] >= v); return b; },
       order(col, opts) { state.orderBy = { col, asc: !(opts && opts.ascending === false) }; return b; },
       limit(n) { state.limitN = n; return b; },
       maybeSingle() { state.single = "maybe"; return b; },

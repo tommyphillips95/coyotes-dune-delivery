@@ -63,11 +63,31 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid latitude or longitude values" }) };
     }
 
+    // The driver app doesn't send order_id, but /track/ looks fixes up by
+    // order. Stamp the driver's active (assigned / in_progress) order so the
+    // customer sees them. A failed lookup never blocks the location post.
+    let orderId = body.order_id || null;
+    if (!orderId) {
+      try {
+        const { data: active, error: activeErr } = await supabase
+          .from("orders")
+          .select("id, assigned_at")
+          .eq("driver_id", driverId)
+          .in("status", ["assigned", "in_progress"])
+          .order("assigned_at", { ascending: false })
+          .limit(1);
+        if (activeErr) throw activeErr;
+        if (active && active[0]) orderId = active[0].id;
+      } catch (e) {
+        console.error("[update-driver-location] active order lookup:", e);
+      }
+    }
+
     const locationData = {
       driver_id: driverId,
       lat: lat,
       lng: lng,
-      order_id: body.order_id || null,
+      order_id: orderId,
       accuracy: body.accuracy ? parseFloat(body.accuracy) : null,
       timestamp: now,
     };
