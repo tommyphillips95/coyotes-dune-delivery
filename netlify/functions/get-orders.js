@@ -94,6 +94,17 @@ async function mintTrackingToken(event, headers) {
   };
 }
 
+// Status log notes are dispatcher text (driver names, "call them" warnings,
+// Stripe ids, SMS failures). A customer token gets status + time only.
+function customerView(order) {
+  if (!order || typeof order !== "object") return order;
+  const out = Object.assign({}, order);
+  for (const k of ["status_logs", "order_status_logs"]) {
+    if (Array.isArray(out[k])) out[k] = out[k].map((l) => ({ status: l && l.status, created_at: l && l.created_at }));
+  }
+  return out;
+}
+
 async function fetchOrders(event, headers, auth) {
   const supabase = supabaseClient();
   const url = new URL(event.rawUrl || `http://localhost${event.path}${event.rawQuery ? "?" + event.rawQuery : ""}`);
@@ -141,7 +152,7 @@ async function fetchOrders(event, headers, auth) {
   return {
     statusCode: 200,
     headers,
-    body: JSON.stringify({ success: true, data }),
+    body: JSON.stringify({ success: true, data: auth.kind === "customer" ? customerView(data) : data }),
   };
 }
 

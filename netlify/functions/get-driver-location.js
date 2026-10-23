@@ -3,6 +3,10 @@ const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { requireLocationCaller, assertLocationAccess, jsonError, assertDriverActive } = require("./_auth");
 
+const ACTIVE = ["assigned", "in_progress"];
+// Customers get the driver's first name and vehicle only: no last name or phone.
+const CUSTOMER_DRIVER_COLS = "first_name, vehicle_make, vehicle_model, vehicle_color";
+
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers, body: "" };
@@ -39,11 +43,13 @@ exports.handler = async (event) => {
       // point would otherwise show until the new driver sends one.
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("id, driver_id, assigned_at")
+        .select("id, driver_id, assigned_at, status")
         .eq("id", orderId)
         .maybeSingle();
       if (orderError) throw orderError;
-      if (!order || !order.driver_id) {
+      // Customers see the driver only while the order is assigned / on the way.
+      const live = order && ACTIVE.includes(order.status);
+      if (!order || !order.driver_id || (auth.kind === "customer" && !live)) {
         return { statusCode: 404, headers, body: JSON.stringify({ success: false, error: "No location found for this driver/order" }) };
       }
       query = query.eq("order_id", orderId).eq("driver_id", order.driver_id);
@@ -63,10 +69,14 @@ exports.handler = async (event) => {
     if (location.driver_id) {
       const { data: driverData, error: driverError } = await supabase
         .from("applications")
-        .select("first_name, last_name, vehicle_make, vehicle_model, vehicle_color")
+        .select(auth.kind === "customer" ? CUSTOMER_DRIVER_COLS : "first_name, last_name, vehicle_make, vehicle_model, vehicle_color")
         .eq("id", location.driver_id)
         .maybeSingle();
-      if (!driverError && driverData) driverInfo = driverData;
+      if (!driverError && driverData) {
+        const keep = (auth.kind === "customer" ? CUSTOMER_DRIVER_COLS : "first_name, last_name, vehicle_make, vehicle_model, vehicle_color").split(", ");
+        driverInfo = {};
+        for (const k of keep) driverInfo[k] = driverData[k] == null ? null : driverData[k];
+      }
     }
 
     return {
