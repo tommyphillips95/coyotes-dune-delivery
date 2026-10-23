@@ -192,7 +192,7 @@ exports.handler = async (event) => {
       // Money was received, so the order is paid whichever intent it was. If it
       // was not the order's current intent, say so loudly (possible 2nd payment).
       const { data: current, error: currentError } = await supabase
-        .from("orders").select("stripe_payment_intent_id, payment_status").eq("id", orderId).maybeSingle();
+        .from("orders").select("stripe_payment_intent_id, payment_status, status").eq("id", orderId).maybeSingle();
       if (currentError) throw currentError;
       const currentId = current && current.stripe_payment_intent_id;
       const otherIntent = currentId && currentId !== paymentIntent.id ? currentId : null;
@@ -207,6 +207,11 @@ exports.handler = async (event) => {
       // Same intent already recorded as paid: a redelivery. Don't log a second
       // payment; still let dispatch run (it is idempotent) in case it failed before.
       const redelivery = !!(current && current.payment_status === "paid" && currentId === paymentIntent.id);
+      // Money arrived for an order that was already cancelled (e.g. a
+      // checkout left open while admin cancelled it). Record it as paid, flag
+      // it for a refund, and don't dispatch.
+      const paidWhileClosed = !!(current && current.status === "cancelled");
+      if (paidWhileClosed) console.error(`[payment-webhook] ${paymentIntent.id} succeeded for ${current.status} order ${orderId}; needs a refund`);
       if (otherIntent) console.error(`[payment-webhook] ${paymentIntent.id} succeeded but order ${orderId} points at ${otherIntent}`);
       if (!redelivery) {
         const { error: updateError } = await supabase
@@ -229,13 +234,18 @@ exports.handler = async (event) => {
             (paymentIntent.amount_received / 100).toFixed(2) +
             (otherIntent
               ? ` (WARNING: ${paymentIntent.id} is not the order's current PaymentIntent ${otherIntent}; check Stripe for a second payment)`
+              : "") +
+            (paidWhileClosed
+              ? ` (WARNING: paid after the order was ${current.status}; no driver will be sent. Refund ${paymentIntent.id} in Stripe.)`
               : ""),
           changed_by: "stripe_webhook",
         },
       ]);
       }
       let dispatch = null;
-      try {
+      if (paidWhileClosed) {
+        dispatch = { offered: false, reason: "order_" + current.status };
+      } else try {
         dispatch = await offerNext(supabase, orderId);
       } catch (e) {
         console.error("[payment-webhook] offerNext:", e);

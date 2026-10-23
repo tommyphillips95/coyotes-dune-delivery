@@ -220,6 +220,26 @@ exports.handler = async (event) => {
       return { statusCode: 409, headers, body: JSON.stringify({ error: "This order is already paid.", code: "already_paid", status: "already_paid", order_id: order.id }) };
     }
 
+    // A cancelled order, or one whose payment was refunded, must
+    // not take a new card payment: the webhook would mark it paid but dispatch
+    // skips closed orders, so the customer would be charged for nothing.
+    // Any still-open PaymentIntent is cancelled so an open checkout can't confirm it.
+    const closedReason = order.status === "cancelled" ? "cancelled"
+      : order.payment_status === "refunded" ? "refunded" : null;
+    if (closedReason) {
+      if (order.stripe_payment_intent_id) {
+        try {
+          const open = await stripe.paymentIntents.retrieve(order.stripe_payment_intent_id);
+          if (open && MODIFIABLE.has(open.status)) await stripe.paymentIntents.cancel(open.id);
+        } catch (e) {
+          console.error(`[create-payment-intent] could not cancel open intent for closed order ${order.id}:`, e && e.message);
+        }
+      }
+      const msg = closedReason === "cancelled" ? "This order was cancelled, so it can't be paid."
+        : "This order's payment was refunded, so it can't be paid again.";
+      return { statusCode: 409, headers, body: JSON.stringify({ error: msg, code: "order_closed", reason: closedReason, order_id: order.id }) };
+    }
+
     let amountCents;
     try {
       amountCents = resolveChargeAmountCents(order, body.amount);
