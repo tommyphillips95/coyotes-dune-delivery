@@ -55,7 +55,7 @@ test("CSS keeps the hidden boxes in layout at their rendered heights", () => {
 });
 
 test("order.js releases the reservation after filling the note and quote (and on load)", () => {
-  assert.match(JS, /classList\.remove\('cc-pre-note-1', 'cc-pre-note-2', 'cc-pre-quote'\)/);
+  assert.match(JS, /classList\.remove\('cc-pre-note-1', 'cc-pre-note-2', 'cc-pre-quote'(, 'cc-pre-partner')?\)/);
   const init = JS.slice(JS.indexOf("function init()"));
   assert.ok(init.indexOf("releaseReservedSpace();") > init.indexOf("updateLiveQuote();"));
   assert.match(JS, /addEventListener\('load', releaseReservedSpace\)/);

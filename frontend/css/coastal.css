@@ -265,6 +265,12 @@ a:hover { color: var(--cc-coral-dark); }
 .cc-pre-note-1 #ccPrefillNote[hidden] { min-height: 44px; }
 .cc-pre-note-2 #ccPrefillNote[hidden] { min-height: 68px; }
 .cc-pre-quote #ccLiveQuote[hidden] { min-height: 76px; }
+/* Unknown ?restaurant= slug: the note always takes a fixed height (2 lines at
+   360-412px, 3 below 360px), reserved before first paint, so showing it moves nothing. */
+.cc-pre-partner #ccPartnerNote[hidden] { display: block; visibility: hidden; }
+.cc-prefill-note.cc-partner-note { min-height: 68px; color: var(--cc-ink); }
+.cc-partner-note a { color: inherit; text-decoration: underline; }
+@media (max-width: 359px) { .cc-prefill-note.cc-partner-note { min-height: 92px; } }
 .cc-prefill-note {
     background: var(--cc-coral-soft); color: var(--cc-coral-dark); border-radius: 12px;
     padding: 10px 14px; font-size: 0.9rem; margin-bottom: 16px; font-weight: 600;

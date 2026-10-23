@@ -768,11 +768,22 @@
             banner.textContent = 'Starting your order: ' + bits.join(' · ');
             banner.hidden = false;
         }
+        // Unknown ?restaurant= slug: fixed text only (the slug is never shown).
+        const partnerNote = document.getElementById('ccPartnerNote');
+        if (partnerNote && params.restaurantUnknown) {
+            const link = document.createElement('a');
+            link.href = '/#partners-menu';
+            link.textContent = 'Choose a partner';
+            partnerNote.textContent = "We couldn't find that partner. ";
+            partnerNote.appendChild(link);
+            partnerNote.appendChild(document.createTextNode(' or start a regular order below.'));
+            partnerNote.hidden = false;
+        }
     }
 
     // The <head> script reserved space for the note/quote; real content is in place now.
     function releaseReservedSpace() {
-        document.documentElement.classList.remove('cc-pre-note-1', 'cc-pre-note-2', 'cc-pre-quote');
+        document.documentElement.classList.remove('cc-pre-note-1', 'cc-pre-note-2', 'cc-pre-quote', 'cc-pre-partner');
     }
     window.addEventListener('load', releaseReservedSpace);
 
