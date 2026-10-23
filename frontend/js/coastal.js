@@ -401,8 +401,10 @@
     var status = Number(r.status) || 0;
     var msg = String(r.error || "").trim();
     if (status === 0) return orderNetworkMessage(networkFailureKind(r) || "network");
-    if (status === 503) {
-      return msg || "Deliveries are paused right now. Please try again later.";
+    // Only create-order's weather hold (body.weather_hold) means "paused";
+    // any other 503 (gateway, maintenance page, overload) is a normal retry.
+    if (status === 503 && r.data && r.data.weather_hold === true) {
+      return msg && msg !== "Request failed" && msg !== "weather_hold" ? msg : "Deliveries are paused for weather. Please try again later.";
     }
     if (status >= 400 && status < 500 && msg && msg !== "Request failed") {
       return msg;

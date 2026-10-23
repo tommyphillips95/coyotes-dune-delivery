@@ -206,9 +206,9 @@ test("network failure (status 0) tells the customer to retry, nothing charged", 
 test("weather hold 503 shows the hold reason create-order sends", () => {
   // CoyoteAPI surfaces body.message as result.error.
   const payload = weatherShutdownPayload({ WEATHER_SHUTDOWN: "1", WEATHER_SHUTDOWN_REASON: "Tropical storm hold until Tuesday." });
-  const m = C.orderErrorMessage({ ok: false, error: payload.message, status: 503 });
+  const m = C.orderErrorMessage({ ok: false, error: payload.message, status: 503, data: payload });
   assert.strictEqual(m, "Tropical storm hold until Tuesday.");
-  assert.ok(/paused/i.test(C.orderErrorMessage({ ok: false, status: 503 })));
+  assert.ok(/paused/i.test(C.orderErrorMessage({ ok: false, status: 503, data: { weather_hold: true } })));
 });
 
 test("400 validation messages pass through", () => {
