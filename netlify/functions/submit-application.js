@@ -36,6 +36,18 @@ const REQUIRED_CONSENTS = [
   { field: 'termsAgree', error: 'Please confirm your information and agree to the terms.' },
 ];
 
+// Consent record columns from schema/driver_consents.sql (LAUNCH.md step 8).
+// Until that runs they don't exist; the application is saved without them.
+const CONSENT_COLS = ['background_check_disclosure_read', 'esignature_consent', 'terms_consent', 'consents_accepted_at'];
+
+/** True when an insert failed only because a driver_consents.sql column is missing. */
+function isMissingConsentColumn(err) {
+  if (!err) return false;
+  const text = [err.message, err.details, err.hint].filter(Boolean).join(' ');
+  const missing = err.code === '42703' || err.code === 'PGRST204' || /does not exist|could not find/i.test(text);
+  return missing && CONSENT_COLS.some((c) => text.includes(c));
+}
+
 /** First missing/false required consent as { error, field }, or null. */
 function missingConsent(body) {
   for (const c of REQUIRED_CONSENTS) {
@@ -74,6 +86,7 @@ function readRequest(event, headers) {
 }
 
 exports.REQUIRED_CONSENTS = REQUIRED_CONSENTS.map((c) => c.field);
+exports.CONSENT_COLS = CONSENT_COLS;
 
 exports.handler = async (event) => {
   const headers = cors.headers(event, { 'Content-Type': 'application/json' });
@@ -147,6 +160,11 @@ exports.handler = async (event) => {
       insurance_policy_number: body.insurance_policy_number || body.policyNumber,
       insurance_expiry: body.insurance_expiry || body.policyExpiry,
       background_check_consent: toBool(body.background_check_consent) || toBool(body.bgConsent),
+      // All four consents were checked above. The time is the server's, never the client's.
+      background_check_disclosure_read: true,
+      esignature_consent: true,
+      terms_consent: true,
+      consents_accepted_at: new Date().toISOString(),
       status: 'pending',
     };
 
@@ -156,13 +174,22 @@ exports.handler = async (event) => {
     );
 
     const insert = (row) => supabase.from('applications').insert([row]).select().single();
-    let { data, error } = await insert(applicationData);
-    if (error && vehicle.isMissingVehicleColumn(error)) {
-      // schema/vehicle_verification.sql not run yet: keep the class in
-      // vehicle_class (unverified either way) and save the application.
-      console.warn('[submit-application] applications.vehicle_class_reported missing; saving without it');
-      const row = Object.assign({}, applicationData);
-      delete row.vehicle_class_reported;
+    // Columns from SQL files that may not be run yet are dropped on a
+    // "column not found" error and the insert retried, with a warning.
+    let row = applicationData;
+    let { data, error } = await insert(row);
+    for (let tries = 0; error && tries < 2; tries++) {
+      if (vehicle.isMissingVehicleColumn(error) && 'vehicle_class_reported' in row) {
+        // schema/vehicle_verification.sql not run yet: keep the class in
+        // vehicle_class (unverified either way) and save the application.
+        console.warn('[submit-application] applications.vehicle_class_reported missing; saving without it');
+        row = Object.assign({}, row);
+        delete row.vehicle_class_reported;
+      } else if (isMissingConsentColumn(error) && 'consents_accepted_at' in row) {
+        console.warn('[submit-application] consent columns missing (run schema/driver_consents.sql, LAUNCH.md step 8); saving without the consent record');
+        row = Object.assign({}, row);
+        CONSENT_COLS.forEach((c) => { delete row[c]; });
+      } else break;
       ({ data, error } = await insert(row));
     }
 
