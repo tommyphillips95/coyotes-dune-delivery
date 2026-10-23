@@ -101,6 +101,27 @@ function isUniqueViolation(err) {
   return !!err && err.code === "23505";
 }
 
+// Service types the order form sends (input[name="serviceType"] on /order/).
+const SERVICE_TYPES = ["ride", "package_delivery"];
+const text = (v) => (typeof v === "string" || typeof v === "number" ? String(v).trim() : "");
+const bad = (headers, error, extra) => ({ statusCode: 400, headers, body: JSON.stringify(Object.assign({ error }, extra || {})) });
+const blankValue = (v) => v == null || (typeof v === "string" && v.trim() === "");
+// Passenger count: absent/blank -> null (default 1); otherwise a whole number >= 1, else undefined (invalid).
+function parseCount(v) {
+  if (blankValue(v)) return null;
+  const s = String(v).trim();
+  if (typeof v === "boolean" || !/^\d+$/.test(s) || Number(s) < 1) return undefined;
+  return Number(s);
+}
+// Tip: absent/blank -> 0; otherwise a finite number >= 0, else undefined (invalid).
+function parseTip(v) {
+  if (blankValue(v)) return 0;
+  if (typeof v === "boolean") return undefined;
+  const n = Number(String(v).trim());
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n;
+}
+
 const digits = (p) => String(p || "").replace(/\D/g, "");
 
 // Fields that define "the same order". A reused key must come with the same
@@ -292,16 +313,39 @@ exports.handler = async (event) => {
   }
 
   try {
-    const body = JSON.parse(event.body || "{}");
-
-    if (!body.first_name || !body.last_name || !body.phone) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "First name, last name, and phone are required" }) };
+    let body;
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch (_) {
+      return bad(headers, "We couldn't read that order. Please try again.");
     }
-    if (!body.pickup_address || !body.pickup_city) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Pickup address and city are required" }) };
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return bad(headers, "We couldn't read that order. Please try again.");
+    }
+
+    // Required text must have something besides spaces; it is stored trimmed.
+    if (!text(body.first_name) || !text(body.last_name) || !text(body.phone)) {
+      return bad(headers, "First name, last name, and phone are required", { field: !text(body.first_name) ? "first_name" : !text(body.last_name) ? "last_name" : "phone" });
+    }
+    if (!text(body.pickup_address) || !text(body.pickup_city)) {
+      return bad(headers, "Pickup address and city are required", { field: !text(body.pickup_address) ? "pickup_address" : "pickup_city" });
     }
     if (!body.service_type) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Service type is required" }) };
+      return bad(headers, "Service type is required");
+    }
+    if (!SERVICE_TYPES.includes(body.service_type)) {
+      return bad(headers, "Please choose a ride or a package delivery.", { field: "service_type" });
+    }
+    // Stored values are built from these (body itself is left as sent: the
+    // idempotency payload hash is computed from it and already ignores spaces).
+    const optText = (v) => text(v) || null;
+    const passengers = parseCount(body.passenger_count);
+    if (passengers === undefined) {
+      return bad(headers, "Please choose how many passengers.", { field: "passenger_count" });
+    }
+    const tip = parseTip(body.tip_amount);
+    if (tip === undefined) {
+      return bad(headers, "Tip can't be negative.", { field: "tip_amount" });
     }
     for (const [field, label] of [["pickup_zip", "pickup"], ["dropoff_zip", "dropoff"]]) {
       if (body[field] != null && String(body[field]).trim() !== "" && !isValidZip(body[field])) {
@@ -351,9 +395,9 @@ exports.handler = async (event) => {
       customerId = existingCustomer.id;
     } else {
       const { data: newCustomer, error: customerError } = await supabase.from("customers").insert([{
-        first_name: body.first_name.trim(),
-        last_name: body.last_name.trim(),
-        phone: body.phone.trim(),
+        first_name: text(body.first_name),
+        last_name: text(body.last_name),
+        phone: text(body.phone),
         email: body.email ? body.email.trim() : null,
       }]).select().single();
       if (customerError) {
@@ -383,7 +427,7 @@ exports.handler = async (event) => {
     const dropoffCity = area.dropoffTown;
     const priced = priceQuote(pickupCity, dropoffCity, {
       service_type: body.service_type,
-      passenger_count: body.passenger_count,
+      passenger_count: passengers,
       package_size: body.package_size,
     });
     const miles = priced.miles;
@@ -395,22 +439,22 @@ exports.handler = async (event) => {
       customer_id: customerId,
       service_type: body.service_type,
       status: "pending",
-      pickup_address: body.pickup_address.trim(),
+      pickup_address: text(body.pickup_address),
       pickup_city: pickupCity,
       pickup_zip: body.pickup_zip ? body.pickup_zip.trim() : null,
-      dropoff_address: body.dropoff_address ? body.dropoff_address.trim() : null,
+      dropoff_address: optText(body.dropoff_address),
       dropoff_city: body.dropoff_city ? dropoffCity : null,
       dropoff_zip: body.dropoff_zip ? body.dropoff_zip.trim() : null,
       scheduled_date: scheduledDate,
       scheduled_time: scheduledTime,
       is_asap: isAsap,
-      passenger_count: body.passenger_count ? parseInt(body.passenger_count, 10) : 1,
-      package_description: body.package_description ? body.package_description.trim() : null,
+      passenger_count: passengers == null ? 1 : passengers,
+      package_description: optText(body.package_description),
       package_size: body.package_size || null,
-      special_instructions: body.special_instructions ? body.special_instructions.trim() : (vehicle === "4x4" ? "Beach access — 4x4 required." : null),
+      special_instructions: optText(body.special_instructions) || (vehicle === "4x4" ? "Beach access — 4x4 required." : null),
       estimated_price: estimatedPrice,
       final_price: null,
-      tip_amount: body.tip_amount ? parseFloat(body.tip_amount) : 0,
+      tip_amount: tip,
       required_vehicle_class: vehicle,
       weather_hold: false,
     };
@@ -442,7 +486,7 @@ exports.handler = async (event) => {
     }]);
 
     const smsEnabled = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
-    const customerPhone = body.phone.trim().replace(/\D/g, "");
+    const customerPhone = text(body.phone).replace(/\D/g, "");
     let smsSent = false;
     if (smsEnabled && customerPhone.length >= 10) {
       const smsMessage = "Your order " + order.order_number + " has been received. We'll assign a driver shortly. — Coyote's Dune Delivery";
