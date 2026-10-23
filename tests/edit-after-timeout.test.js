@@ -45,7 +45,7 @@ async function send(session, fields, mode) {
   if (mode === "response-lost") return { ok: false, status: 0, timedOut: true, sent: body };
   const data = JSON.parse(r.body);
   const result = { ok: r.statusCode < 300, status: r.statusCode, data, sent: body };
-  if (result.ok) session.clear(); // order.js: success clears the key
+  // order.js keeps the key until showSuccess (order finished), not on create.
   return result;
 }
 const tests = [];
