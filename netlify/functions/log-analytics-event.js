@@ -19,6 +19,9 @@ const { serverError } = require('./_errors');
 const { headers: corsHeaders } = require('./_cors');
 const rateLimit = require('./_rate-limit');
 
+const MAX_BODY_CHARS = 8 * 1024;
+const MAX_METADATA_CHARS = 4 * 1024;
+
 exports.handler = async (event) => {
   const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -34,10 +37,21 @@ exports.handler = async (event) => {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    // Public, unauthenticated write: cap what can be stored per row.
+    const bad = (error) => ({ statusCode: 400, headers, body: JSON.stringify({ error }) });
+    if (typeof event.body === 'string' && event.body.length > MAX_BODY_CHARS) return bad('Event too large');
+    let body;
+    try { body = JSON.parse(event.body || '{}'); } catch (_) { return bad('Invalid JSON'); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return bad('Invalid event');
+    const shortText = (v, n) => v === undefined || v === null || (typeof v === 'string' && v.length <= n);
+    if (!shortText(body.category, 50) || !shortText(body.user_id, 100)) return bad('Invalid category or user_id');
+    if (body.metadata !== undefined && body.metadata !== null &&
+        (typeof body.metadata !== 'object' || Array.isArray(body.metadata) || JSON.stringify(body.metadata).length > MAX_METADATA_CHARS)) {
+      return bad('Invalid metadata');
+    }
 
     // Validation
-    if (!body.event_name || typeof body.event_name !== 'string') {
+    if (!body.event_name || typeof body.event_name !== 'string' || body.event_name.length > 100) {
       return {
         statusCode: 400,
         headers,
