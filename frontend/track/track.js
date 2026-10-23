@@ -233,6 +233,15 @@
     document.getElementById("detailPickup").textContent = order.pickup_address || "--";
     document.getElementById("detailDropoff").textContent = order.dropoff_address || "--";
     document.getElementById("detailStatus").textContent = formatStatus(order.status);
+    // Payment row: only once the card payment actually went through
+    // (payment_status from get-orders); otherwise the row stays hidden.
+    const payRow = document.getElementById("detailPaymentRow");
+    if (payRow) {
+      const b = C && C.paymentBadge ? C.paymentBadge(order) : null;
+      const paid = !!b && b.cls === "paid";
+      payRow.hidden = !paid;
+      document.getElementById("detailPayment").textContent = paid ? b.label : "";
+    }
     // Until the driver shares GPS, say what we know instead of a stale default
     // ("Not assigned yet" next to Status: Assigned) or a bare "--".
     // Dispatch can also unassign or cancel from the admin dashboard, so the

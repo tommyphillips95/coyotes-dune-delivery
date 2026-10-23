@@ -53,6 +53,7 @@
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3FB8A6; display: inline-block; }
         .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EADFCC; font-size: 0.88rem; gap: 12px; }
         .order-detail-row > span:last-child { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+        .order-detail-row[hidden] { display: none; }
     </style>
 </head>
 <body>
@@ -102,6 +103,7 @@
                     <div class="order-detail-row"><span>Pickup</span><span id="detailPickup">--</span></div>
                     <div class="order-detail-row"><span>Drop-off</span><span id="detailDropoff">--</span></div>
                     <div class="order-detail-row"><span>Status</span><span id="detailStatus">--</span></div>
+                    <div class="order-detail-row" id="detailPaymentRow" hidden><span>Payment</span><span id="detailPayment"></span></div>
                 </div>
                 <div class="track-card hidden" id="timelineCard">
                     <div class="timeline-step"><div id="dotPending" class="timeline-dot"></div>Order received</div>
