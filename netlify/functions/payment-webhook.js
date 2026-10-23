@@ -74,10 +74,42 @@ async function closeForRefund(supabase, order, now) {
   }
 }
 
+/**
+ * Which order a refunded charge belongs to: metadata.order_id first, then the
+ * charge's PaymentIntent matched against orders.stripe_payment_intent_id
+ * (refunds made from the Stripe dashboard on charges without metadata).
+ * Returns null when neither finds an order.
+ */
+async function resolveRefundOrderId(supabase, charge) {
+  if (!charge) return null;
+  const metaId = charge.metadata && charge.metadata.order_id;
+  if (metaId) {
+    const { data, error } = await supabase.from("orders").select("id").eq("id", metaId).maybeSingle();
+    if (error) throw error;
+    if (data) return data.id;
+  }
+  const pi = typeof charge.payment_intent === "string" ? charge.payment_intent
+    : (charge.payment_intent && charge.payment_intent.id) || null;
+  if (!pi) return null;
+  const { data: rows, error } = await supabase.from("orders").select("id").eq("stripe_payment_intent_id", pi).limit(2);
+  if (error) throw error;
+  if (!rows || rows.length !== 1) {
+    if (rows && rows.length > 1) console.warn("[payment-webhook] refund PaymentIntent matches several orders; not guessing", pi);
+    return null;
+  }
+  return rows[0].id;
+}
+
 async function handleRefund(supabase, headers, charge) {
   const ok = (extra) => ({ statusCode: 200, headers, body: JSON.stringify(Object.assign({ received: true }, extra)) });
-  const orderId = charge && charge.metadata && charge.metadata.order_id;
-  if (!orderId) return ok({ warning: "No order_id in metadata" });
+  const orderId = await resolveRefundOrderId(supabase, charge);
+  if (!orderId) {
+    console.warn("[payment-webhook] charge.refunded with no matching order", JSON.stringify({
+      charge: charge && charge.id, payment_intent: charge && charge.payment_intent,
+      metadata_order_id: (charge && charge.metadata && charge.metadata.order_id) || null,
+    }));
+    return ok({ warning: "No matching order for refunded charge" });
+  }
 
   const amount = Number(charge.amount) || 0;
   const refundedCents = Number(charge.amount_refunded) || 0;
