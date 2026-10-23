@@ -148,6 +148,29 @@ function buildApplicationPatch(body) {
   return { patch };
 }
 
+/**
+ * A driver moved off "approved" must stop getting work at once: take them
+ * offline, expire their open offers, and list orders still assigned to them
+ * (assigned / in progress) so dispatch can reassign. Orders are not changed
+ * here; the admin decides via PUT /orders/:id.
+ */
+async function offboardDrivers(supabase, ids) {
+  if (!ids.length) return { active_orders: [], warning: null };
+  const now = new Date().toISOString();
+  const { error: oErr } = await supabase.from("applications").update({ online: false }).in("id", ids);
+  if (oErr) throw oErr;
+  const { error: fErr } = await supabase.from("dispatch_offers").update({ status: "expired", responded_at: now }).in("driver_id", ids).eq("status", "offered");
+  if (fErr) throw fErr;
+  const { data, error } = await supabase.from("orders").select("id, order_number, status, driver_id")
+    .in("driver_id", ids).in("status", ["assigned", "in_progress"]);
+  if (error) throw error;
+  const active = (data || []).map((o) => ({ id: o.id, order_number: o.order_number || null, status: o.status, driver_id: o.driver_id }));
+  const warning = active.length
+    ? `${active.length} active order(s) still assigned to this driver: ${active.map((o) => o.order_number || o.id).join(", ")}. Reassign them in Orders.`
+    : null;
+  return { active_orders: active, warning };
+}
+
 const DRIVER_COLS = "id, first_name, last_name, status, vehicle_class, online, beach_permit_ok";
 
 /** Approved drivers with vehicle verification (if the columns exist yet). Array + .verificationReady */
@@ -226,7 +249,8 @@ exports.handler = async (event) => {
           .update({ status: body.status, updated_at: new Date().toISOString() })
           .in("id", ids).select();
         if (error) throw error;
-        return json(headers, 200, { success: true, updated: (data || []).length });
+        const off = body.status === "approved" ? { active_orders: [], warning: null } : await offboardDrivers(supabase, (data || []).map((a) => a.id));
+        return json(headers, 200, Object.assign({ success: true, updated: (data || []).length }, off));
       }
       if (parts.length === 2 && method === "PUT") {
         const { patch, error: bad } = buildApplicationPatch(body);
@@ -234,7 +258,9 @@ exports.handler = async (event) => {
         const { data, error } = await supabase.from("applications").update(patch).eq("id", parts[1]).select().maybeSingle();
         if (error) throw error;
         if (!data) return json(headers, 404, { error: "Application not found" });
-        return json(headers, 200, { success: true, data: shapeApplication(data) });
+        const off = patch.status && patch.status !== "approved" ? await offboardDrivers(supabase, [data.id]) : { active_orders: [], warning: null };
+        if (patch.status && patch.status !== "approved") data.online = false;
+        return json(headers, 200, Object.assign({ success: true, data: shapeApplication(data) }, off));
       }
       if (parts.length === 3 && parts[2] === "vehicle" && method === "PUT") {
         return setVehicle(supabase, parts[1], body, (admin && admin.user) || "admin", headers);
