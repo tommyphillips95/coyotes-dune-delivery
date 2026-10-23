@@ -9,7 +9,7 @@ exports.config = { schedule: "*/1 * * * *" };
 exports.handler = async (event) => {
   const headers = corsHeaders(event || {});
   try {
-    requireAdminOrInternal(event || {});
+    requireAdminOrInternal(event || {}, { allowSchedule: true });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
     const stale = await expireStale(supabase);
     const nexts = [];
