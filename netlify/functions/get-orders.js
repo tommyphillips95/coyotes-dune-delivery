@@ -57,7 +57,13 @@ async function mintTrackingToken(event, headers) {
     .eq("order_number", orderNumber.toUpperCase())
     .maybeSingle();
 
-  if (error || !order) {
+  if (error) {
+    // A database problem is not "not found": the track page tells the customer
+    // to try again instead of suggesting their order doesn't exist.
+    console.error("[get-orders] order lookup failed:", error.message || error);
+    return { statusCode: 503, headers, body: JSON.stringify({ error: "Order lookup is temporarily unavailable. Please try again." }) };
+  }
+  if (!order) {
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
   }
   const custPhone = order.customer && order.customer.phone;

@@ -188,12 +188,17 @@
   let polling = false;
   const C = window.CoyoteCoastal || null;
 
+  // 5xx / 429 mean "try again", not "no such order".
+  function isTemporary(status) { return status >= 500 || status === 429; }
+
+  // Returns a token string, null (not found / wrong phone) or { unavailable: true }.
   async function mintToken(orderNumber, phone) {
     const res = await fetch(API_BASE + "/get-orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order_number: orderNumber, phone: phone }),
     });
+    if (isTemporary(res.status)) return { unavailable: true };
     const json = await res.json().catch(function () { return {}; });
     if (!res.ok || !json.token) return null;
     if (C) C.saveTrackingToken(json.orderNumber || orderNumber, json.token);
@@ -204,6 +209,7 @@
   async function fetchOrder(token) {
     const res = await fetch(API_BASE + "/get-orders", { headers: { Authorization: "Bearer " + token } });
     if (res.status === 401 || res.status === 403) return { expired: true };
+    if (isTemporary(res.status)) return { unavailable: true };
     const json = await res.json().catch(function () { return {}; });
     if (!res.ok) return { error: json.error || "Lookup failed" };
     const payload = json.data || json;
@@ -284,6 +290,7 @@
     currentToken = token;
     const r = await fetchOrder(token);
     if (r.expired) return { expired: true };
+    if (r.unavailable) return { unavailable: true };
     if (!r.order) return { error: r.error };
     renderOrder(r.order);
     readyMap(r.order);
@@ -303,14 +310,18 @@
         if (!orderNumber || !phone) { say("Enter both your order number and the phone number used for the order."); (orderNumber ? document.getElementById("lookupPhone") : document.getElementById("lookupOrderNum")).focus(); return; }
         token = await mintToken(orderNumber, phone);
       }
+      const UNAVAILABLE = "We couldn't look up your order right now. Your order is not affected. Please try again in a minute.";
+      if (token && token.unavailable) { say(UNAVAILABLE); return; }
       if (!token) { say("We couldn't find that order. Check the order number and phone number."); return; }
       let r = await trackWithToken(token);
       if (r.expired && phone) {
         if (C) C.clearTrackingToken(orderNumber);
         token = await mintToken(orderNumber, phone);
-        r = token ? await trackWithToken(token) : { error: "Order not found" };
+        r = token && token.unavailable ? token : token ? await trackWithToken(token) : { error: "Order not found" };
       }
-      if (r.expired) {
+      if (r.unavailable) {
+        say(UNAVAILABLE);
+      } else if (r.expired) {
         if (C) C.clearTrackingToken(orderNumber);
         say("Your tracking link expired. Enter your phone number to continue.");
         document.getElementById("lookupPhone").focus();
