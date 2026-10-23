@@ -66,6 +66,33 @@ function driverOptions(drivers, order) {
  * body: { status?, driver_id?, note?, confirm? }  actor: admin user name
  * Returns { order, from, to, driver, warnings, log }.
  */
+const CANCELABLE = new Set(["requires_payment_method", "requires_confirmation", "requires_action", "requires_capture"]);
+
+/** Returns a warning for the admin, or null when nothing needs doing. Never throws. */
+async function cancelOpenPayment(order) {
+  const id = order.stripe_payment_intent_id;
+  if (!id) return null;
+  if (order.payment_status === "paid") return `${order.order_number} was paid; refund it in Stripe if the customer should get the money back.`;
+  if (order.payment_status === "refunded") return null;
+  const manual = `Couldn't cancel the open payment in Stripe; cancel ${id} in the Stripe dashboard so the customer can't still be charged.`;
+  try {
+    const stripe = require("./_stripe").getStripe();
+    if (!stripe) return manual;
+    const pi = await stripe.paymentIntents.retrieve(id);
+    if (!pi || pi.status === "canceled") return null;
+    if (CANCELABLE.has(pi.status)) {
+      await stripe.paymentIntents.cancel(id, { cancellation_reason: "abandoned" });
+      return null;
+    }
+    if (pi.status === "succeeded") return `${order.order_number} was paid in Stripe (${id}); refund it there.`;
+    if (pi.status === "processing") return `A payment for ${order.order_number} is still processing in Stripe (${id}); refund it there if it goes through.`;
+    return manual;
+  } catch (e) {
+    console.error("[order-admin] could not cancel PaymentIntent for", order.order_number, (e && (e.code || e.type)) || "error");
+    return manual;
+  }
+}
+
 async function changeOrder(supabase, orderId, body, actor) {
   const b = body || {};
   const tried = PAYMENT_FIELDS.filter((f) => Object.prototype.hasOwnProperty.call(b, f));
@@ -81,7 +108,7 @@ async function changeOrder(supabase, orderId, body, actor) {
   const note = b.note == null ? "" : String(b.note).trim().slice(0, NOTE_MAX);
 
   const { data: order, error } = await supabase.from("orders")
-    .select("id, order_number, status, driver_id, required_vehicle_class, pickup_city, dropoff_city, weather_hold")
+    .select("id, order_number, status, driver_id, required_vehicle_class, pickup_city, dropoff_city, weather_hold, stripe_payment_intent_id, payment_status")
     .eq("id", orderId).maybeSingle();
   if (error) throw error;
   if (!order) throw fail(404, "order_not_found", "Order not found.");
@@ -144,6 +171,13 @@ async function changeOrder(supabase, orderId, body, actor) {
   // An admin decision ends any open auto-offer for this order.
   if (to !== from || driver) {
     await supabase.from("dispatch_offers").update({ status: "expired", responded_at: now }).eq("order_id", order.id).eq("status", "offered");
+  }
+
+  // Cancelling also cancels the order's open Stripe PaymentIntent so a checkout
+  // left open can't still charge the customer. Never blocks the cancel.
+  if (to === "cancelled") {
+    const w = await cancelOpenPayment(order);
+    if (w) warnings.push(w);
   }
 
   const prevDriver = order.driver_id && (!driver || driver.id !== order.driver_id) ? order.driver_id : null;

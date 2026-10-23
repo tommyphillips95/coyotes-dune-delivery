@@ -154,7 +154,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, data: order }),
+      body: JSON.stringify({ success: true, data: order, warnings: result.warnings }),
     };
   } catch (err) {
     return serverError(headers, err, 'Failed to update order', 'update-order');
