@@ -26,6 +26,24 @@ function toBool(v) {
   return typeof v === 'string' && ['true', 'on', '1', 'yes'].includes(v.trim().toLowerCase());
 }
 
+// Consents the apply form requires (field names exactly as the form sends
+// them; checkboxes arrive as "true"/"false"). background_check_consent is the
+// stored column name, accepted as an alias for bgConsent.
+const REQUIRED_CONSENTS = [
+  { field: 'bgConsent', alias: 'background_check_consent', error: 'Please consent to the background check to submit your application.' },
+  { field: 'bgDisclosureRead', error: 'Please confirm you have read the background check disclosure.' },
+  { field: 'esignature', error: 'Please check the box to sign your application electronically.' },
+  { field: 'termsAgree', error: 'Please confirm your information and agree to the terms.' },
+];
+
+/** First missing/false required consent as { error, field }, or null. */
+function missingConsent(body) {
+  for (const c of REQUIRED_CONSENTS) {
+    if (!toBool(body[c.field]) && !(c.alias && toBool(body[c.alias]))) return { error: c.error, field: c.field };
+  }
+  return null;
+}
+
 /** { body, file } from a multipart or JSON request, or { error: response }. */
 function readRequest(event, headers) {
   const fail = (statusCode, error, field) => ({ error: { statusCode, headers, body: JSON.stringify(field ? { error, field } : { error }) } });
@@ -55,6 +73,8 @@ function readRequest(event, headers) {
   }
 }
 
+exports.REQUIRED_CONSENTS = REQUIRED_CONSENTS.map((c) => c.field);
+
 exports.handler = async (event) => {
   const headers = cors.headers(event, { 'Content-Type': 'application/json' });
 
@@ -81,6 +101,12 @@ exports.handler = async (event) => {
           body: JSON.stringify({ error: 'Do not send SSN or bank details to this endpoint' }),
         };
       }
+    }
+
+    // Required consents: same rule as the form, enforced here too (multipart and JSON).
+    const consent = missingConsent(body);
+    if (consent) {
+      return { statusCode: 400, headers, body: JSON.stringify(consent) };
     }
 
     // Self-reported vehicle class (required). Stored as-is; it does not make

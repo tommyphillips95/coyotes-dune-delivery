@@ -48,6 +48,9 @@
         const target = getStepEl(stepNum);
         if (target) target.classList.add('active');
         currentStep = stepNum;
+        // The review summary lives on the final step (also when a saved
+        // session is restored straight onto it).
+        if (stepNum === TOTAL_STEPS) buildSummary();
 
         // Update progress bar
         $$$('.progress-step').forEach(el => {
@@ -223,7 +226,6 @@
                 if (validateStep(currentStep)) {
                     showStep(nextStep);
                     trackStepProgression(nextStep);
-                    if (nextStep === 6) buildSummary();
                 }
             });
         });
@@ -350,6 +352,10 @@
         insuranceProvider: 'Insurance Provider', policyNumber: 'Policy Number', policyExpiry: 'Policy Expiry',
     };
 
+    function escapeHtml(v) {
+        return String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     function buildSummary() {
         if (!summaryBody) return;
         let html = '';
@@ -366,7 +372,7 @@
                 if (!input) return;
                 let value = input.value;
                 if (input.tagName === 'SELECT' && input.selectedIndex > 0) value = input.options[input.selectedIndex].text;
-                html += '<tr><td>' + (LABEL_MAP[field] || field) + '</td><td>' + (value || '—') + '</td></tr>';
+                html += '<tr><td>' + (LABEL_MAP[field] || field) + '</td><td>' + (value ? escapeHtml(value) : '—') + '</td></tr>';
             });
         });
 
@@ -376,10 +382,26 @@
 
         if (uploadedFiles.insuranceCard) {
             html += '<tr><th colspan="2">Documents</th></tr>';
-            html += '<tr><td>Insurance Card</td><td>' + uploadedFiles.insuranceCard.name + '</td></tr>';
+            html += '<tr><td>Insurance Card</td><td>' + escapeHtml(uploadedFiles.insuranceCard.name) + '</td></tr>';
         }
 
         summaryBody.innerHTML = html;
+    }
+
+    // Before submit, check every step up to the real final one (TOTAL_STEPS),
+    // including the background-check consents (step 4) and the final
+    // confirm/terms box. On the first step with a problem, show that step with
+    // its linked errors and focus the first field to fix (e.g. an unticked box).
+    function validateAllSteps() {
+        for (let s = 1; s <= TOTAL_STEPS; s++) {
+            if (validateStep(s)) continue;
+            if (s !== currentStep) {
+                showStep(s);
+                validateStep(s); // re-run now it's visible so focus lands
+            }
+            return false;
+        }
+        return true;
     }
 
     // ── API Submission ──────────────────────────────────────
@@ -387,7 +409,7 @@
         e.preventDefault();
         if (isSubmitting) return;
 
-        if (!validateStep(6)) return;
+        if (!validateAllSteps()) return;
 
         isSubmitting = true;
         submitBtn.disabled = true;

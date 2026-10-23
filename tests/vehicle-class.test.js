@@ -32,6 +32,8 @@ const vehicle = require(path.join(FN, "_vehicle.js"));
 const admin = require(path.join(FN, "admin.js"));
 const dispatch = require(path.join(FN, "dispatch.js"));
 const submit = require(path.join(FN, "submit-application.js"));
+// Required consents (submit-application rejects an application without them).
+const CONSENT = { bgConsent: "true", bgDisclosureRead: "true", esignature: "true", termsAgree: "true" };
 const updateApp = require(path.join(FN, "update-application.js"));
 
 const adminToken = jwt.sign({ role: "admin", user: "ops" }, SECRET);
@@ -130,7 +132,7 @@ test("apply form: required vehicle type select with the dispatch class values, p
 test("submit-application: vehicle class required + valid; stored as self-reported, never verified", async () => {
   fresh([]);
   const base = { first_name: "New", last_name: "Driver", email: "new@example.com", phone: "5555550199" };
-  const post = (b) => quiet(() => submit.handler({ httpMethod: "POST", headers: H(null), body: JSON.stringify(b) }));
+  const post = (b) => quiet(() => submit.handler({ httpMethod: "POST", headers: H(null), body: JSON.stringify(Object.assign({}, CONSENT, b)) }));
   for (const bad of [undefined, "", "truck", "4wd"]) {
     const r = await post(Object.assign({}, base, bad === undefined ? {} : { vehicleClass: bad }));
     assert.strictEqual(r.statusCode, 400, String(bad));
@@ -146,7 +148,7 @@ test("submit-application: vehicle class required + valid; stored as self-reporte
 
 test("submit-application before the SQL runs: saved without vehicle_class_reported (class kept in vehicle_class)", async () => {
   freshNoColumns([]);
-  const r = await quiet(() => submit.handler({ httpMethod: "POST", headers: H(null), body: JSON.stringify({ first_name: "A", email: "a@example.com", vehicleClass: "utv" }) }));
+  const r = await quiet(() => submit.handler({ httpMethod: "POST", headers: H(null), body: JSON.stringify(Object.assign({ first_name: "A", email: "a@example.com", vehicleClass: "utv" }, CONSENT)) }));
   assert.strictEqual(r.statusCode, 201, r.body);
   const row = fake.db.applications[0];
   assert.strictEqual(row.vehicle_class, "utv");

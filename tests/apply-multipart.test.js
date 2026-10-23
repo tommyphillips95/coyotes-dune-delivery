@@ -259,7 +259,7 @@ test("Storage fails (e.g. bucket not created) → application still saved, admin
 
 test("JSON submissions (no file) still work, and bad JSON is a 400 not a 500", async () => {
   fake = makeFake();
-  const r = await send({ httpMethod: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firstName: "J", lastName: "S", email: "j@example.com", vehicleClass: "2wd", bgConsent: true }) });
+  const r = await send({ httpMethod: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firstName: "J", lastName: "S", email: "j@example.com", vehicleClass: "2wd", bgConsent: true, bgDisclosureRead: true, esignature: true, termsAgree: true }) });
   assert.strictEqual(r.statusCode, 201, r.body);
   assert.ok(!("insuranceCardStored" in B(r)));
   assert.strictEqual(fake.db.applications[0].background_check_consent, true);
