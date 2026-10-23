@@ -5,6 +5,7 @@
  *
  *   POST /api/admin/login                      -> login-admin
  *   GET  /api/admin/applications               -> list applications
+ *   GET  /api/admin/applications/:id           -> one application, incl. DOB + policy no.
  *   PUT  /api/admin/applications/:id           -> status, notes, beach permit
  *   PUT  /api/admin/applications/:id/vehicle   -> set + verify vehicle class
  *                                                 { vehicle_class, verified } (logged
@@ -82,6 +83,14 @@ function shapeApplication(a) {
     vehicle_verified: vehicle.isVerified(a),
     vehicle_verification_ready: vehicleColumnsPresent(a),
   });
+}
+
+/** Fields shown only on the single-application detail view, never in the list. */
+const DETAIL_ONLY = ["date_of_birth", "dob", "insurance_policy_number", "insurance_policy"];
+function listApplication(a) {
+  const out = shapeApplication(a);
+  DETAIL_ONLY.forEach((k) => { delete out[k]; });
+  return out;
 }
 
 /** select("*") returns every column, so a missing key means the column isn't there yet. */
@@ -237,9 +246,15 @@ exports.handler = async (event) => {
       if (parts.length === 1 && method === "GET") {
         const { data, error } = await supabase.from("applications").select("*").order("created_at", { ascending: false });
         if (error) throw error;
-        const applications = (data || []).map(shapeApplication);
+        const applications = (data || []).map(listApplication);
         const ready = applications.every((a) => a.vehicle_verification_ready);
         return json(headers, 200, { applications, vehicleSetupMessage: ready ? null : vehicle.SETUP_MESSAGE });
+      }
+      if (parts.length === 2 && parts[1] !== "bulk" && method === "GET") {
+        const { data, error } = await supabase.from("applications").select("*").eq("id", parts[1]).maybeSingle();
+        if (error) throw error;
+        if (!data) return json(headers, 404, { error: "Application not found" });
+        return json(headers, 200, { application: shapeApplication(data) });
       }
       if (parts[1] === "bulk" && method === "POST") {
         const ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];

@@ -281,8 +281,18 @@
     /* ===== Detail Modal ===== */
     async function openDetail(id) {
         currentDetailId = id;
-        const app = currentApps.find(a => String(a.id) === id);
-        if (!app) return;
+        const listed = currentApps.find(a => String(a.id) === id);
+        if (!listed) return;
+        // The list leaves out DOB and policy number; fetch the full record.
+        let app;
+        try {
+            const res = await api('GET', `/applications/${encodeURIComponent(id)}`);
+            app = Object.assign({}, listed, res.application || {});
+        } catch (err) {
+            showToast(err.message || 'Failed to load application', 'error');
+            return;
+        }
+        if (currentDetailId !== id) return;
         modalStatus.value = app.status || 'pending';
         modalBody.innerHTML = buildDetailHTML(app);
         detailModal.style.display = '';

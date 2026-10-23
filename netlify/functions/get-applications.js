@@ -53,7 +53,12 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ applications: applications || [] }),
+      // DOB and insurance policy number are detail-only: GET /api/admin/applications/:id.
+      body: JSON.stringify({ applications: (applications || []).map((a) => {
+        const out = Object.assign({}, a);
+        delete out.date_of_birth; delete out.insurance_policy_number;
+        return out;
+      }) }),
     };
   } catch (err) {
     return serverError(headers, err, 'Failed to fetch applications', 'get-applications');
