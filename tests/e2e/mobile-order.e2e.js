@@ -22,8 +22,8 @@ const LEAFLET = "window.L={map:()=>({setView(){return this},invalidateSize(){},f
 const SHOTS = process.env.E2E_SHOTS || "";
 
 let browser;
-async function page() {
-  const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+async function page(width) {
+  const ctx = await browser.newContext({ viewport: { width: width || 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await ctx.route("**/*", (r) => {
     const u = r.request().url();
     if (u.startsWith(B)) return r.continue();
@@ -148,6 +148,27 @@ test("tracking: cancelled+refunded, completed, not found, wrong phone, 503", asy
   await track(q, "CDD-E2E01", "3615550177");
   assert.ok(/right now/.test(await text(q, "#lookupMessage")));
   await noOverflow(q);
+});
+
+test("large text: at 320px with 200% text the header fits and the menu button is on screen", async () => {
+  const p = await page(320);
+  for (const u of ["/order/", "/track/"]) {
+    await p.goto(B + u);
+    await p.addStyleTag({ content: "html{font-size:200%!important}" });
+    await p.waitForTimeout(300);
+    const r = await p.evaluate(() => {
+      const nav = document.querySelector("nav.navbar");
+      const right = Math.max(...[...nav.querySelectorAll("*")].map((e) => e.getBoundingClientRect().right));
+      const t = document.querySelector("#navToggle");
+      return { right, toggle: t ? t.getBoundingClientRect().right : 0, navH: nav.offsetHeight };
+    });
+    assert.ok(r.right <= 320, u + " header right edge " + r.right);
+    assert.ok(r.toggle <= 320, u + " menu button right edge " + r.toggle);
+    assert.ok(r.navH <= 110, u + " header height " + r.navH);
+  }
+  await p.goto(B + "/order/");
+  await p.addStyleTag({ content: "html{font-size:200%!important}" });
+  await shot(p, "e2e-header-320-200pct");
 });
 
 (async () => {
