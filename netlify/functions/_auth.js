@@ -95,15 +95,21 @@ function hasInternalSecret(event) {
   const expected = process.env.INTERNAL_FUNCTION_SECRET;
   if (!expected) return false;
   const got = header(event, "x-internal-secret");
-  return Boolean(got && got === expected);
+  if (!got) return false;
+  const crypto = require("crypto");
+  const h = (v) => crypto.createHash("sha256").update(String(v)).digest();
+  return crypto.timingSafeEqual(h(got), h(expected));
 }
 
 /**
- * Admin JWT, Netlify schedule, or internal shared-secret header.
- * Used by expire-offers (cron + manual) and offer-next (manual/admin).
+ * Admin JWT or internal shared-secret header; plus the Netlify schedule header
+ * only when opts.allowSchedule is set. That header is plain text any caller can
+ * send, so only a function that is actually scheduled (exports.config.schedule,
+ * which Netlify doesn't expose by URL in production) may trust it.
+ * expire-offers (cron + manual) opts in; offer-next (manual/admin) does not.
  */
-function requireAdminOrInternal(event) {
-  if (isNetlifySchedule(event)) return { kind: "schedule" };
+function requireAdminOrInternal(event, opts) {
+  if (opts && opts.allowSchedule && isNetlifySchedule(event)) return { kind: "schedule" };
   if (hasInternalSecret(event)) return { kind: "internal" };
   return { kind: "admin", decoded: requireAdmin(event) };
 }

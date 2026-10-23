@@ -102,7 +102,7 @@ check("requireAdminOrDriver fails closed without JWT_SECRET", () => {
 check("requireAdminOrInternal allows Netlify schedule header", () => {
   const ev = { headers: { "x-netlify-event": "schedule" } };
   assert.ok(isNetlifySchedule(ev));
-  assert.strictEqual(requireAdminOrInternal(ev).kind, "schedule");
+  assert.strictEqual(requireAdminOrInternal(ev, { allowSchedule: true }).kind, "schedule");
 });
 
 check("requireAdminOrInternal allows internal secret", () => {
