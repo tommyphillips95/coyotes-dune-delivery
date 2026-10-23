@@ -27,7 +27,7 @@ const webhook = require(path.join(ROOT, "netlify/functions/payment-webhook.js"))
 const C = require(path.join(ROOT, "frontend/js/coastal.js"));
 
 const db = () => createFakeSupabase({
-  orders: [{ id: "o1", payment_status: "paid", stripe_payment_intent_id: "pi_1" }],
+  orders: [{ id: "o1", status: "pending", payment_status: "paid", stripe_payment_intent_id: "pi_1" }],
   order_status_logs: [],
 });
 const charge = (amount_refunded, extra) => Object.assign({ id: "ch_1", amount: 3500, amount_refunded, refunded: amount_refunded >= 3500, metadata: { order_id: "o1" } }, extra || {});
@@ -74,7 +74,7 @@ test("full refund (amount_refunded >= amount, or refunded:true) marks refunded o
   await refund(charge(3500));
   await refund(charge(3500)); // redelivery
   assert.strictEqual(status(), "refunded");
-  assert.deepStrictEqual(logs().map((l) => l.status), ["partial_refund", "refunded"]);
+  assert.deepStrictEqual(logs().map((l) => l.status), ["partial_refund", "refunded", "cancelled"]); // full refund cancels the open order
   assert.ok(/Refund issued: \$35\.00 of \$35\.00 \(full\)/.test(logs()[1].note));
   fake = db();
   await refund(charge(3400, { refunded: true }));
@@ -86,7 +86,7 @@ test("partial event arriving AFTER the full refund never downgrades or re-logs",
   await refund(charge(3500));
   await refund(charge(1000));
   assert.strictEqual(status(), "refunded");
-  assert.strictEqual(logs().length, 1);
+  assert.deepStrictEqual(logs().map((l) => l.status), ["refunded", "cancelled"]);
 });
 
 test("refund without order metadata is acknowledged, nothing written", async () => {

@@ -53,6 +53,27 @@ const IGNORED_STALE = (headers, eventType) => ({
 const REFUND_MARKER = /\[refund:([^:\]]+):(\d+)\]/;
 const dollars = (cents) => "$" + (Number(cents || 0) / 100).toFixed(2);
 
+/** Full refund cancelled the order: end open offers, log it, tell the driver. */
+async function closeForRefund(supabase, order, now) {
+  await supabase.from("dispatch_offers").update({ status: "expired", responded_at: now }).eq("order_id", order.id).eq("status", "offered");
+  await supabase.from("order_status_logs").insert([{
+    order_id: order.id, status: "cancelled", changed_by: "stripe_webhook",
+    note: `Order cancelled: full refund (was ${order.status})` + (order.driver_id ? "; driver notified" : "") + ".",
+  }]);
+  if (!order.driver_id) return;
+  try {
+    const { data: d } = await supabase.from("applications").select("id, phone").eq("id", order.driver_id).maybeSingle();
+    if (!d || !d.phone) return;
+    // Same channel as dispatch/admin driver texts; a no-op without Twilio env.
+    const { sendSMS, logSMS } = require("./dispatch");
+    const msg = `Coyote's Dune Delivery: ${order.order_number || "your order"} was refunded and cancelled. Do not complete it.`;
+    const sent = await sendSMS(d.phone, msg);
+    await logSMS(supabase, { order_id: order.id, phone_number: d.phone, message: msg, status: sent.success ? "sent" : "failed", twilio_sid: sent.messageSid || null, error: sent.error || null });
+  } catch (e) {
+    console.error("[payment-webhook] refund driver notice failed", e.message || e);
+  }
+}
+
 async function handleRefund(supabase, headers, charge) {
   const ok = (extra) => ({ statusCode: 200, headers, body: JSON.stringify(Object.assign({ received: true }, extra)) });
   const orderId = charge && charge.metadata && charge.metadata.order_id;
@@ -74,7 +95,16 @@ async function handleRefund(supabase, headers, charge) {
   if (refundedCents <= seenMax) return ok({ status: full ? "refunded" : "partial_refund", duplicate: true });
 
   if (full) {
-    const { error } = await supabase.from("orders").update({ payment_status: "refunded", updated_at: new Date().toISOString() }).eq("id", orderId);
+    const now = new Date().toISOString();
+    const { data: before, error: rErr } = await supabase.from("orders")
+      .select("id, order_number, status, driver_id, pickup_city, dropoff_city").eq("id", orderId).maybeSingle();
+    if (rErr) throw rErr;
+    // A full refund cancels an open order (pending/assigned/in progress).
+    // Completed or already-cancelled orders keep their status.
+    const cancel = !!before && !["completed", "cancelled"].includes(before.status);
+    const patch = { payment_status: "refunded", updated_at: now };
+    if (cancel) patch.status = "cancelled";
+    const { error } = await supabase.from("orders").update(patch).eq("id", orderId);
     if (error) throw error;
     await supabase.from("order_status_logs").insert([{
       order_id: orderId,
@@ -82,7 +112,8 @@ async function handleRefund(supabase, headers, charge) {
       note: `Refund issued: ${dollars(refundedCents)} of ${dollars(amount)} (full) ${marker}`,
       changed_by: "stripe_webhook",
     }]);
-    return ok({ status: "refunded" });
+    if (cancel) await closeForRefund(supabase, before, now);
+    return ok({ status: "refunded", cancelled: cancel });
   }
 
   await supabase.from("order_status_logs").insert([{
