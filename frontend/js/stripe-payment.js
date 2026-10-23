@@ -364,7 +364,10 @@
                 order_id: currentOrderId,
                 amount: currentAmount,
                 customer_email: customerEmail,
-            }, { timeoutMs: C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000 });
+                // Proof this is the customer's order: the phone on the form,
+                // plus the order's tracking token when we have one.
+                phone: document.getElementById('customerPhone')?.value?.trim() || '',
+            }, { timeoutMs: C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000, headers: paymentAuthHeaders() });
 
             const netKind = C && C.networkFailureKind ? C.networkFailureKind(piResult) : null;
             if (netKind) {
@@ -651,6 +654,18 @@
     // orders.estimated_price in /api/create-payment-intent.
     // (Previously this file cloned #orderForm to strip listeners, which also
     //  broke order.js step/price handlers and the live estimate.)
+    // The tracking token for this order: from create-order, or the one saved
+    // on this device (a reload or the "first order went through" panel).
+    function paymentAuthToken() {
+        if (currentTrackingToken) return currentTrackingToken;
+        const C = window.CoyoteCoastal;
+        return C && C.getTrackingToken && currentOrderNumber ? C.getTrackingToken(currentOrderNumber) : null;
+    }
+    function paymentAuthHeaders() {
+        const t = paymentAuthToken();
+        return t ? { Authorization: 'Bearer ' + t } : {};
+    }
+
     async function afterOrderCreated(ctx) {
         currentOrderId = ctx.orderId;
         currentOrderNumber = ctx.orderNumber;
