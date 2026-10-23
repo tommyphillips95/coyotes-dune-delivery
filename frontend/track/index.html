@@ -17,7 +17,7 @@
         body { margin: 0; }
         .track-page { max-width: 1200px; margin: 0 auto; padding: 100px 24px 24px; }
         .track-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; min-height: 600px; }
-        @media (max-width: 900px) { .track-layout { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { .track-layout { grid-template-columns: minmax(0, 1fr); } }
         .track-card { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
         .lookup-form { display: flex; flex-direction: column; gap: 10px; }
         /* 16px+ so iOS Safari doesn't zoom the page when a field is tapped; 48px tap targets */
