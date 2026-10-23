@@ -28,9 +28,11 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 /* ─── Checkr signature verification ─── */
 function verifyCheckrSignature(body, signature) {
+  // Fail closed: without the secret anyone could post a "clear" report and
+  // auto-approve a driver (deriveApplicationStatus).
   if (!CHECKR_WEBHOOK_SECRET) {
-    console.warn('CHECKR_WEBHOOK_SECRET not set; skipping signature verification');
-    return true;
+    console.error('CHECKR_WEBHOOK_SECRET not set; rejecting Checkr webhook');
+    return false;
   }
   if (!signature) return false;
 
