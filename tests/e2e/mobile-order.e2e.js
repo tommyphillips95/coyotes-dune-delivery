@@ -22,8 +22,8 @@ const LEAFLET = "window.L={map:()=>({setView(){return this},invalidateSize(){},f
 const SHOTS = process.env.E2E_SHOTS || "";
 
 let browser;
-async function page() {
-  const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+async function page(width) {
+  const ctx = await browser.newContext({ viewport: { width: width || 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await ctx.route("**/*", (r) => {
     const u = r.request().url();
     if (u.startsWith(B)) return r.continue();
@@ -148,6 +148,19 @@ test("tracking: cancelled+refunded, completed, not found, wrong phone, 503", asy
   await track(q, "CDD-E2E01", "3615550177");
   assert.ok(/right now/.test(await text(q, "#lookupMessage")));
   await noOverflow(q);
+});
+
+test("reflow: /track/ and /order/ fit 320px with no horizontal scroll (WCAG 1.4.10)", async () => {
+  const p = await page(320);
+  const sw = () => p.evaluate(() => document.documentElement.scrollWidth);
+  await p.goto(B + "/track/"); await p.waitForTimeout(300);
+  assert.strictEqual(await sw(), 320, "/track/ empty");
+  await track(p, "CDD-E2E02", "3615550177");
+  assert.strictEqual(await text(p, "#detailStatus"), "Completed");
+  assert.strictEqual(await sw(), 320, "/track/ with an order");
+  await shot(p, "e2e-track-320");
+  await p.goto(B + "/order/"); await p.waitForTimeout(300);
+  assert.strictEqual(await sw(), 320, "/order/");
 });
 
 (async () => {
