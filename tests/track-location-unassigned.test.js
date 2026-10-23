@@ -99,6 +99,17 @@ test("driver assigned on a later poll: location is fetched and shown", async () 
   assert.strictEqual(t.els.driverName.textContent, "Val D");
 });
 
+test("dispatch unassigns the driver: polling stops asking for a location", async () => {
+  const t = load();
+  t.state.order = order("assigned"); t.state.location = NEAR_PICKUP;
+  await t.submit();
+  const before = locCalls(t);
+  assert.ok(before >= 1);
+  t.state.order = order("pending", { driver_id: null }); t.state.location = null;
+  await t.state.tick(); await t.state.tick();
+  assert.strictEqual(locCalls(t), before, "no get-driver-location after unassign");
+});
+
 test("assigned with no GPS yet still asks (a real 404/5xx is not hidden server-side)", async () => {
   const t = load();
   t.state.order = order("assigned");

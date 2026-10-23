@@ -97,6 +97,21 @@ test("partial refund keeps the existing badge wording", async () => {
   assert.strictEqual(t.els.detailStatus.textContent, "Assigned");
 });
 
+test("Paid row follows polling: appears when payment lands, hides again on a full refund", async () => {
+  const t = load();
+  t.state.order = order("assigned", { payment_status: "pending", stripe_payment_intent_id: "pi_1" });
+  await t.submit();
+  assert.strictEqual(t.els.detailPaymentRow.hidden, true);
+  t.state.order = order("assigned", { payment_status: "paid", stripe_payment_intent_id: "pi_1" });
+  await t.state.tick(); await new Promise((r) => setImmediate(r));
+  assert.strictEqual(t.els.detailPaymentRow.hidden, false);
+  assert.strictEqual(t.els.detailPayment.textContent, "Paid");
+  t.state.order = order("assigned", { payment_status: "refunded", stripe_payment_intent_id: "pi_1" });
+  await t.state.tick(); await new Promise((r) => setImmediate(r));
+  assert.strictEqual(t.els.detailPaymentRow.hidden, true);
+  assert.strictEqual(t.els.detailPayment.textContent, "");
+});
+
 test("hidden row really hides (display:flex would override [hidden])", () => {
   assert.ok(/\.order-detail-row\[hidden\]\s*\{\s*display:\s*none/.test(html));
 });
