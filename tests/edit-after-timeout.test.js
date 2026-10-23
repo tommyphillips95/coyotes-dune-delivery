@@ -98,10 +98,12 @@ test("reload keeps the key: a resend of the same order after reload replays it (
   assert.strictEqual(r.data.orderNumber, fake.db.orders[0].order_number);
 });
 
-test("success clears the key (sessionStorage too); the next order gets a new one", async () => {
+test("a finished order clears the key (sessionStorage too); the next order gets a new one", async () => {
   fresh(); const store = memStore(); const s = C.checkoutSession(store, mkKey);
   const r = await send(s, form());
   assert.strictEqual(r.status, 201);
+  assert.strictEqual(store.getItem(C.CHECKOUT_KEY_STORE), r.sent.idempotency_key, "kept until paid/confirmed");
+  s.clear(); // order.js showSuccess
   assert.strictEqual(store.getItem(C.CHECKOUT_KEY_STORE), null);
   assert.notStrictEqual(C.checkoutSession(store, mkKey).key(), r.sent.idempotency_key);
 });
