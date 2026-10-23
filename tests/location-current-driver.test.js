@@ -35,20 +35,20 @@ const loc = (id, driver, ts) => ({ id, driver_id: driver, order_id: "o1", lat: 2
 const tests = [];
 const test = (n, f) => tests.push([n, f]);
 test("reassigned order: old driver's newer point is hidden until the new driver reports (404)", async () => {
-  db = { orders: [{ id: "o1", driver_id: "dB", assigned_at: "2026-10-22T15:00:00Z" }],
+  db = { orders: [{ id: "o1", status: "assigned", driver_id: "dB", assigned_at: "2026-10-22T15:00:00Z" }],
     driver_locations: [loc("L1", "dA", "2026-10-22T15:01:00Z")], applications: [] };
   const r = await call();
   assert.strictEqual(r.statusCode, 404, r.body);
 });
 test("new driver's point after assignment is returned, not the old driver's", async () => {
-  db = { orders: [{ id: "o1", driver_id: "dB", assigned_at: "2026-10-22T15:00:00Z" }],
+  db = { orders: [{ id: "o1", status: "assigned", driver_id: "dB", assigned_at: "2026-10-22T15:00:00Z" }],
     driver_locations: [loc("L1", "dA", "2026-10-22T15:05:00Z"), loc("L2", "dB", "2026-10-22T15:02:00Z")], applications: [] };
   const r = await call();
   assert.strictEqual(r.statusCode, 200, r.body);
   assert.strictEqual(JSON.parse(r.body).data.location.id, "L2");
 });
 test("current driver's point from before the assignment is not shown", async () => {
-  db = { orders: [{ id: "o1", driver_id: "dB", assigned_at: "2026-10-22T15:00:00Z" }],
+  db = { orders: [{ id: "o1", status: "assigned", driver_id: "dB", assigned_at: "2026-10-22T15:00:00Z" }],
     driver_locations: [loc("L0", "dB", "2026-10-22T14:00:00Z")], applications: [] };
   assert.strictEqual((await call()).statusCode, 404);
 });
