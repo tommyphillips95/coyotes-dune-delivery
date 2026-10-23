@@ -163,6 +163,19 @@ test("reflow: /track/ and /order/ fit 320px with no horizontal scroll (WCAG 1.4.
   assert.strictEqual(await sw(), 320, "/order/");
 });
 
+test("large text: checkout progress labels and footer fit 320px at 200% text", async () => {
+  const p = await page(320);
+  await p.goto(B + "/order/");
+  await p.addStyleTag({ content: "html{font-size:200%!important}" });
+  await p.waitForTimeout(300);
+  // Header is covered by its own test; everything else on the page must stay within 320px.
+  const wide = await p.evaluate(() => [...document.querySelectorAll("body *")]
+    .filter((e) => !e.closest("nav.navbar") && e.getBoundingClientRect().right > 321)
+    .map((e) => e.tagName + "." + e.className).slice(0, 5));
+  assert.ok(wide.length === 0, "past 320px: " + wide.join(", "));
+  await shot(p, "e2e-order-320-200pct");
+});
+
 (async () => {
   const srv = await require("./server.js").start(PORT);
   browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
