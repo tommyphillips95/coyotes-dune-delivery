@@ -576,8 +576,16 @@
         };
         try {
             const C = window.CoyoteCoastal;
-            const result = await CoyoteAPI.post('/api/create-order', attemptPayload(orderData),
+            let result = await CoyoteAPI.post('/api/create-order', attemptPayload(orderData),
                 { timeoutMs: C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000 });
+            // A 200 we can't read (proxy/captive-portal page, cut-off body) is not a
+            // confirmation: don't show "Order Confirmed" with no order number. We
+            // can't tell if the order was made, so treat it like a lost answer
+            // (Retry re-checks under the same key, no second order).
+            if (result.ok && !(result.data && typeof result.data === 'object' && result.data.orderNumber && result.data.orderId)) {
+                console.error('create-order: unreadable success response');
+                result = { ok: false, status: 0, error: 'unreadable response', timedOut: true, network: true };
+            }
             const netKind = C && C.networkFailureKind ? C.networkFailureKind(result) : null;
             lastFailureWasNetwork = !!netKind;
             showRetry(!!netKind);
@@ -689,14 +697,22 @@
         btn.disabled = true;
         btn.textContent = 'Tracking...';
         try {
-            const auth = await CoyoteAPI.post('/api/get-orders', { order_number: orderNum, phone: phone });
+            const C = window.CoyoteCoastal;
+            const timeoutMs = C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000; // no stuck "Tracking..."
+            const auth = await CoyoteAPI.post('/api/get-orders', { order_number: orderNum, phone: phone }, { timeoutMs });
+            // 200 but not our JSON (proxy page): "try again", not "not found".
+            if (auth.ok && (!auth.data || typeof auth.data !== 'object')) {
+                trackMessage(trackErrorMessage({ ok: false, status: 500 }));
+                return;
+            }
             if (!auth.ok || !auth.data || !auth.data.token) {
                 trackMessage(trackErrorMessage(auth));
                 return;
             }
             const result = await CoyoteAPI.request('/api/get-orders', {
                 method: 'GET',
-                headers: { Authorization: 'Bearer ' + auth.data.token }
+                headers: { Authorization: 'Bearer ' + auth.data.token },
+                timeoutMs
             });
             if (result.ok && result.data && (Array.isArray(result.data.data) ? result.data.data.length > 0 : result.data.data)) {
                 const order = Array.isArray(result.data.data) ? result.data.data[0] : result.data.data;
