@@ -16,6 +16,8 @@ function headers(event, extra) {
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
       Vary: "Origin",
+      // Every function answers with a JSON body; say so (callers can override).
+      "Content-Type": "application/json",
     },
     extra || {}
   );
