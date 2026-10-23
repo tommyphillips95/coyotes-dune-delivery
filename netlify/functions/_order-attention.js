@@ -20,7 +20,11 @@ function payment(order, logs) {
   if (s === "paid") return partial ? { cls: "partial", label: "Paid, partly refunded" } : { cls: "paid", label: "Paid" };
   if (s === "refunded") return { cls: "refunded", label: "Refunded" };
   if (s === "failed") return { cls: "failed", label: "Payment failed" };
-  if (s === "pending") return { cls: "pending", label: "Card payment started, not paid" };
+  // payment_status defaults to 'pending' (schema.sql), so "pending" alone does
+  // not mean a card payment was started: only a Stripe PaymentIntent does.
+  if (s === "pending") return order.stripe_payment_intent_id
+    ? { cls: "pending", label: "Card payment started, not paid" }
+    : { cls: "none", label: "No card payment yet" };
   if (!s) return { cls: "none", label: "No card payment yet" };
   return { cls: "other", label: s.replace(/_/g, " ") };
 }

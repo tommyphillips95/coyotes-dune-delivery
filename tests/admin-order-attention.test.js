@@ -141,6 +141,19 @@ test("dashboard renders payment + flags + history + filter; status text never bl
   assert.strictEqual(fmtStatus("in_progress"), "in progress");
 });
 
+test("default 'pending' payment_status without a PaymentIntent is 'No card payment yet'; intent id not sent to the browser", async () => {
+  const A = require(path.join(ROOT, "netlify/functions/_order-attention.js"));
+  assert.strictEqual(A.payment({ payment_status: "pending" }, []).label, "No card payment yet");
+  assert.strictEqual(A.payment({ payment_status: "pending", stripe_payment_intent_id: "pi_x" }, []).label, "Card payment started, not paid");
+  const sd = seed();
+  sd.orders.push(Object.assign({}, sd.orders.find((o) => o.order_number === "CDD-ADDR1"), { id: "o-default", order_number: "CDD-DEF1", payment_status: "pending" }));
+  fake = createFakeSupabase(sd);
+  const { by } = await list();
+  assert.strictEqual(by["CDD-DEF1"].payment.label, "No card payment yet");
+  assert.strictEqual(by["CDD-DEF1"].payment.cls, "none");
+  for (const o of Object.values(by)) assert(!("stripe_payment_intent_id" in o), o.order_number);
+});
+
 (async () => {
   let failed = 0;
   for (const [n, f] of tests) { try { await f(); console.log("ok - " + n); } catch (e) { failed++; console.error("not ok - " + n + "\n  " + e.message); } }

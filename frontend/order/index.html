@@ -22,11 +22,10 @@
          Heights mirror what order.js renders; order.js drops these classes once filled.
          P = the PARTNERS slugs in coastal.js (tests/partner-not-found.test.js keeps them
          in sync): a known slug gets the prefill note + quote, an unknown one the
-         "couldn't find that partner" note. Same matching as partnerBySlug (case-insensitive; blank = absent). -->
+         "couldn't find that partner" note. Same matching as partnerBySlug (trimmed, case-insensitive; blank = absent). -->
     <script>(function (s, c) { var P = ['texmexcoyote', 'heb-coastal-market', 'clems-bait-tackle', 'shells-seafood', 'stingrays-taphouse', 'padre-island-burger-co'];
         var m = /[?&]restaurant=([^&#]*)/.exec(s), r = '';
-        if (m && m[1]) { try { r = decodeURIComponent(m[1].replace(/\+/g, ' ')).toLowerCase(); } catch (e) { r = '?'; } }
-        if (!r.trim()) r = '';
+        if (m && m[1]) { try { r = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim().toLowerCase(); } catch (e) { r = '?'; } }
         if (r && P.indexOf(r) >= 0) c.add('cc-pre-note-2', 'cc-pre-quote');
         else { if (r) c.add('cc-pre-partner'); if (/[?&](pickup|category)=./.test(s)) c.add('cc-pre-note-1'); if (/[?&]pickup=./.test(s)) c.add('cc-pre-quote'); }
     })(location.search, document.documentElement.classList);</script>

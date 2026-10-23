@@ -73,7 +73,7 @@ test("partner slugs: known slug prefills category/service/pickup town", () => {
 });
 
 test("partner slugs: unknown/hostile values are ignored", () => {
-  ["<script>alert(1)</script>", "%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E", "texmexcoyote%22onmouseover", "../../etc", "x".repeat(300), "TEXMEXCOYOTE "]
+  ["<script>alert(1)</script>", "%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E", "texmexcoyote%22onmouseover", "../../etc", "x".repeat(300), "TEXMEX%20COYOTE"]
     .forEach((v) => {
       const p = C.parseOrderParams("?restaurant=" + v);
       assert.strictEqual(p.restaurant, null, v);
