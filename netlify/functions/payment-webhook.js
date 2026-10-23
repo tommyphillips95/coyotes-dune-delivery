@@ -16,7 +16,7 @@ const { offerNext } = require("./dispatch");
  * "canceled"/"failed"/"requires_action" from the OLD intent must not flip the
  * order back after the new one was created or paid.
  * Returns true when this intent is no longer the order's current one, or the
- * order is already paid.
+ * order is already paid or refunded.
  */
 async function staleForOrder(supabase, orderId, intentId) {
   const { data: order, error } = await supabase
@@ -26,7 +26,9 @@ async function staleForOrder(supabase, orderId, intentId) {
     .maybeSingle();
   if (error) throw error;
   if (!order) return false;
-  if (order.payment_status === "paid") return true;
+  // Paid or refunded: money already moved; a failed/canceled/requires_action
+  // event must never flip it (a refunded order must not show as 'failed').
+  if (order.payment_status === "paid" || order.payment_status === "refunded") return true;
   return !!(order.stripe_payment_intent_id && order.stripe_payment_intent_id !== intentId);
 }
 
