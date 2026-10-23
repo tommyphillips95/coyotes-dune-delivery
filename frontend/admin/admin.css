@@ -345,6 +345,10 @@ body {
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     font-size: 13px;
+    /* Wrap instead of pushing Approve/Reject off-screen on phones. */
+    flex-wrap: wrap;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 #bulk-count {
@@ -803,6 +807,19 @@ body {
     }
     .toolbar-left, .toolbar-right {
         width: 100%;
+    }
+    /* Bulk bar: full width, count on its own line, buttons two per row. */
+    .bulk-actions {
+        width: 100%;
+        align-items: stretch;
+    }
+    .bulk-actions #bulk-count {
+        flex-basis: 100%;
+    }
+    .bulk-actions .btn {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 0;
+        white-space: normal;
     }
     .search-box input {
         width: 100%;
