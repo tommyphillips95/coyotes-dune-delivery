@@ -166,6 +166,13 @@
             saveSession();
             renderStatus(data);
         } catch (err) {
+            // No longer approved (or gone): end the session, back to login.
+            if (err.status === 403 || err.status === 404) {
+                clearSession();
+                showLogin();
+                loginError.textContent = err.message;
+                return;
+            }
             showToast('Failed to refresh status', 'error');
             console.error(err);
         }
@@ -184,7 +191,7 @@
             approvedContent.style.display = '';
             nonApprovedMessage.style.display = 'none';
             renderProfile(data);
-            renderDocuments(data.documents || []);
+            renderDocuments();
         } else if (status === 'rejected') {
             statusTitle.textContent = `Hello, ${esc(name)}`;
             statusMessage.textContent = 'Your application was not approved at this time.';
@@ -213,12 +220,10 @@
             ['Full Name', data.name],
             ['Email', data.email],
             ['Phone', data.phone],
-            ['Date of Birth', data.dob],
             ['Address', [data.address, data.city, data.state, data.zip].filter(Boolean).join(', ')],
             ['Vehicle', [data.vehicle_year, data.vehicle_make, data.vehicle_model].filter(Boolean).join(' ')],
             ['License Plate', data.vehicle_plate],
             ['Insurance', data.insurance_provider],
-            ['Policy Number', data.insurance_policy],
             ['Payouts', 'Stripe Connect (bank details are not stored here)'],
         ];
         profileGrid.innerHTML = fields.map(([label, value]) => `
@@ -235,7 +240,10 @@
         document.getElementById('edit-vehicle-year').value = data.vehicle_year || '';
         document.getElementById('edit-vehicle-plate').value = data.vehicle_plate || '';
         document.getElementById('edit-insurance-provider').value = data.insurance_provider || '';
-        document.getElementById('edit-insurance-policy').value = data.insurance_policy || '';
+        // The policy number is never sent to the browser: blank keeps the one on file.
+        const policy = document.getElementById('edit-insurance-policy');
+        policy.value = '';
+        policy.placeholder = 'On file. Enter a new number to replace it.';
     }
 
     /* ===== Edit Profile ===== */
@@ -265,13 +273,15 @@
             insurance_policy: document.getElementById('edit-insurance-policy').value.trim(),
         };
         try {
-            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), { ...payload, email: session.email });
-            Object.assign(session.data, payload);
+            if (!payload.insurance_policy) delete payload.insurance_policy;
+            const res = await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), { ...payload, email: session.email });
+            Object.assign(session.data, (res && res.data) || {});
             saveSession();
             renderProfile(session.data);
             closeEdit();
             showToast('Profile updated', 'success');
         } catch (err) {
+            if (err.status === 403) { clearSession(); showLogin(); loginError.textContent = err.message; return; }
             profileSaveError.textContent = err.message || 'Failed to save profile';
         }
     }
@@ -332,16 +342,9 @@
         }
     }
 
-    function renderDocuments(docs) {
-        if (!docs.length) {
-            driverDocsList.innerHTML = '<p style="font-size:13px;color:var(--muted);">No documents on file.</p>';
-            return;
-        }
-        driverDocsList.innerHTML = docs.map(d => `
-            <div class="doc-list-item">
-                📄 <a href="${esc(d.url)}" target="_blank">${esc(d.name || d.filename || 'Document')}</a>
-            </div>
-        `).join('');
+    // Document files aren't sent to the portal; renewals are uploaded below.
+    function renderDocuments() {
+        driverDocsList.innerHTML = '<p style="font-size:13px;color:var(--muted);">Documents on file are kept private. Upload a new file above to renew.</p>';
     }
 
     /* ===== GPS / Go Online ===== */
