@@ -132,6 +132,36 @@ test("migration file + LAUNCH.md step", () => {
   assert.ok(md.includes("### Step 9 on Supabase: `admin_login_attempts.sql`"));
 });
 
+test("username lockout can't lock out the real admin from an IP that signed in before", async () => {
+  fake = createFakeSupabase({ admin_login_attempts: [] });
+  const HOME = "198.51.100.20";
+  assert.strictEqual((await call(GOOD, HOME)).statusCode, 200, "admin signs in once from home");
+  for (let i = 0; i < 20; i++) await call("nope", "10.9.0." + i); // attacker sprays the username
+  assert.strictEqual((await call(GOOD, "10.9.1.1")).statusCode, 429, "new IPs are still username-locked");
+  const home = await call(GOOD, HOME);
+  assert.strictEqual(home.statusCode, 200, home.body);
+  assert.ok(JSON.parse(home.body).token);
+});
+
+test("known IP still hits the per-IP lock", async () => {
+  fake = createFakeSupabase({ admin_login_attempts: [] });
+  const HOME = "198.51.100.21";
+  assert.strictEqual((await call(GOOD, HOME)).statusCode, 200);
+  for (let i = 1; i <= 4; i++) assert.strictEqual((await call("nope", HOME)).statusCode, 401);
+  assert.strictEqual((await call("nope", HOME)).statusCode, 429);
+  assert.strictEqual((await call(GOOD, HOME)).statusCode, 429);
+});
+
+test("a known-IP mark older than 90 days doesn't exempt", async () => {
+  const old = new Date(Date.now() - 91 * 24 * 3600 * 1000).toISOString();
+  const soon = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  fake = createFakeSupabase({ admin_login_attempts: [
+    { key: "ok:198.51.100.22", failures: 0, first_failed_at: null, locked_until: null, updated_at: old },
+    { key: "user:ops-test", failures: 20, first_failed_at: new Date().toISOString(), locked_until: soon, updated_at: new Date().toISOString() },
+  ] });
+  assert.strictEqual((await call(GOOD, "198.51.100.22")).statusCode, 429);
+});
+
 (async () => {
   let failed = 0;
   for (const [name, fn] of tests) {
