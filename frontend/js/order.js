@@ -843,6 +843,13 @@
         if (c.title) { const h = orderSuccess.querySelector('h2'); if (h) h.textContent = c.title; }
         if (c.message) { const ps = orderSuccess.querySelectorAll('p'); if (ps[1]) ps[1].textContent = c.message; }
         orderSuccess.classList.add('active');
+        // Focus the confirmation heading so it is announced and Tab continues
+        // from here (the form that had focus is now hidden).
+        const heading = orderSuccess.querySelector('h2');
+        if (heading) {
+            heading.setAttribute('tabindex', '-1');
+            try { heading.focus({ preventScroll: true }); } catch (_) { heading.focus(); }
+        }
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
