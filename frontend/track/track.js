@@ -56,8 +56,8 @@
     map.invalidateSize();
     if (pickupMarker) { map.removeLayer(pickupMarker); pickupMarker = null; }
     if (dropoffMarker) { map.removeLayer(dropoffMarker); dropoffMarker = null; }
-    if (order.pickup_lat && order.pickup_lng) pickupMarker = L.marker([parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)]).addTo(map).bindPopup("Pickup");
-    if (order.dropoff_lat && order.dropoff_lng) dropoffMarker = L.marker([parseFloat(order.dropoff_lat), parseFloat(order.dropoff_lng)]).addTo(map).bindPopup("Dropoff");
+    if (order.pickup_lat && order.pickup_lng) pickupMarker = L.marker([parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)], { alt: "Pickup location", title: "Pickup" }).addTo(map).bindPopup("Pickup");
+    if (order.dropoff_lat && order.dropoff_lng) dropoffMarker = L.marker([parseFloat(order.dropoff_lat), parseFloat(order.dropoff_lng)], { alt: "Dropoff location", title: "Dropoff" }).addTo(map).bindPopup("Dropoff");
     fitLeaflet();
   }
   function isTouchScreen() {
