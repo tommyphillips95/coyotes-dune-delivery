@@ -5,13 +5,14 @@ Production is deployed by hand with the Netlify CLI (the site is not linked to G
 
 Do them in one sitting, in this order, on the live Supabase project. **Take a backup first.** Steps 1–4 of the [Run order](#run-order) must already be applied (Step 5 needs the `orders` table). All SQL files are re-runnable.
 
-1. **Step 5 (required): `schema/order_idempotency.sql`.** *Where:* Supabase → **SQL Editor** → **New query**. Paste the whole file, then **Run**. *Check:* "Success. No rows returned", then the verify query in [Step 5 on Supabase](#step-5-on-supabase-order_idempotencysql) returns one row with all three values `true`.
-2. **Step 6 (optional): `schema/customer_phone_normalize.sql`.** *Where:* **SQL Editor** → **New query**. Paste the whole file, then **Run**. *Check:* the last result (the duplicate report) is empty, which means the unique index was created. If it lists numbers instead, you'll also see a NOTICE, and the unique index was skipped. Merging those customers is a manual decision ([Run order](#run-order) step 6). Don't do it in this sitting. *If you skip this step:* `create-order` still works. It matches common phone formats instead of `customers.phone_normalized`, reuses the oldest customer row for a repeat phone, and the database does not enforce one customer per number.
-3. **Step 7 (required): `schema/vehicle_verification.sql`, then verify every beach driver's vehicle in admin.** *Where:* **SQL Editor** → **New query**. Paste the whole file, then **Run**. Then in `SITE/admin/`, for each approved driver who should get beach orders, check the vehicle (photo / registration) and go to **Applications** → **View** → **Vehicle Class (dispatch)** → pick the class → **Save & mark verified**. *Check:* the column query in [Step 7 on Supabase](#step-7-on-supabase-vehicle_verificationsql) returns all `true`. Each driver shows "Verified: …, by <you> on …", and the file's closing driver list (safe to re-run) shows `vehicle_class_verified_at` filled for them. **Without this, beach orders get no driver.**
-4. **Step 8 (required for consent records): `schema/driver_consents.sql`.** *Where:* **SQL Editor** → **New query**. Paste the whole file, then **Run**. *Check:* the file's closing verify query returns one row with all four values `true` (details: [Step 8 on Supabase](#step-8-on-supabase-driver_consentssql)). Required so each application keeps a record of all four consent boxes and when they were accepted. *If it hasn't run yet:* applications still save (201); only the new consent record is left out and the function logs a warning.
-5. **Step 9 (recommended): `schema/admin_login_attempts.sql`.** *Where:* **SQL Editor** → **New query**. Paste the whole file, then **Run**. *Check:* the file's closing verify query returns one row with `has_table` and `rls_on` both `true` (details: [Step 9 on Supabase](#step-9-on-supabase-admin_login_attemptssql)). *If it hasn't run yet:* admin login still works, with no rate limit or lockout, and the function logs `admin_login_attempts table missing`. The same table also holds the per-IP limits on `create-order`, `submit-application` and `log-analytics-event`. Until it runs, those endpoints also work with no limit and log `rate limit is OFF`.
-6. **Storage bucket `driver-documents` (private) for insurance cards.** *Where:* Supabase → **Storage** → **New bucket**. Name `driver-documents`, **Public: off**, file size limit **4 MB**, allowed MIME types `image/jpeg, image/png, image/webp, image/heic, image/heif, application/pdf`. *Check:* Storage lists `driver-documents` as private with those limits. After the deploy, a test application's card appears under `driver-documents/applications/<application id>/`. Without the bucket, applications still save, but the card is not kept and the application notes say to ask for it again. Details: [Driver insurance card uploads](#driver-insurance-card-uploads).
-7. **Then the production deploy.** The required [Netlify env vars](#exact-netlify-env-vars-from-processenv-in-netlifyfunctions) must be set first, since env changes apply on the next deploy. Deploy with the Netlify CLI from a clean checkout of the commit being released, with `npm test` passing. Merging a PR does **not** deploy. Then run the [Post-deploy smoke test](#post-deploy-smoke-test-after-each-production-deploy-15-min).
+1. **Step 5 (required): `schema/order_idempotency.sql`.** One order per checkout retry. [Paste, verify, undo](#step-5-on-supabase-order_idempotencysql).
+2. **Step 6 (optional): `schema/customer_phone_normalize.sql`.** One customer per phone number. [Paste, verify, undo](#step-6-on-supabase-customer_phone_normalizesql). *If you skip this step:* `create-order` still works and matches common phone formats instead.
+3. **Step 7 (required): `schema/vehicle_verification.sql`, then verify every beach driver's vehicle in admin** (**Applications** → **View** → **Vehicle Class (dispatch)** → **Save & mark verified**). **Without this, beach orders get no driver.** [Paste, verify, undo](#step-7-on-supabase-vehicle_verificationsql).
+4. **Step 8 (required for consent records): `schema/driver_consents.sql`.** Keeps the four consent boxes and when they were accepted. [Paste, verify, undo](#step-8-on-supabase-driver_consentssql).
+5. **Step 9 (recommended): `schema/admin_login_attempts.sql`.** Admin login lockout plus the per-IP limits; without it they're off and the functions log `admin_login_attempts table missing` / `rate limit is OFF`. [Paste, verify, undo](#step-9-on-supabase-admin_login_attemptssql).
+6. **Storage bucket `driver-documents` for insurance cards:** **Public: off**, file size limit **4 MB**, types `image/jpeg, image/png, image/webp, image/heic, image/heif, application/pdf`. [Paste, verify, undo](#bucket-driver-documents).
+7. **Check everything at once:** paste `schema/verify-schema.sql` into **SQL Editor** and **Run** (read-only). Every `REQUIRED` row must be `ok = true`; `optional` rows are steps 6 and 9.
+8. **Then the production deploy.** The required [Netlify env vars](#exact-netlify-env-vars-from-processenv-in-netlifyfunctions) must be set first, since env changes apply on the next deploy. Deploy with the Netlify CLI from a clean checkout of the commit being released, with `npm test` passing. Merging a PR does **not** deploy. Then run the [Post-deploy smoke test](#post-deploy-smoke-test-after-each-production-deploy-15-min).
 
 This repo is the delivery product only.
 
@@ -127,11 +128,12 @@ Go-live: repeat the endpoint and secret steps in live mode, swap the three env v
 8. *(NOT yet run anywhere. Required for consent records, before the production deploy)* `schema/driver_consents.sql`: adds `applications.background_check_disclosure_read`, `esignature_consent`, `terms_consent` (boolean) and `consents_accepted_at` (timestamptz), all nullable; existing rows stay empty. `submit-application` stores all four consents plus the server time it accepted them. Until this runs, applications still save, without that record, and the function logs a warning. Exact steps: [Step 8 on Supabase](#step-8-on-supabase-driver_consentssql).
 9. *(NOT yet run anywhere. Recommended before the production deploy)* `schema/admin_login_attempts.sql`: adds the `admin_login_attempts` table (service role only, RLS on, no policies). `login-admin` locks sign-in for 15 minutes after 5 failed tries from one IP or 20 for one username within 15 minutes; a successful sign-in clears the count and marks that IP as known (`ok:<ip>` row). For 90 days a known IP skips the per-username lock, so someone who only knows the username can't lock the real admin out; the per-IP lock still applies. Until this runs, login works without a limit and logs a warning. The same table also stores the public write limits, as `rl:<endpoint>:<ip>` rows with a 15-minute window per IP. The limits are `create-order` 30 new orders (an idempotent checkout retry is never counted), `submit-application` 20, and `log-analytics-event` 600. The order-number + phone lookup (`POST get-orders`) allows 60 per IP, and after 10 failed lookups that IP gets no more lookups for the rest of the window. A successful lookup doesn't reset that count. Track-page polling with a token is never limited. Over the limit, the endpoint returns 429 with `Retry-After`. Without the table those limits are off too (fail open). Exact steps: [Step 9 on Supabase](#step-9-on-supabase-admin_login_attemptssql).
 
-### Step 5 on Supabase: `order_idempotency.sql`
-Run this once, after `orders` exists (steps 1–4). It is re-runnable: every statement is `IF NOT EXISTS`, so a second run makes no changes and raises no error. It only adds two nullable columns and one partial unique index, so no data is changed or deleted. Existing orders keep `NULL` in both columns.
+All SQL below goes into Supabase → **SQL Editor** → **New query**. Every file is re-runnable and changes no existing rows except where noted. To copy a whole file from a checkout: `pbcopy < schema/<file>` (macOS) or open it on GitHub and use **Copy raw file**. After all of them, paste `schema/verify-schema.sql` for one read-only checklist of steps 5–9 and the bucket.
 
-1. Open the Supabase dashboard for the project, then go to **SQL Editor** and click **New query**.
-2. Paste the full contents of `schema/order_idempotency.sql` (copied below, same text) and click **Run**. Expected result: "Success. No rows returned".
+### Step 5 on Supabase: `order_idempotency.sql`
+**Purpose:** `create-order` dedupes checkout retries on `orders.idempotency_key` (one order per checkout attempt). Without it orders still save, without duplicate protection, and the function logs a warning.
+
+**Run:** Supabase → **SQL Editor** → **New query** → paste → **Run**. Expect "Success. No rows returned". Adds two nullable columns and one partial unique index; existing orders keep `NULL`.
 
 ```sql
 -- One order per checkout attempt: create-order dedupes on orders.idempotency_key.
@@ -152,7 +154,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_uidx
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_payload_hash TEXT;
 ```
 
-3. Verify it worked. In a new query, paste and run the query below. Expect one row with all three values `true`:
+**Verify:** one row, all three `true`.
 
 ```sql
 SELECT
@@ -169,13 +171,63 @@ SELECT
             AND indexdef ILIKE '%WHERE (idempotency_key IS NOT NULL)%') AS has_unique_index;
 ```
 
-If any value is `false`, run step 2 again; it is safe to repeat. Until this is applied, `create-order` still creates orders, but without duplicate protection, and logs a warning. To undo it, use the rollback lines at the top of the file.
+**Undo:** `DROP INDEX IF EXISTS orders_idempotency_key_uidx; ALTER TABLE orders DROP COLUMN IF EXISTS idempotency_payload_hash, DROP COLUMN IF EXISTS idempotency_key;`
+
+### Step 6 on Supabase: `customer_phone_normalize.sql`
+**Purpose (optional):** adds `customers.phone_normalized` (10 US digits) with a sync trigger, backfill and lookup index, so one phone maps to one customer. Without it `create-order` matches common phone formats and reuses the oldest customer row.
+
+**Run:** **SQL Editor** → **New query** → paste the whole file `schema/customer_phone_normalize.sql` (135 lines, too long to repeat here) → **Run**. It updates only the new `phone_normalized` column. The last result is a duplicate-phone report: empty means the unique index was created. If it lists numbers, a NOTICE says the unique index was skipped; merging those customers is a manual decision ([Run order](#run-order) step 6), not part of this sitting.
+
+**Verify:** one row, all `true` (`has_unique_index` is `false` only when duplicates held it back).
+
+```sql
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'phone_normalized') AS has_column,
+  EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'customers_phone_normalized_sync' AND NOT tgisinternal) AS has_trigger,
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_customers_phone_normalized') AS has_lookup_index,
+  EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'customers_phone_normalized_uidx') AS has_unique_index;
+```
+
+**Undo:** `DROP INDEX IF EXISTS customers_phone_normalized_uidx; DROP INDEX IF EXISTS idx_customers_phone_normalized; DROP TRIGGER IF EXISTS customers_phone_normalized_sync ON customers; DROP FUNCTION IF EXISTS customers_phone_normalized_sync(); ALTER TABLE customers DROP COLUMN IF EXISTS phone_normalized;`
 
 ### Step 7 on Supabase: `vehicle_verification.sql`
-> **MUST be done BEFORE the production deploy.** Run this SQL **and** verify every beach driver in admin (step 3 below) first, then deploy. If production goes out first, no driver counts as verified, so **beach (4x4) orders get no driver** until both are done.
+> **MUST be done BEFORE the production deploy**, together with the admin verification below. If production goes out first, no driver counts as verified, so **beach (4x4) orders get no driver**. Mainland orders are unaffected.
 
-1. Supabase dashboard → **SQL Editor** → **New query**. Paste the full contents of `schema/vehicle_verification.sql` and click **Run**. It ends with a read-only list of approved drivers; every `vehicle_class_verified_at` is empty at first. Safe to run again.
-2. Verify the columns exist (expect one row, all `true`):
+**Purpose:** beach (4x4) orders only go to drivers whose 4x4/AWD/UTV class an admin verified. Adds three nullable columns; nobody is marked verified.
+
+**Run:** **SQL Editor** → **New query** → paste → **Run**. The last result lists approved drivers; every `vehicle_class_verified_at` is empty at first.
+
+```sql
+-- Vehicle class verification (draft; NOT run anywhere yet).
+-- LAUNCH.md, SQL run order step 7.
+--
+-- Adds three nullable columns to applications. Re-runnable: every statement
+-- is IF NOT EXISTS, so a second run changes nothing. No data is changed or
+-- deleted, and no driver is marked verified by this script.
+--
+--   vehicle_class_reported     what the driver picked on the application form
+--   vehicle_class_verified_at  when an admin checked the vehicle (NULL = not verified)
+--   vehicle_class_verified_by  which admin checked it
+--
+-- After this runs, beach (4x4) orders only go to drivers whose 4x4/AWD/UTV
+-- class has been verified in Admin > Applications > (driver) > Vehicle Class.
+-- Before it runs, the app already treats every driver as unverified.
+
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS vehicle_class_reported TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS vehicle_class_verified_at TIMESTAMPTZ;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS vehicle_class_verified_by TEXT;
+
+-- Read-only check (safe to run any time): approved drivers and their state.
+SELECT id, first_name, last_name, status, vehicle_class, vehicle_class_reported,
+       vehicle_class_verified_at, vehicle_class_verified_by
+FROM applications
+WHERE status = 'approved'
+ORDER BY vehicle_class_verified_at NULLS FIRST, last_name;
+```
+
+**Then, in admin (Tommy):** for each approved driver who should get beach orders, check the vehicle yourself (photo / registration), then `SITE/admin/` → **Applications** → **View** → **Vehicle Class (dispatch)** → pick the class → **Save & mark verified**. Each change adds a dated line to the driver's Admin Notes. If a driver later edits make/model/year/plate in the driver portal, the verification clears and has to be redone.
+
+**Verify:** one row, all `true`; then re-run the driver list above and expect `vehicle_class_verified_at` filled for your beach drivers.
 
 ```sql
 SELECT
@@ -184,28 +236,111 @@ SELECT
   EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'vehicle_class_verified_by') AS has_verified_by;
 ```
 
-3. **Tommy (before the production deploy):** for each approved driver who should get beach orders, check the vehicle yourself (photo / registration), then in `SITE/admin/` → **Applications** → **View** → **Vehicle Class (dispatch)**, pick the class and tap **Save & mark verified**. Each change adds a dated line to that driver's Admin Notes. Drivers you haven't verified still get mainland orders. If a driver later edits their make/model/year/plate in the driver portal, the verification is cleared automatically and has to be redone.
-
-To undo: `ALTER TABLE applications DROP COLUMN IF EXISTS vehicle_class_verified_by, DROP COLUMN IF EXISTS vehicle_class_verified_at, DROP COLUMN IF EXISTS vehicle_class_reported;` (the app goes back to treating everyone as unverified).
+**Undo:** `ALTER TABLE applications DROP COLUMN IF EXISTS vehicle_class_verified_by, DROP COLUMN IF EXISTS vehicle_class_verified_at, DROP COLUMN IF EXISTS vehicle_class_reported;` (everyone is unverified again).
 
 ### Step 8 on Supabase: `driver_consents.sql`
-> **Required for consent records.** Applications still work without it: `submit-application` retries the insert without the four new columns and logs `consent columns missing (run schema/driver_consents.sql, LAUNCH.md step 8)`. Only applications submitted after this runs have the record; older rows stay empty (`background_check_consent` was already stored).
+**Purpose:** `submit-application` stores all four consent boxes plus the server time it accepted them. Applications still save without it (the insert is retried without these columns and the function logs `consent columns missing`); only applications submitted after this runs have the record.
 
-1. Supabase dashboard → **SQL Editor** → **New query**. Paste the full contents of `schema/driver_consents.sql` and click **Run**. Every statement is `ADD COLUMN IF NOT EXISTS`, so it's safe to run again. It changes no existing data.
-2. *Check:* the file's closing verify query returns one row, all `true` (`has_disclosure_read`, `has_esignature`, `has_terms`, `has_accepted_at`).
-3. After the deploy, submit a test application and check it in **Table Editor** → `applications`: `background_check_disclosure_read`, `esignature_consent`, `terms_consent` are `true` and `consents_accepted_at` is filled.
+**Run:** **SQL Editor** → **New query** → paste → **Run**. Adds four nullable columns; existing rows stay empty.
 
-To undo: `ALTER TABLE applications DROP COLUMN IF EXISTS consents_accepted_at, DROP COLUMN IF EXISTS terms_consent, DROP COLUMN IF EXISTS esignature_consent, DROP COLUMN IF EXISTS background_check_disclosure_read;` (applications then save without the consent record again).
+```sql
+-- Driver application consent records (draft; NOT run anywhere yet).
+-- LAUNCH.md, SQL run order step 8.
+--
+-- Adds four nullable columns to applications. Strictly additive and
+-- re-runnable: every statement is ADD COLUMN IF NOT EXISTS, so a second run
+-- changes nothing. No data is changed or deleted; existing rows stay NULL.
+--
+--   background_check_disclosure_read  form box bgDisclosureRead ("I have read the disclosure")
+--   esignature_consent                form box esignature (sign electronically)
+--   terms_consent                     form box termsAgree (info confirmed + terms agreed)
+--   consents_accepted_at              server time submit-application accepted all four
+--
+-- background_check_consent (form box bgConsent) already exists in schema.sql.
+-- submit-application rejects an application unless all four boxes are ticked,
+-- and saves applications without these columns (with a log warning) until
+-- this file is run.
+
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS background_check_disclosure_read BOOLEAN;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS esignature_consent BOOLEAN;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS terms_consent BOOLEAN;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS consents_accepted_at TIMESTAMPTZ;
+
+-- Verify (read-only, safe any time): expect one row, all four values true.
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'background_check_disclosure_read' AND data_type = 'boolean' AND is_nullable = 'YES') AS has_disclosure_read,
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'esignature_consent' AND data_type = 'boolean' AND is_nullable = 'YES') AS has_esignature,
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'terms_consent' AND data_type = 'boolean' AND is_nullable = 'YES') AS has_terms,
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'applications' AND column_name = 'consents_accepted_at' AND data_type = 'timestamp with time zone' AND is_nullable = 'YES') AS has_accepted_at;
+```
+
+**Verify:** the file's last query (above) returns one row, all `true`. After the deploy, a test application in **Table Editor** → `applications` has `background_check_disclosure_read`, `esignature_consent`, `terms_consent` = `true` and `consents_accepted_at` filled.
+
+**Undo:** `ALTER TABLE applications DROP COLUMN IF EXISTS consents_accepted_at, DROP COLUMN IF EXISTS terms_consent, DROP COLUMN IF EXISTS esignature_consent, DROP COLUMN IF EXISTS background_check_disclosure_read;`
 
 ### Step 9 on Supabase: `admin_login_attempts.sql`
-> **Recommended.** Admin login works without it (timing-safe check, no rate limit) and logs `admin_login_attempts table missing; login rate limit is OFF`.
+**Purpose (recommended):** one table for the admin login lockout (5 failures per IP / 20 per username in 15 minutes) and the per-IP limits on `create-order`, `submit-application`, `log-analytics-event` and the order-number + phone lookup. Without it all of those run unlimited (fail open) and log a warning. Service role only: RLS on, no policies.
 
-1. Supabase dashboard → **SQL Editor** → **New query**. Paste the full contents of `schema/admin_login_attempts.sql` and click **Run**. It is `CREATE TABLE IF NOT EXISTS`, so it's safe to run again, and it changes no existing data.
-2. *Check:* the file's closing verify query returns one row, `has_table` and `rls_on` both `true`.
-3. After the deploy, sign in to `SITE/admin/` with a wrong password 5 times. The 5th try should say "Too many failed sign-in attempts. Try again in 15 minutes." To unlock early, delete that row in **Table Editor** → `admin_login_attempts` (key `ip:<your ip>`).
-   The table also holds `ok:<ip>` rows, one per IP that signed in successfully. Deleting one just makes that IP subject to the per-username lock again.
+**Run:** **SQL Editor** → **New query** → paste → **Run**. Creates one empty table; touches nothing else.
 
-To undo: `DROP TABLE IF EXISTS admin_login_attempts;` (login then works without a limit again).
+```sql
+-- Admin login rate limit / lockout (draft; NOT run anywhere yet).
+-- LAUNCH.md, SQL run order step 9.
+--
+-- One row per counter: key = 'ip:<client ip>' or 'user:<username>'.
+-- login-admin (netlify/functions/_login-limit.js) counts failed sign-ins in a
+-- 15-minute window and sets locked_until for 15 minutes at 5 failures per IP
+-- or 20 per username. A successful sign-in clears both rows.
+-- It also upserts 'ok:<client ip>' (updated_at = last success); for 90 days
+-- that IP skips the per-username lock (the per-IP lock still applies).
+-- Until this runs, admin login still works with NO rate limit (timing-safe
+-- password check only) and logs "admin_login_attempts table missing".
+--
+-- Strictly additive and re-runnable. Service role only: RLS on, no policies,
+-- so the anon/public key can't read or write it.
+
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  key             TEXT PRIMARY KEY,
+  failures        INTEGER NOT NULL DEFAULT 0,
+  first_failed_at TIMESTAMPTZ,
+  locked_until    TIMESTAMPTZ,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE admin_login_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Verify (read-only, safe any time): expect one row, both values true.
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'admin_login_attempts') AS has_table,
+  COALESCE((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.admin_login_attempts'::regclass), false) AS rls_on;
+```
+
+**Verify:** the file's last query (above) returns `has_table` and `rls_on` both `true`. Columns, primary key and "no policies" are checked row by row in `schema/verify-schema.sql` (step `9`). After the deploy, 5 wrong admin passwords in a row show "Too many failed sign-in attempts. Try again in 15 minutes."; to unlock early, delete the `ip:<your ip>` row in **Table Editor** → `admin_login_attempts`.
+
+**Undo:** `DROP TABLE IF EXISTS admin_login_attempts;` (login and the per-IP limits run without a limit again).
+
+### Bucket: `driver-documents`
+**Purpose:** private Storage bucket where `submit-application` keeps each applicant's insurance card. Without it applications still save, but the card is dropped and the notes say to ask for it again.
+
+**Run:** **SQL Editor** → **New query** → paste → **Run** (or, by hand: Storage → **New bucket** → `driver-documents`, **Public: off**, 4 MB, the six types below). Safe to re-run; it resets the bucket to these settings.
+
+```sql
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('driver-documents', 'driver-documents', false, 4194304,
+        ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'])
+ON CONFLICT (id) DO UPDATE
+   SET public = false,
+       file_size_limit = EXCLUDED.file_size_limit,
+       allowed_mime_types = EXCLUDED.allowed_mime_types;
+```
+
+**Verify:** one row: `false`, `4194304`, the six types.
+
+```sql
+SELECT public, file_size_limit, allowed_mime_types FROM storage.buckets WHERE id = 'driver-documents';
+```
+
+**Undo** (only while the bucket is still empty): `DELETE FROM storage.buckets WHERE id = 'driver-documents';`
 
 ### Idempotency
 - Tables/indexes/extensions: mostly `IF NOT EXISTS` — safe to re-run.
@@ -243,7 +378,7 @@ The apply page sends the form as `multipart/form-data` with the insurance card (
 - saves the application, then uploads the card to Storage bucket **`driver-documents`** at `applications/<application id>/insurance-card-<time>.<ext>` and adds a `documents` row (`file_type = insurance_card`, `storage_path`).
 - if the upload fails (for example, the bucket is missing) the application is still saved, the response has `insuranceCardStored: false`, and the application's notes say "Insurance card upload failed … Ask the driver to send it again."
 
-**Tommy, one-time setup (Supabase dashboard, no SQL):** Storage → **New bucket** → name `driver-documents`, **Public: off**. Optional: file size limit 4 MB, allowed MIME types `image/jpeg, image/png, image/webp, image/heic, image/heif, application/pdf`. Functions use `SUPABASE_SERVICE_KEY`, so no Storage policies are needed. No new env vars. Viewing the card: Storage → `driver-documents` → `applications/<id>/` (admin does not link to it yet).
+**Tommy, one-time setup:** see [Bucket: `driver-documents`](#bucket-driver-documents) (one SQL paste). Functions use `SUPABASE_SERVICE_KEY`, so no Storage policies are needed. No new env vars. Viewing the card: Storage → `driver-documents` → `applications/<id>/` (admin does not link to it yet).
 
 ## PR #2 merge gate (Tommy)
 
