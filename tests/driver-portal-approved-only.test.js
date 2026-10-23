@@ -36,7 +36,7 @@ function app(over) {
 }
 const seed = (over) => { fake = createFakeSupabase({ applications: [app(over)], documents: [{ id: "doc1", application_id: "a1", url: "https://files/x.pdf" }] }); };
 const login = async () => { const r = await getStatus({ httpMethod: "POST", headers: {}, body: JSON.stringify({ applicantId: "a1", email: "val@example.com" }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
-const edit = async (b) => { const r = await updateApp({ httpMethod: "PUT", path: "/api/update-application/a1", queryStringParameters: { applicantId: "a1" }, headers: {}, body: JSON.stringify(Object.assign({ email: "val@example.com" }, b)) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
+const edit = async (b) => { const r = await updateApp({ httpMethod: "PUT", path: "/api/update-application/a1", queryStringParameters: { applicantId: "a1" }, headers: { authorization: "Bearer " + require("jsonwebtoken").sign({ role: "driver", driver_id: "a1" }, process.env.JWT_SECRET) }, body: JSON.stringify(Object.assign({ email: "val@example.com" }, b)) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
 const noSecrets = (obj) => { for (const k of SECRET_KEYS) assert.ok(!(k in obj), `response leaks ${k}`); assert.ok(!JSON.stringify(obj).includes("POL-SECRET-9")); assert.ok(!JSON.stringify(obj).includes("1990-01-02")); };
 const tests = [];
 const test = (n, f) => tests.push([n, f]);
