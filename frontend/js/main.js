@@ -255,6 +255,12 @@
                     data = await response.json();
                 } else {
                     data = await response.text();
+                    // Functions that omit Content-Type still send JSON; parse it so
+                    // callers get objects (e.g. create-order's orderId), not a string.
+                    const t = typeof data === 'string' ? data.trim() : '';
+                    if (t && (t[0] === '{' || t[0] === '[')) {
+                        try { data = JSON.parse(t); } catch (_) { /* keep text */ }
+                    }
                 }
 
                 if (!response.ok) {
