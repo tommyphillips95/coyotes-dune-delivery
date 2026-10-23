@@ -180,7 +180,9 @@
       else if (k === "dropoff" && isCity(val)) out.dropoff = val;
       else if (k === "q" && val) out.q = val.slice(0, 120);
       else if ((k === "track" || k === "order") && /^[A-Z0-9-]{4,40}$/i.test(val)) out.track = val.toUpperCase();
-      else if (k === "restaurant" && partnerBySlug(val)) out.restaurant = partnerBySlug(val).slug;
+      // Several restaurant= values: the first known partner wins (the order
+      // page head pre-paint check matches this).
+      else if (k === "restaurant" && !out.restaurant && partnerBySlug(val)) out.restaurant = partnerBySlug(val).slug;
       // A restaurant= value that isn't one of PARTNERS (or can't be decoded):
       // the page says so instead of silently starting a plain order. Empty or
       // blank restaurant= is treated as absent.

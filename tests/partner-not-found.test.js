@@ -81,6 +81,29 @@ test("pre-paint: bogus and weird slugs reserve the not-found note only; valid/em
   assert.strictEqual(classesFor("?restaurant=+shells-seafood+"), "cc-pre-note-2 cc-pre-quote", "+ = space, trimmed");
   assert.strictEqual(classesFor("?restaurant=%20%20"), "", "blank = absent");
   assert.strictEqual(classesFor("?restaurant="), "");
+});
+
+test("several restaurant= values: pre-paint picks what parseOrderParams picks (first known partner, trimmed, case-insensitive)", () => {
+  const cases = [
+    "?restaurant=nope&restaurant=shells-seafood",
+    "?restaurant=%20%20&restaurant=Shells-Seafood",
+    "?restaurant=%E0%A4%A&restaurant=+texmexcoyote+",
+    "?restaurant=shells-seafood&restaurant=texmexcoyote",
+    "?restaurant=texmexcoyote&restaurant=nope",
+    "?restaurant=nope&restaurant=also-nope&pickup=Port%20Aransas",
+    "?restaurant=&restaurant=%20",
+    "?pickup=Rockport&restaurant=bogus&restaurant=SHELLS-SEAFOOD",
+  ];
+  for (const q of cases) {
+    const p = C.parseOrderParams(q);
+    const want = p.restaurant ? "cc-pre-note-2 cc-pre-quote"
+      : [p.restaurantUnknown && "cc-pre-partner", (p.pickup || p.category) && "cc-pre-note-1", p.pickup && "cc-pre-quote"].filter(Boolean).sort().join(" ");
+    assert.strictEqual(classesFor(q), want, q);
+  }
+  assert.strictEqual(C.parseOrderParams("?restaurant=nope&restaurant=shells-seafood").restaurant, "shells-seafood");
+  assert.strictEqual(C.parseOrderParams("?restaurant=shells-seafood&restaurant=texmexcoyote").restaurant, "shells-seafood", "first known wins");
+  assert.strictEqual(C.parseOrderParams("?restaurant=nope&restaurant=shells-seafood").restaurantUnknown, false);
+  assert.strictEqual(C.parseOrderParams("?restaurant=nope&restaurant=also-nope").restaurantUnknown, true);
   assert.strictEqual(classesFor("?restaurant=&category=food"), "cc-pre-note-1");
 });
 
