@@ -77,7 +77,8 @@ test("pre-paint: bogus and weird slugs reserve the not-found note only; valid/em
   assert.strictEqual(classesFor(BOGUS + "&pickup=Port%20Aransas"), "cc-pre-note-1 cc-pre-partner cc-pre-quote");
   assert.strictEqual(classesFor("?restaurant=shells-seafood"), "cc-pre-note-2 cc-pre-quote");
   assert.strictEqual(classesFor("?restaurant=Shells-Seafood"), "cc-pre-note-2 cc-pre-quote", "case-insensitive");
-  assert.strictEqual(classesFor("?restaurant=%20Shells-Seafood%20"), "cc-pre-partner", "not trimmed, like partnerBySlug");
+  assert.strictEqual(classesFor("?restaurant=%20Shells-Seafood%20"), "cc-pre-note-2 cc-pre-quote", "trimmed, like partnerBySlug");
+  assert.strictEqual(classesFor("?restaurant=+shells-seafood+"), "cc-pre-note-2 cc-pre-quote", "+ = space, trimmed");
   assert.strictEqual(classesFor("?restaurant=%20%20"), "", "blank = absent");
   assert.strictEqual(classesFor("?restaurant="), "");
   assert.strictEqual(classesFor("?restaurant=&category=food"), "cc-pre-note-1");
@@ -98,7 +99,11 @@ test("parseOrderParams flags unknown slugs; valid, empty and normalized slugs un
   const v = C.parseOrderParams("?restaurant=shells-seafood");
   assert.deepStrictEqual([v.restaurant, v.restaurantUnknown, v.pickup, v.category], ["shells-seafood", false, "Padre Island", "food"]);
   assert.strictEqual(C.parseOrderParams("?restaurant=Shells-Seafood").restaurant, "shells-seafood");
-  assert.strictEqual(C.parseOrderParams("?restaurant=%20Shells-Seafood%20").restaurantUnknown, true);
+  // Padded slugs (stray spaces from copy/paste or link builders) now match.
+  const pad = C.parseOrderParams("?restaurant=%20Shells-Seafood%20");
+  assert.deepStrictEqual([pad.restaurant, pad.restaurantUnknown, pad.pickup], ["shells-seafood", false, "Padre Island"]);
+  assert.strictEqual(C.partnerBySlug("\tshells-seafood\n").slug, "shells-seafood");
+  assert.strictEqual(C.partnerBySlug("shells seafood"), null, "inner spaces still rejected");
 });
 
 test("bogus slug: note shown with fixed text, role=status + aria-live, link to partners, form not prefilled", () => {

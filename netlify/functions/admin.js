@@ -248,7 +248,7 @@ exports.handler = async (event) => {
       const supabase = db();
       if (parts.length === 1 && method === "GET") {
         const { data, error } = await supabase.from("orders")
-          .select("id, order_number, status, payment_status, driver_id, pickup_city, dropoff_city, required_vehicle_class, weather_hold, estimated_price, final_price, is_asap, scheduled_date, scheduled_time, created_at")
+          .select("id, order_number, status, payment_status, stripe_payment_intent_id, driver_id, pickup_city, dropoff_city, required_vehicle_class, weather_hold, estimated_price, final_price, is_asap, scheduled_date, scheduled_time, created_at")
           .order("created_at", { ascending: false }).limit(ORDERS_LIMIT);
         if (error) throw error;
         const orders = data || [];
@@ -270,7 +270,7 @@ exports.handler = async (event) => {
         drivers.forEach((d) => { byId[d.id] = d; });
         const shaped = orders.map((o) => {
           const logs = logsByOrder[o.id] || [];
-          return Object.assign({}, o, {
+          const out = Object.assign({}, o, {
             driver_name: o.driver_id ? (byId[o.driver_id] ? orderAdmin.driverName(byId[o.driver_id]) : "Driver (not approved)") : null,
             allowed: orderAdmin.allowedNext(o.status),
             driver_options: orderAdmin.driverOptions(drivers, o),
@@ -279,6 +279,8 @@ exports.handler = async (event) => {
             history: orderAttention.newestFirst(logs).slice(0, HISTORY_PER_ORDER)
               .map((l) => ({ status: l.status, note: l.note, by: l.changed_by, at: l.created_at })),
           });
+          delete out.stripe_payment_intent_id; // only used for the payment label
+          return out;
         });
         return json(headers, 200, { orders: shaped, logsError, weather: weatherState(),
           vehicleSetupMessage: drivers.verificationReady ? null : vehicle.SETUP_MESSAGE });

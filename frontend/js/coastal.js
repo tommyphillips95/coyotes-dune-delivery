@@ -45,7 +45,8 @@
     { slug: "padre-island-burger-co", name: "Padre Island Burger Co.", category: "food", city: "Padre Island" }
   ];
   function partnerBySlug(slug) {
-    var s = String(slug || "").toLowerCase();
+    // Trimmed: shared links often carry stray spaces (?restaurant=%20shells-seafood%20).
+    var s = String(slug || "").trim().toLowerCase();
     if (!/^[a-z0-9-]{1,60}$/.test(s)) return null;
     for (var i = 0; i < PARTNERS.length; i++) if (PARTNERS[i].slug === s) return PARTNERS[i];
     return null;
