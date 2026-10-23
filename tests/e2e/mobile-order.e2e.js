@@ -173,6 +173,19 @@ test("large text: at 320px with 200% text the header fits and the menu button is
   await shot(p, "e2e-header-320-200pct");
 });
 
+test("reflow: /track/ and /order/ fit 320px with no horizontal scroll (WCAG 1.4.10)", async () => {
+  const p = await page(320);
+  const sw = () => p.evaluate(() => document.documentElement.scrollWidth);
+  await p.goto(B + "/track/"); await p.waitForTimeout(300);
+  assert.strictEqual(await sw(), 320, "/track/ empty");
+  await track(p, "CDD-E2E02", "3615550177");
+  assert.strictEqual(await text(p, "#detailStatus"), "Completed");
+  assert.strictEqual(await sw(), 320, "/track/ with an order");
+  await shot(p, "e2e-track-320");
+  await p.goto(B + "/order/"); await p.waitForTimeout(300);
+  assert.strictEqual(await sw(), 320, "/order/");
+});
+
 (async () => {
   const srv = await require("./server.js").start(PORT);
   browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
