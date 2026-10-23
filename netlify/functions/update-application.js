@@ -6,6 +6,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { serverError } = require('./_errors');
 const { headers: corsHeaders } = require('./_cors');
+const { publicProfile, pendingReview } = require('./_driver-profile');
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event, {
@@ -50,10 +51,12 @@ exports.handler = async (event) => {
       updated_at: new Date().toISOString(),
     };
 
-    // Remove undefined values
+    // Remove undefined values. The portal never receives the policy number, so
+    // a blank policy field means "keep the one on file", not "erase it".
     Object.keys(updateData).forEach(key => {
       if (updateData[key] === undefined) delete updateData[key];
     });
+    if (typeof updateData.insurance_policy_number === 'string' && !updateData.insurance_policy_number.trim()) delete updateData.insurance_policy_number;
 
     // A verified vehicle class belongs to the vehicle an admin checked. If the
     // driver changes make/model/year/plate, the check no longer applies:
@@ -68,6 +71,7 @@ exports.handler = async (event) => {
     if (!cur) {
       return { statusCode: 404, headers, body: JSON.stringify({ error: 'Application not found' }) };
     }
+    if (cur.status !== 'approved') return pendingReview(headers);
     const VEHICLE_FIELDS = ['vehicle_make', 'vehicle_model', 'vehicle_year', 'license_plate'];
     const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
     const vehicleChanged = VEHICLE_FIELDS.some((k) => updateData[k] !== undefined && norm(updateData[k]) !== norm(cur[k]));
@@ -91,7 +95,7 @@ exports.handler = async (event) => {
       return { statusCode: 404, headers, body: JSON.stringify({ error: 'Application not found' }) };
     }
 
-    return { statusCode: 200, headers, body: JSON.stringify({ success: true, data }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true, data: publicProfile(data) }) };
   } catch (err) {
     return serverError(headers, err, 'Failed to update application', 'update-application');
   }
