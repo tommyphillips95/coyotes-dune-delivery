@@ -376,6 +376,12 @@
                 say('');
                 return;
             }
+            if (C && C.paymentServerBusy && C.paymentServerBusy(piResult)) {
+                showPaymentError(C.paymentBusyMessage());
+                if (retryBtn) retryBtn.hidden = false;
+                say('');
+                return;
+            }
             if (retryBtn) retryBtn.hidden = true;
 
             // 409 + code: the order must not be charged again (#53).
@@ -431,6 +437,7 @@
 
         } catch (err) {
             console.error('Payment failed:', err);
+            say('');
             showPaymentError(err.message || 'Payment failed. Please try again or use a different card.');
         } finally {
             paying = false;

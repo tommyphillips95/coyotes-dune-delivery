@@ -388,6 +388,14 @@
     if (kind === "timeout") return "This is taking longer than usual. Your order may already have gone through \u2014 tap Retry and we'll check without placing a second order.";
     return "We couldn't reach Coyote's servers. Check your signal and tap Retry \u2014 it won't place a second order. Nothing was charged.";
   }
+  // create-payment-intent answered 5xx or 429: the server or Stripe is having
+  // a moment. Retrying is safe (it checks for an existing payment first), so
+  // say that instead of the raw server text.
+  function paymentServerBusy(result) {
+    var st = Number(result && result.status) || 0;
+    return st >= 500 || st === 429;
+  }
+  var PAYMENT_BUSY_MESSAGE = "Card payment is temporarily unavailable. Wait a minute, then tap Retry \u2014 we check whether this order is already paid before charging. You haven't been charged.";
   function paymentNetworkMessage(kind) {
     if (kind === "offline") return "You're offline. Reconnect, then tap Retry. You haven't been charged.";
     if (kind === "timeout") return "Payment setup is taking longer than usual. Tap Retry \u2014 we check whether this order is already paid before charging.";
@@ -585,6 +593,8 @@
     networkFailureKind: networkFailureKind,
     orderNetworkMessage: orderNetworkMessage,
     paymentNetworkMessage: paymentNetworkMessage,
+    paymentServerBusy: paymentServerBusy,
+    paymentBusyMessage: function () { return PAYMENT_BUSY_MESSAGE; },
     maskPhone: maskPhone,
     confirmationNextSteps: confirmationNextSteps,
     formatServiceSlot: formatServiceSlot,
