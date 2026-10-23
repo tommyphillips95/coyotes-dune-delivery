@@ -281,7 +281,7 @@
             closeEdit();
             showToast('Profile updated', 'success');
         } catch (err) {
-            if (err.status === 403) { clearSession(); showLogin(); loginError.textContent = err.message; return; }
+            if (err.status === 401 || err.status === 403) { clearSession(); showLogin(); loginError.textContent = err.status === 401 ? 'Your session expired. Please log in again.' : err.message; return; }
             profileSaveError.textContent = err.message || 'Failed to save profile';
         }
     }

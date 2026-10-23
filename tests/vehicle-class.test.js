@@ -277,7 +277,7 @@ test("columns missing: everyone unverified, beach waits with a clear message, ma
 test("driver portal: changing make/model/year/plate clears verification (logged); other edits keep it", async () => {
   const verified = { vehicle_make: "Jeep", vehicle_model: "Wrangler", vehicle_year: 2020, license_plate: "ABC123", vehicle_class_verified_at: "2026-10-18T20:00:00Z", vehicle_class_verified_by: "ops" };
   fresh([drv("d-self", "4x4", verified)]);
-  const put = (b) => quiet(() => updateApp.handler({ httpMethod: "PUT", path: "/api/update-application/d-self", queryStringParameters: { applicantId: "d-self" }, headers: H(null), body: JSON.stringify(Object.assign({ email: "d-self@example.com" }, b)) }));
+  const put = (b) => quiet(() => updateApp.handler({ httpMethod: "PUT", path: "/api/update-application/d-self", queryStringParameters: { applicantId: "d-self" }, headers: H(driverToken), body: JSON.stringify(Object.assign({ email: "d-self@example.com" }, b)) }));
   let r = await put({ phone: "5555550123", vehicle_make: "jeep ", vehicle_model: "Wrangler", vehicle_year: "2020", vehicle_plate: "ABC123" });
   assert.strictEqual(r.statusCode, 200, r.body);
   assert.strictEqual(app("d-self").vehicle_class_verified_by, "ops", "same vehicle: still verified");
