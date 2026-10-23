@@ -3,7 +3,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { offerNext, sendSMS, logSMS } = require("./dispatch");
-const { requireAdminOrDriver, jsonError } = require("./_auth");
+const { requireAdminOrDriver, jsonError, assertDriverActive } = require("./_auth");
 const { trackUrl } = require("./_site-url");
 
 exports.handler = async (event) => {
@@ -23,6 +23,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "driver_id required for admin" }) };
     }
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await assertDriverActive(supabase, auth);
     const { data: offer, error } = await supabase.from("dispatch_offers").select("*").eq("id", offerId).maybeSingle();
     if (error) throw error;
     if (!offer) return { statusCode: 404, headers, body: JSON.stringify({ error: "offer not found" }) };

@@ -505,6 +505,15 @@
                 }),
             });
             const data = await res.json().catch(() => ({}));
+            if (res.status === 401 || res.status === 403) {
+                // Driver access was revoked (or the token expired): stop
+                // sharing location and send them back to login.
+                stopGPSTracking();
+                clearSession();
+                showLogin();
+                showToast(data.error || 'Your driver access is no longer active.', 'error');
+                return;
+            }
             if (res.ok && data.success) {
                 console.log('Location posted successfully');
             } else {

@@ -7,7 +7,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
-const { requireAdminOrDriver, jsonError } = require("./_auth");
+const { requireAdminOrDriver, jsonError, assertDriverActive } = require("./_auth");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -40,6 +40,7 @@ exports.handler = async (event) => {
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await assertDriverActive(supabase, auth);
     const now = new Date().toISOString();
     const online = body.online !== false;
 
