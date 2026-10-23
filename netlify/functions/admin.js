@@ -260,12 +260,27 @@ exports.handler = async (event) => {
         const ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
         if (!ids.length) return json(headers, 400, { error: "ids required" });
         if (!APP_STATUSES.includes(body.status)) return json(headers, 400, { error: "Invalid status" });
-        const { data, error } = await supabase.from("applications")
-          .update({ status: body.status, updated_at: new Date().toISOString() })
-          .in("id", ids).select();
-        if (error) throw error;
-        const off = body.status === "approved" ? { active_orders: [], warning: null } : await offboardDrivers(supabase, (data || []).map((a) => a.id));
-        return json(headers, 200, Object.assign({ success: true, updated: (data || []).length }, off));
+        const { data: rows, error: rErr } = await supabase.from("applications").select("id, status, notes").in("id", ids);
+        if (rErr) throw rErr;
+        const who = String((admin && admin.user) || "admin").slice(0, 120);
+        const changed = [];
+        let skipped = 0;
+        for (const row of rows || []) {
+          if (row.status === body.status) { skipped++; continue; }
+          const now = new Date().toISOString();
+          const line = `[${chicagoStamp(now)}] Status ${row.status || "none"} → ${body.status} by admin ${who} (bulk).`;
+          // Guard on the status we read so a concurrent change isn't overwritten.
+          let q = supabase.from("applications")
+            .update({ status: body.status, notes: (row.notes ? row.notes + "\n" : "") + line, updated_at: now })
+            .eq("id", row.id);
+          q = row.status == null ? q.is("status", null) : q.eq("status", row.status);
+          const { data: up, error } = await q.select("id").maybeSingle();
+          if (error) throw error;
+          if (up) changed.push(row.id); else skipped++;
+        }
+        const notFound = ids.length - (rows || []).length;
+        const off = body.status === "approved" ? { active_orders: [], warning: null } : await offboardDrivers(supabase, changed);
+        return json(headers, 200, Object.assign({ success: true, updated: changed.length, updated_ids: changed, skipped, not_found: notFound }, off));
       }
       if (parts.length === 2 && method === "PUT") {
         const { patch, error: bad } = buildApplicationPatch(body);

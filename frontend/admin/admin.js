@@ -528,11 +528,12 @@
         if (!ids.length) return;
         try {
             const res = await api('POST', '/applications/bulk', { ids, status });
-            currentApps.forEach(a => { if (selectedIds.has(String(a.id))) a.status = status; });
+            const changedIds = new Set((res && res.updated_ids || []).map(String));
+            currentApps.forEach(a => { if (changedIds.has(String(a.id))) a.status = status; });
             selectedIds.clear();
             applyFiltersAndSort();
             updateStats();
-            showToast(`Updated ${ids.length} applications`, 'success');
+            showToast(`Updated ${res && res.updated != null ? res.updated : ids.length} applications` + (res && res.skipped ? ` (${res.skipped} already ${fmtStatus(status)})` : ''), 'success');
             if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Bulk status change ────────────────
