@@ -130,7 +130,7 @@
                     margin-top: 24px;
                     animation: fadeInUp 0.4s ease;
                 }
-                .payment-form-container h3 {
+                .payment-form-container h2 {
                     font-family: var(--font-display);
                     font-size: 1.2rem;
                     color: var(--navy);
@@ -164,7 +164,7 @@
                     border-color: #C45A3E;
                 }
                 .payment-error {
-                    color: #C45A3E;
+                    color: #A84A31; /* was #C45A3E: 3.8:1 on the tinted box; 5.0:1 */
                     font-size: 0.85rem;
                     margin-bottom: 12px;
                     display: none;
@@ -243,7 +243,7 @@
                 }
                 @keyframes spin { to { transform: rotate(360deg); } }
             </style>
-            <h3>Secure Payment</h3>
+            <h2>Secure Payment</h2>
             <p class="payment-subtitle">Your card information is encrypted and secure.</p>
             <span class="payment-amount" id="paymentAmount">$0.00</span>
             <div class="card-element-wrapper" id="cardElement"></div>
@@ -433,6 +433,11 @@
             paying = false;
             setPaymentLoading(false);
             if (retryBtn) retryBtn.disabled = false;
+            // Disabling the button while paying drops keyboard focus to <body>;
+            // put it back so keyboard users can retry after a decline.
+            if (paymentSubmitBtn && paymentSubmitBtn.isConnected && (!document.activeElement || document.activeElement === document.body)) {
+                paymentSubmitBtn.focus();
+            }
         }
     }
 
@@ -452,7 +457,7 @@
         const orderIdDiv = document.getElementById('orderIdDisplay');
         if (orderIdDiv) {
             orderIdDiv.insertAdjacentHTML('afterend', `
-                <div style="margin-top: 12px; color: #4C8C64; font-weight: 600; font-size: 0.95rem;">
+                <div style="margin-top: 12px; color: #3A7550; font-weight: 600; font-size: 0.95rem;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                         <polyline points="22 4 12 14.01 9 11.01"/>
@@ -662,6 +667,9 @@
         createPaymentForm();
         const amt = document.getElementById('paymentAmount');
         if (amt) amt.textContent = `$${currentAmount.toFixed(2)}`;
+        // The Place Order button is gone: move focus to the card step's heading
+        // so keyboard and screen reader users land on it (not <body>).
+        focusHeading(paymentFormContainer && paymentFormContainer.querySelector('h2'));
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return true;
     }
