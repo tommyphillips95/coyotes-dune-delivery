@@ -590,7 +590,10 @@
                 return;
             }
             if (result.ok) {
-                checkoutState.clear();
+                // Keep the checkout key until the order is finished (showSuccess:
+                // paid, pay-driver, already paid). A reload on the card form then
+                // resends under the same key and gets this order back instead of
+                // creating a second, unpaid one.
                 lastBooking = {
                     asap: isAsap, date: dateVal, time: timeVal,
                     pickupAddress: orderData.pickup_address, pickupCity: pricedTown('pickup'),
@@ -823,6 +826,7 @@
     }
 
     function showSuccess(ctx) {
+        checkoutState.clear(); // order finished: the next booking is a new order
         const c = ctx || {};
         renderConfirmationDetails(c.paid);
         if (form) form.style.display = 'none';

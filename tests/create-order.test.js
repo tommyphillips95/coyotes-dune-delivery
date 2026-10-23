@@ -528,7 +528,7 @@ test("order form sends one key per attempt and reuses it on retry", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "frontend/js/order.js"), "utf8");
   assert.ok(/idempotency_key: checkoutIdempotencyKey\(\)/.test(src), "orderData carries the key");
   assert.ok(/checkoutSession\(undefined, newIdempotencyKey\)/.test(src), "key is created once and reused (sessionStorage)");
-  assert.ok(/if \(result\.ok\) \{\s*checkoutState\.clear\(\);/.test(src), "success clears it");
+  assert.ok(/function showSuccess\(ctx\) \{\s*checkoutState\.clear\(\);/.test(src), "a finished order clears it");
   assert.ok(/form\.addEventListener\('input', checkoutEdited\)/.test(src), "edits send new details under the same key");
   assert.ok(/randomUUID/.test(src));
   // The failure branches must not clear the key (that is what makes retry safe).
