@@ -5,6 +5,8 @@
 -- login-admin (netlify/functions/_login-limit.js) counts failed sign-ins in a
 -- 15-minute window and sets locked_until for 15 minutes at 5 failures per IP
 -- or 20 per username. A successful sign-in clears both rows.
+-- It also upserts 'ok:<client ip>' (updated_at = last success); for 90 days
+-- that IP skips the per-username lock (the per-IP lock still applies).
 -- Until this runs, admin login still works with NO rate limit (timing-safe
 -- password check only) and logs "admin_login_attempts table missing".
 --
