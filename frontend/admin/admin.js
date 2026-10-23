@@ -431,7 +431,7 @@
         const beach_permit_ok = permitEl ? permitEl.checked : undefined;
         const beach_access_notes = beachNotesEl ? beachNotesEl.value : undefined;
         try {
-            await api('PUT', `/applications/${currentDetailId}`, { status, admin_notes: notes, beach_permit_ok, beach_access_notes });
+            const res = await api('PUT', `/applications/${currentDetailId}`, { status, admin_notes: notes, beach_permit_ok, beach_access_notes });
             const app = currentApps.find(a => String(a.id) === currentDetailId);
             if (app) {
                 app.status = status;
@@ -443,6 +443,7 @@
             updateStats();
             closeDetail();
             showToast('Application updated', 'success');
+            if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Application status changed ──────────
             if (typeof trackEvent === 'function') {
@@ -516,12 +517,13 @@
         const ids = Array.from(selectedIds);
         if (!ids.length) return;
         try {
-            await api('POST', '/applications/bulk', { ids, status });
+            const res = await api('POST', '/applications/bulk', { ids, status });
             currentApps.forEach(a => { if (selectedIds.has(String(a.id))) a.status = status; });
             selectedIds.clear();
             applyFiltersAndSort();
             updateStats();
             showToast(`Updated ${ids.length} applications`, 'success');
+            if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Bulk status change ────────────────
             if (typeof trackEvent === 'function') {
@@ -544,12 +546,13 @@
 
     async function updateStatus(id, status) {
         try {
-            await api('PUT', `/applications/${id}`, { status });
+            const res = await api('PUT', `/applications/${id}`, { status });
             const app = currentApps.find(a => String(a.id) === id);
             if (app) app.status = status;
             applyFiltersAndSort();
             updateStats();
             showToast(`Status updated to ${fmtStatus(status)}`, 'success');
+            if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Status change from row action ─────
             if (typeof trackEvent === 'function') {
@@ -832,7 +835,7 @@
         toast.className = `toast ${type}`;
         toast.textContent = message;
         toastContainer.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        setTimeout(() => toast.remove(), type === 'error' ? 8000 : 3000);
     }
 
     function handleTokenExpired() {
