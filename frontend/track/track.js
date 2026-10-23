@@ -177,7 +177,7 @@
       // No driver on the order yet: there is no location to fetch (the server
       // would answer 404 every 15s). Ask again once get-orders shows a driver.
       if (!driverId && currentOrder && !currentOrder.driver_id) return;
-      const res = await fetch(API_BASE + "/get-driver-location?" + params.toString(),
+      const res = await timedFetch(API_BASE + "/get-driver-location?" + params.toString(),
         currentToken ? { headers: { Authorization: "Bearer " + currentToken } } : undefined);
       // 404 = no location yet; 5xx/429 = try next tick. Either way the body
       // is not a location, so don't read it, and don't log every 15s.
@@ -202,26 +202,33 @@
   let polling = false;
   const C = window.CoyoteCoastal || null;
 
+  // Every request has a timeout so a stalled connection ends in a message
+  // (lookup) or a counted failure (polling) instead of "Tracking..." forever.
+  function timedFetch(url, init) {
+    const ms = C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000;
+    return C && C.timedFetch ? C.timedFetch(fetch, url, init, ms) : fetch(url, init);
+  }
   // 5xx / 429 mean "try again", not "no such order".
   function isTemporary(status) { return status >= 500 || status === 429; }
 
   // Returns a token string, null (not found / wrong phone) or { unavailable: true }.
   async function mintToken(orderNumber, phone) {
-    const res = await fetch(API_BASE + "/get-orders", {
+    const res = await timedFetch(API_BASE + "/get-orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order_number: orderNumber, phone: phone }),
     });
     if (isTemporary(res.status)) return { unavailable: true };
-    const json = await res.json().catch(function () { return {}; });
-    if (!res.ok || !json.token) return null;
+    const json = await res.json().catch(function () { return null; });
+    if (res.ok && !json) return { unavailable: true }; // 200 but not our JSON (proxy page)
+    if (!res.ok || !json || !json.token) return null;
     if (C) C.saveTrackingToken(json.orderNumber || orderNumber, json.token);
     return json.token;
   }
 
   // Returns { order } | { expired: true } | { error }
   async function fetchOrder(token) {
-    const res = await fetch(API_BASE + "/get-orders", { headers: { Authorization: "Bearer " + token } });
+    const res = await timedFetch(API_BASE + "/get-orders", { headers: { Authorization: "Bearer " + token } });
     if (res.status === 401 || res.status === 403) return { expired: true };
     if (isTemporary(res.status)) return { unavailable: true };
     const json = await res.json().catch(function () { return {}; });
@@ -417,7 +424,13 @@
   // Deep link from the order confirmation: /track/?order=CDD-...
   (function autoTrack() {
     const params = C ? C.parseOrderParams(window.location.search) : {};
-    if (!params.track) return;
+    if (!params.track) {
+      // ?order= was there but isn't an order number (cut-off or edited link).
+      if (/[?&](order|track)=[^&]/.test(window.location.search || "")) {
+        say("That tracking link isn't complete. Enter your order number and phone number.");
+      }
+      return;
+    }
     document.getElementById("lookupOrderNum").value = params.track;
     if (C && C.getTrackingToken(params.track)) { lookupOrder(params.track, ""); return; }
     // No saved token on this device (other browser, cleared storage): the
