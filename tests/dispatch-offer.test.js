@@ -296,6 +296,50 @@ test("respond-offer: accept on an already-assigned order → 409, offer expired"
   assert.strictEqual(fake.db.orders[0].driver_id, "someone");
 });
 
+// An offer that is still open when the order is cancelled, completed,
+// refunded in Stripe or put on weather hold must not put a driver on it.
+for (const [label, over] of [
+  ["cancelled", { status: "cancelled" }],
+  ["completed", { status: "completed" }],
+  ["refunded", { payment_status: "refunded" }],
+  ["weather hold", { weather_hold: true }],
+]) {
+  test(`respond-offer: accept on a ${label} order → 409, order untouched, offer expired`, async () => {
+    const fake = createFakeSupabase(offerSeed({}, { orders: [order(over)] }));
+    const before = Object.assign({}, fake.db.orders[0]);
+    const r = await respond(fake, { offer_id: "of1", driver_id: "d1", action: "accept" });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.body.code, "order_unavailable");
+    assert.deepStrictEqual(fake.db.orders[0], before);
+    assert.strictEqual(fake.db.dispatch_offers[0].status, "expired");
+    assert.ok(!(fake.db.order_status_logs || []).length, "no assigned log");
+  });
+}
+
+test("respond-offer: accept loses a race with another assign → 409, no overwrite", async () => {
+  const fake = createFakeSupabase(offerSeed());
+  // Another writer assigns the order between our read and our write.
+  const realFrom = fake.from;
+  let reads = 0;
+  fake.from = (name) => {
+    const q = realFrom(name);
+    if (name === "orders" && ++reads === 2) Object.assign(fake.db.orders[0], { driver_id: "d2", status: "assigned" });
+    return q;
+  };
+  const r = await respond(fake, { offer_id: "of1", driver_id: "d1", action: "accept" });
+  assert.strictEqual(r.status, 409);
+  assert.strictEqual(fake.db.orders[0].driver_id, "d2");
+  assert.strictEqual(fake.db.dispatch_offers[0].status, "expired");
+});
+
+test("offerNext: a refunded order is never offered to a driver", async () => {
+  const fake = createFakeSupabase({ orders: [order({ payment_status: "refunded" })], applications: [driver("d1", "4x4")], driver_locations: [loc("d1", PA[0], PA[1])] });
+  const r = await dispatch.offerNext(fake, "o1");
+  assert.strictEqual(r.offered, false);
+  assert.strictEqual(r.reason, "refunded");
+  assert.ok(!(fake.db.dispatch_offers || []).length);
+});
+
 (async () => {
   let failed = 0;
   console.log("dispatch-offer.test.js");

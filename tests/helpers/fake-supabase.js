@@ -60,6 +60,7 @@ function createFakeSupabase(seed) {
       update(patch) { state.op = "update"; state.payload = patch; return b; },
       eq(col, val) { state.filters.push((r) => r[col] === val); return b; },
       lt(col, val) { state.filters.push((r) => r[col] < val); return b; },
+      is(col, val) { state.filters.push((r) => (r[col] == null ? null : r[col]) === val); return b; },
       in(col, vals) { state.filters.push((r) => vals.includes(r[col])); return b; },
       gte(col, v) { state.filters.push((r) => r[col] >= v); return b; },
       order(col, opts) { state.orderBy = { col, asc: !(opts && opts.ascending === false) }; return b; },
