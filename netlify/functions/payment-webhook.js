@@ -18,7 +18,7 @@ const { offerNext } = require("./dispatch");
  * Returns true when this intent is no longer the order's current one, or the
  * order is already paid or refunded.
  */
-async function staleForOrder(supabase, orderId, intentId) {
+async function staleForOrder(supabase, orderId, intentId, opts) {
   const { data: order, error } = await supabase
     .from("orders")
     .select("id, stripe_payment_intent_id, payment_status")
@@ -29,6 +29,9 @@ async function staleForOrder(supabase, orderId, intentId) {
   // Paid or refunded: money already moved; a failed/canceled/requires_action
   // event must never flip it (a refunded order must not show as 'failed').
   if (order.payment_status === "paid" || order.payment_status === "refunded") return true;
+  // Already failed for this same intent: a redelivered failed/canceled adds nothing.
+  if (opts && opts.failed && order.payment_status === "failed" &&
+      (!order.stripe_payment_intent_id || order.stripe_payment_intent_id === intentId)) return true;
   return !!(order.stripe_payment_intent_id && order.stripe_payment_intent_id !== intentId);
 }
 
@@ -171,13 +174,17 @@ exports.handler = async (event) => {
     stripeEvent = constructWebhookEvent(event);
   } catch (err) {
     // Signature/config problems: Stripe sees a short reason; detail is logged.
-    if (err.cause) console.error("[payment-webhook] signature check:", err.cause);
+    // Message only: the Stripe error object carries the signature header and the raw body.
+    if (err.cause) console.error("[payment-webhook] signature check:", String(err.cause.message || "failed").slice(0, 200));
     return errorResponse(headers, err, "Webhook not accepted", "payment-webhook");
   }
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   const eventType = stripeEvent.type;
-  const paymentIntent = stripeEvent.data.object;
+  const paymentIntent = (stripeEvent && stripeEvent.data && stripeEvent.data.object) || null;
+  if (!eventType || !paymentIntent || typeof paymentIntent !== "object") {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: "Malformed event" }) };
+  }
   const orderId = paymentIntent.metadata && paymentIntent.metadata.order_id;
 
   try {
@@ -259,7 +266,7 @@ exports.handler = async (event) => {
     }
 
     if (eventType === "payment_intent.payment_failed" && orderId) {
-      if (await staleForOrder(supabase, orderId, paymentIntent.id)) return IGNORED_STALE(headers, eventType);
+      if (await staleForOrder(supabase, orderId, paymentIntent.id, { failed: true })) return IGNORED_STALE(headers, eventType);
       const failureMessage =
         (paymentIntent.last_payment_error && paymentIntent.last_payment_error.message) ||
         "Payment failed";
@@ -293,7 +300,7 @@ exports.handler = async (event) => {
     }
 
     if (eventType === "payment_intent.canceled" && orderId) {
-      if (await staleForOrder(supabase, orderId, paymentIntent.id)) return IGNORED_STALE(headers, eventType);
+      if (await staleForOrder(supabase, orderId, paymentIntent.id, { failed: true })) return IGNORED_STALE(headers, eventType);
       await supabase.from("orders").update({ payment_status: "failed" }).eq("id", orderId);
       await supabase.from("order_status_logs").insert([
         {
