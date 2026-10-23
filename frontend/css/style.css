@@ -1891,6 +1891,17 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     height: 44px;
 }
 
+/* Large text / zoom (WCAG 1.4.4, 1.4.10): let the logo wrap so the menu button stays on screen. */
+@media (max-width: 768px) {
+  .nav-container { height: auto; min-height: 70px; gap: 8px; }
+  .logo { min-width: 0; flex: 1 1 auto; }
+  .logo-text { white-space: normal; overflow-wrap: break-word; min-width: 0; }
+  .nav-toggle { flex-shrink: 0; }
+  /* Logo is branding: cap its growth so a fixed header never covers the page heading. */
+  .navbar .logo { font-size: min(1.2rem, 24px); }
+  .navbar .logo-sub { font-size: min(0.66rem, 13px); }
+}
+
 /* Large text (WCAG 1.4.4/1.4.10): checkout progress labels and footer logo must reflow at 320px. */
 @media (max-width: 768px) {
   .progress-bar { flex-wrap: wrap; row-gap: 10px; }

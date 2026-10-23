@@ -37,6 +37,8 @@ test("only Inter and DM Sans are used; Playfair Display / Outfit are gone", () =
     const s = read(f);
     assert(!/font-family\s*:[^;]*(Playfair|Outfit)/i.test(s), f + " uses Playfair/Outfit");
     assert(!/--font-[a-z-]+\s*:[^;]*(Playfair|Outfit)/i.test(s), f + " defines a Playfair/Outfit stack");
+    // Unmodified third-party files (frontend/vendor/, e.g. Leaflet's system-font stack) keep upstream font names.
+    if (f.startsWith("frontend/vendor/")) continue;
     for (const m of s.matchAll(/(?:font-family|--font(?:-[a-z]+)?)\s*:\s*['"]([^'"]+)['"]/g)) {
       assert(["Inter", "DM Sans", "SF Mono", "Inter Fallback", "DM Sans Fallback"].includes(m[1]), `${f}: unexpected web font '${m[1]}'`);
     }
