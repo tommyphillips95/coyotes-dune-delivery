@@ -164,7 +164,7 @@
 
   /** Parse and whitelist /order/ query params (never trust raw input). */
   function parseOrderParams(search) {
-    var out = { service: null, category: null, pickup: null, dropoff: null, q: null, track: null, restaurant: null };
+    var out = { service: null, category: null, pickup: null, dropoff: null, q: null, track: null, restaurant: null, restaurantUnknown: false };
     var s = String(search || "").replace(/^\?/, "");
     if (!s) return out;
     s.split("&").forEach(function (pair) {
@@ -180,7 +180,12 @@
       else if (k === "q" && val) out.q = val.slice(0, 120);
       else if ((k === "track" || k === "order") && /^[A-Z0-9-]{4,40}$/i.test(val)) out.track = val.toUpperCase();
       else if (k === "restaurant" && partnerBySlug(val)) out.restaurant = partnerBySlug(val).slug;
+      // A restaurant= value that isn't one of PARTNERS (or can't be decoded):
+      // the page says so instead of silently starting a plain order. Empty or
+      // blank restaurant= is treated as absent.
+      else if (k === "restaurant" && (val.trim() || (raw && !val))) out.restaurantUnknown = true;
     });
+    if (out.restaurant) out.restaurantUnknown = false;
     if (out.restaurant) {
       var partner = partnerBySlug(out.restaurant);
       if (!out.category) out.category = partner.category;
