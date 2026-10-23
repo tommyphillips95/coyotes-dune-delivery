@@ -22,8 +22,8 @@ const LEAFLET = "window.L={map:()=>({setView(){return this},invalidateSize(){},f
 const SHOTS = process.env.E2E_SHOTS || "";
 
 let browser;
-async function page(width) {
-  const ctx = await browser.newContext({ viewport: { width: width || 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+async function page(width, desktop) {
+  const ctx = await browser.newContext({ viewport: { width: width || 375, height: 667 }, isMobile: !desktop, hasTouch: true, deviceScaleFactor: 2 });
   await ctx.route("**/*", (r) => {
     const u = r.request().url();
     if (u.startsWith(B)) return r.continue();
@@ -151,7 +151,9 @@ test("tracking: cancelled+refunded, completed, not found, wrong phone, 503", asy
 });
 
 test("large text: at 320px with 200% text the header fits and the menu button is on screen", async () => {
-  const p = await page(320);
+  // Non-mobile context: isolates the header. In mobile mode, overflow elsewhere on
+  // the page (progress labels, footer) widens the layout viewport. That is tracked separately.
+  const p = await page(320, true);
   for (const u of ["/order/", "/track/"]) {
     await p.goto(B + u);
     await p.addStyleTag({ content: "html{font-size:200%!important}" });
