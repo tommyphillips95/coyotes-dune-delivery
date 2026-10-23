@@ -43,6 +43,9 @@ function attention(order, logsIn) {
     if (/succeeded but the order was not marked paid/.test(note) && pay !== "paid") {
       add("danger", "stripe_paid_not_marked", "Stripe took the payment but this order isn't marked paid. Check the payment webhook in Stripe/Netlify before charging again.");
     }
+    if (/WARNING: paid after the order was cancelled/.test(note) && pay === "paid") {
+      add("danger", "paid_after_close", "Paid after the order was cancelled, so no driver was sent. Refund this payment in Stripe.");
+    }
     if (/WARNING: .*check Stripe for a second payment/.test(note)) {
       add("danger", "second_payment", "Possible second payment for this order. Check Stripe and refund the extra one.");
     }
