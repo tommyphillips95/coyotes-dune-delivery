@@ -24,6 +24,7 @@
         .lookup-form input, .lookup-form button { padding: 12px; border-radius: 6px; font-size: 1rem; min-height: 48px; }
         .lookup-form label { font-size: 0.85rem; font-weight: 600; margin-bottom: -4px; }
         .lookup-message { margin: 10px 0 0; padding: 10px 12px; border-radius: 6px; background: rgba(196, 90, 62, 0.08); color: #A8432A; font-size: 0.92rem; }
+        .connection-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 6px; background: #FFF4D6; color: #6B4300; font-size: 0.92rem; }
         .timeline-step { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: #6B7280; font-size: 0.92rem; }
         .timeline-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #EADFCC; background: #fff; flex-shrink: 0; }
         .timeline-dot.completed { background: #3FB8A6; border-color: #3FB8A6; }
@@ -81,6 +82,7 @@
                         <button type="submit" id="lookupBtn">Track Order</button>
                     </form>
                     <p class="lookup-message" id="lookupMessage" role="status" aria-live="polite" hidden></p>
+                    <p class="connection-notice" id="connectionNotice" role="status" aria-live="polite" hidden></p>
                 </div>
                 <div class="track-card hidden" id="etaCard">
                     <span class="live-dot"></span> Live Tracking

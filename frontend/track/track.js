@@ -256,25 +256,57 @@
     return C ? C.isTerminalStatus(status) : (status === "completed" || status === "cancelled");
   }
 
+  // ── Refresh failures: back off and say so ──
+  // After FAIL_NOTICE_AFTER failed refreshes in a row (network error, 5xx or
+  // 429) a "Connection lost, retrying…" notice is shown once (announced by
+  // its role="status"). Retries back off 15s → 30s → 60s → 120s (the interval
+  // still fires every 15s; ticks before the next attempt are skipped). The
+  // first good refresh clears the notice and the backoff.
+  const FAIL_NOTICE_AFTER = 3;
+  const MAX_BACKOFF_MS = 120000;
+  let failures = 0, nextAttemptAt = 0;
+  function now() { return Date.now(); }
+  function setConnectionNotice(on) {
+    const box = document.getElementById("connectionNotice");
+    if (!box) return;
+    const text = on ? "Connection lost, retrying…" : "";
+    if (box.textContent !== text) box.textContent = text; // unchanged text is not re-announced
+    box.hidden = !on;
+  }
+  function refreshFailed() {
+    failures++;
+    nextAttemptAt = now() + Math.min(POLL_INTERVAL_MS * Math.pow(2, failures - 1), MAX_BACKOFF_MS) - 1000;
+    if (failures >= FAIL_NOTICE_AFTER) setConnectionNotice(true);
+  }
+  function refreshOk() {
+    failures = 0; nextAttemptAt = 0;
+    setConnectionNotice(false);
+  }
+
   async function tick() {
     if (polling || !currentToken) return; // never overlap requests
+    if (failures && now() < nextAttemptAt) return; // backing off
     polling = true;
     try {
       const r = await fetchOrder(currentToken);
+      if (r.unavailable) { refreshFailed(); return; }
       if (r.expired) {
         stopPolling();
+        setConnectionNotice(false);
         if (C && currentOrder) C.clearTrackingToken(currentOrder.order_number);
         currentToken = null;
         say("Your tracking session expired. Enter your order number and phone to keep tracking.");
         return;
       }
       if (r.order) {
+        refreshOk();
         renderOrder(r.order);
         if (isTerminal(r.order.status)) { stopPolling(); return; }
       }
       await fetchDriverLocation(currentDriverId, currentOrder && currentOrder.id);
     } catch (err) {
       console.error(err); // keep polling; transient network errors are common on the beach
+      refreshFailed();
     } finally {
       polling = false;
     }
