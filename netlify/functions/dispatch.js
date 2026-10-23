@@ -75,6 +75,8 @@ async function offerNext(supabase, orderId) {
   if (order.status === "cancelled" || order.status === "completed") {
     return { offered: false, reason: "order_closed" };
   }
+  // Fully refunded in Stripe: the customer has their money back, so don't send a driver.
+  if (order.payment_status === "refunded") return { offered: false, reason: "refunded" };
   if (weatherShutdownActive() || order.weather_hold) {
     return { offered: false, reason: "weather_hold", requiredClass: requiredClass(order.pickup_city, order.dropoff_city || order.pickup_city) };
   }

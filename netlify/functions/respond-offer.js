@@ -39,13 +39,30 @@ exports.handler = async (event) => {
       const next = await offerNext(supabase, offer.order_id);
       return { statusCode: 200, headers, body: JSON.stringify({ success: true, action: "declined", next }) };
     }
-    const { data: order } = await supabase.from("orders").select("id, order_number, customer_id, driver_id, status").eq("id", offer.order_id).maybeSingle();
+    const { data: order, error: oErr } = await supabase.from("orders").select("id, order_number, customer_id, driver_id, status, payment_status, weather_hold").eq("id", offer.order_id).maybeSingle();
+    if (oErr) throw oErr;
+    const endOffer = () => supabase.from("dispatch_offers").update({ status: "expired", responded_at: now }).eq("id", offerId);
     if (order && order.driver_id) {
-      await supabase.from("dispatch_offers").update({ status: "expired", responded_at: now }).eq("id", offerId);
+      await endOffer();
       return { statusCode: 409, headers, body: JSON.stringify({ error: "order already assigned" }) };
     }
+    // The order may have been cancelled, completed, refunded in Stripe or put
+    // on weather hold while this offer was open: don't send a driver.
+    if (!order || order.status !== "pending" || order.payment_status === "refunded" || order.weather_hold) {
+      await endOffer();
+      return { statusCode: 409, headers, body: JSON.stringify({ error: "This order no longer needs a driver.", code: "order_unavailable" }) };
+    }
+    // Assign only if nobody changed the order since we read it (admin cancel,
+    // another accept): same status, still no driver.
+    const { data: rows, error: uErr } = await supabase.from("orders")
+      .update({ driver_id: driverId, status: "assigned", assigned_at: now })
+      .eq("id", offer.order_id).eq("status", order.status).is("driver_id", null).select();
+    if (uErr) throw uErr;
+    if (!(Array.isArray(rows) ? rows[0] : rows)) {
+      await endOffer();
+      return { statusCode: 409, headers, body: JSON.stringify({ error: "This order changed and no longer needs a driver.", code: "order_unavailable" }) };
+    }
     await supabase.from("dispatch_offers").update({ status: "accepted", responded_at: now }).eq("id", offerId);
-    await supabase.from("orders").update({ driver_id: driverId, status: "assigned", assigned_at: now }).eq("id", offer.order_id);
     await supabase.from("order_status_logs").insert([{ order_id: offer.order_id, status: "assigned", note: "Driver accepted auto-offer", changed_by: driverId }]);
     const { data: customer } = await supabase.from("customers").select("phone").eq("id", order.customer_id).maybeSingle();
     const { data: driver } = await supabase.from("applications").select("first_name, last_name").eq("id", driverId).maybeSingle();
