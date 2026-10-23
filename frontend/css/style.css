@@ -1868,3 +1868,25 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     .form-success { padding: 40px 24px; }
     .summary-table th, .summary-table td { padding: 8px 10px; font-size: 0.82rem; }
 }
+/* ── Tap targets (≥44px, WCAG 2.5.5 / Apple HIG) ──
+   Footer and nav text links and consent checkboxes were ~17-32px tall on
+   phones. Size and spacing only: same text, links and colours. */
+.logo { min-height: 44px; }
+.footer-links li { margin-bottom: 0; }
+.footer-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+}
+/* The checkbox stays 18px to look the same; its label (which toggles it)
+   gets a 44x44 hit area centred on the box. */
+.checkbox-group { position: relative; }
+.checkbox-group > label::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 3px;
+    width: 44px;
+    height: 44px;
+}
