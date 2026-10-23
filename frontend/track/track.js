@@ -160,6 +160,12 @@
       if (!dot) return;
       dot.classList.toggle("completed", i < currentIndex);
       dot.classList.toggle("active", i === currentIndex);
+      // The dots are colour-only; tell assistive tech which step is current.
+      const step = dot.parentElement;
+      if (step) {
+        if (i === currentIndex) step.setAttribute("aria-current", "step");
+        else step.removeAttribute("aria-current");
+      }
     });
   }
   async function fetchDriverLocation(driverId, orderId) {
@@ -225,7 +231,19 @@
     return rows[0] ? { order: rows[0] } : { error: "Order not found" };
   }
 
+  let announcedStatus = null;
+  // Polling updates the status silently; announce changes (not the first
+  // render, which the user just asked for) using the existing label.
+  function announceStatus(order) {
+    const prev = announcedStatus;
+    announcedStatus = order.order_number + "|" + order.status;
+    const live = document.getElementById("trackStatusLive");
+    if (!live || prev === null || prev === announcedStatus) return;
+    if (prev.split("|")[0] !== order.order_number) return;
+    live.textContent = "Status: " + formatStatus(order.status);
+  }
   function renderOrder(order) {
+    announceStatus(order);
     currentOrder = order;
     currentDriverId = order.driver_id || null;
     showCard("driverCard"); showCard("orderCard"); showCard("timelineCard");
@@ -349,6 +367,9 @@
   }
 
   async function lookupOrder(orderNumber, phone) {
+    // Only a user-started lookup (focus in the form) gets focus back; the
+    // automatic lookup from a tracking link must not move focus on load.
+    const userStarted = !!document.activeElement && document.activeElement !== document.body;
     lookupBtn.disabled = true;
     lookupBtn.textContent = "Tracking...";
     say("");
@@ -383,6 +404,8 @@
     } finally {
       lookupBtn.disabled = false;
       lookupBtn.textContent = "Track Order";
+      // Disabling the button while looking up drops keyboard focus to <body>.
+      if (userStarted && (!document.activeElement || document.activeElement === document.body)) lookupBtn.focus();
     }
   }
 
