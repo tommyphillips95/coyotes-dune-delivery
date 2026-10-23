@@ -168,6 +168,9 @@
       if (driverId) params.set("driver_id", driverId);
       else if (orderId) params.set("order_id", orderId);
       else return;
+      // No driver on the order yet: there is no location to fetch (the server
+      // would answer 404 every 15s). Ask again once get-orders shows a driver.
+      if (!driverId && currentOrder && !currentOrder.driver_id) return;
       const res = await fetch(API_BASE + "/get-driver-location?" + params.toString(),
         currentToken ? { headers: { Authorization: "Bearer " + currentToken } } : undefined);
       // 404 = no location yet; 5xx/429 = try next tick. Either way the body
