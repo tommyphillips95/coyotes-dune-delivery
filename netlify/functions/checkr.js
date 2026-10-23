@@ -37,6 +37,9 @@ function cors(event) {
 
 /* ── route handlers ────────────────────────── */
 
+// Date of birth is never sent to the browser: only createCheck reads it, to
+// send to Checkr's candidate API server-side (Checkr needs it to match records).
+
 // GET /candidates  → list all applications with background-check info
 async function listCandidates(supabase) {
   const { data, error } = await supabase
@@ -52,7 +55,6 @@ async function listCandidates(supabase) {
     name: `${app.first_name} ${app.last_name}`,
     email: app.email,
     phone: app.phone,
-    dob: app.date_of_birth,
     ssn: app.ssn,
     address: app.address,
     city: app.city,
@@ -91,7 +93,6 @@ async function getCandidate(supabase, id) {
     name: `${data.first_name} ${data.last_name}`,
     email: data.email,
     phone: data.phone,
-    dob: data.date_of_birth,
     ssn: data.ssn,
     address: data.address,
     city: data.city,
