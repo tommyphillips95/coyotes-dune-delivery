@@ -126,21 +126,34 @@ exports.handler = async (event) => {
       }
       // Money was received, so the order is paid whichever intent it was. If it
       // was not the order's current intent, say so loudly (possible 2nd payment).
-      const { data: current } = await supabase
-        .from("orders").select("stripe_payment_intent_id").eq("id", orderId).maybeSingle();
+      const { data: current, error: currentError } = await supabase
+        .from("orders").select("stripe_payment_intent_id, payment_status").eq("id", orderId).maybeSingle();
+      if (currentError) throw currentError;
       const currentId = current && current.stripe_payment_intent_id;
       const otherIntent = currentId && currentId !== paymentIntent.id ? currentId : null;
+      // Stripe redelivers events (for days after a failed or slow delivery) and
+      // doesn't promise order. A late "succeeded" must not undo a refund:
+      // flipping a refunded order back to paid would dispatch a driver for an
+      // order whose money was returned.
+      if (current && current.payment_status === "refunded") {
+        console.error(`[payment-webhook] ${paymentIntent.id} succeeded event for refunded order ${orderId}; left refunded`);
+        return { statusCode: 200, headers, body: JSON.stringify({ received: true, ignored: "already_refunded", event: eventType }) };
+      }
+      // Same intent already recorded as paid: a redelivery. Don't log a second
+      // payment; still let dispatch run (it is idempotent) in case it failed before.
+      const redelivery = !!(current && current.payment_status === "paid" && currentId === paymentIntent.id);
       if (otherIntent) console.error(`[payment-webhook] ${paymentIntent.id} succeeded but order ${orderId} points at ${otherIntent}`);
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({
-          payment_status: "paid",
-          final_price: paymentIntent.amount_received / 100,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", orderId);
-      if (updateError) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to update order" }) };
+      if (!redelivery) {
+        const { error: updateError } = await supabase
+          .from("orders")
+          .update({
+            payment_status: "paid",
+            final_price: paymentIntent.amount_received / 100,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", orderId);
+        if (updateError) {
+          return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to update order" }) };
       }
       await supabase.from("order_status_logs").insert([
         {
@@ -155,6 +168,7 @@ exports.handler = async (event) => {
           changed_by: "stripe_webhook",
         },
       ]);
+      }
       let dispatch = null;
       try {
         dispatch = await offerNext(supabase, orderId);
@@ -165,7 +179,7 @@ exports.handler = async (event) => {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ received: true, status: "paid", dispatch }),
+        body: JSON.stringify(Object.assign({ received: true, status: "paid", dispatch }, redelivery ? { duplicate: true } : {})),
       };
     }
 
