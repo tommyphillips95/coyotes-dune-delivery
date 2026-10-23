@@ -67,10 +67,25 @@
         if (stripeJsPromise) return stripeJsPromise;
         stripeJsPromise = new Promise(function (resolve) {
             const s = document.createElement('script');
+            // A stalled load (weak signal, captive Wi-Fi) fires neither onload
+            // nor onerror. The order already exists by then, so give up after
+            // the usual request timeout and show the confirmation (pay driver)
+            // instead of leaving "Placing Order..." on screen forever.
+            const C = window.CoyoteCoastal;
+            const ms = C && C.requestTimeoutMs ? C.requestTimeoutMs() : 15000;
+            let done = false;
+            const settle = function (ok) {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                if (!ok) stripeJsPromise = null;
+                resolve(ok);
+            };
+            const timer = setTimeout(function () { settle(typeof Stripe !== 'undefined'); }, ms);
             s.src = STRIPE_JS_URL;
             s.async = true;
-            s.onload = function () { resolve(typeof Stripe !== 'undefined'); };
-            s.onerror = function () { stripeJsPromise = null; resolve(false); };
+            s.onload = function () { settle(typeof Stripe !== 'undefined'); };
+            s.onerror = function () { settle(false); };
             document.head.appendChild(s);
         });
         return stripeJsPromise;
