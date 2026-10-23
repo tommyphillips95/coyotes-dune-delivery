@@ -56,7 +56,7 @@ exports.handler = async (event) => {
   try {
     parsed = multipart.parseMultipart(raw, multipart.header(event, "content-type"), { maxParts: 10 });
   } catch (err) {
-    return reply(err.status || 400, { error: err.message });
+    return reply(400, { error: "That upload could not be read. Please choose the file again." });
   }
   const files = parsed.files.filter((f) => f.field === FIELD && (f.filename || f.data.length));
   if (files.length !== 1) return reply(400, { error: files.length ? "Upload one file at a time." : "Please choose a photo or PDF to upload." });
