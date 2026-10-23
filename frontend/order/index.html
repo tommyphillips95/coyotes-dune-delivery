@@ -22,12 +22,13 @@
          Heights mirror what order.js renders; order.js drops these classes once filled.
          P = the PARTNERS slugs in coastal.js (tests/partner-not-found.test.js keeps them
          in sync): a known slug gets the prefill note + quote, an unknown one the
-         "couldn't find that partner" note. Same matching as partnerBySlug (trimmed, case-insensitive; blank = absent). -->
+         "couldn't find that partner" note. Same matching as partnerBySlug (trimmed, case-insensitive; blank = absent; with several restaurant= values the first known partner wins, as in parseOrderParams). -->
     <script>(function (s, c) { var P = ['texmexcoyote', 'heb-coastal-market', 'clems-bait-tackle', 'shells-seafood', 'stingrays-taphouse', 'padre-island-burger-co'];
-        var m = /[?&]restaurant=([^&#]*)/.exec(s), r = '';
-        if (m && m[1]) { try { r = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim().toLowerCase(); } catch (e) { r = '?'; } }
-        if (r && P.indexOf(r) >= 0) c.add('cc-pre-note-2', 'cc-pre-quote');
-        else { if (r) c.add('cc-pre-partner'); if (/[?&](pickup|category)=./.test(s)) c.add('cc-pre-note-1'); if (/[?&]pickup=./.test(s)) c.add('cc-pre-quote'); }
+        var re = /[?&]restaurant=([^&#]*)/g, m, r, known = false, bad = false;
+        while ((m = re.exec(s))) { r = ''; if (m[1]) { try { r = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim().toLowerCase(); } catch (e) { r = '?'; } }
+            if (P.indexOf(r) >= 0) { known = true; break; } if (r) bad = true; }
+        if (known) c.add('cc-pre-note-2', 'cc-pre-quote');
+        else { if (bad) c.add('cc-pre-partner'); if (/[?&](pickup|category)=./.test(s)) c.add('cc-pre-note-1'); if (/[?&]pickup=./.test(s)) c.add('cc-pre-quote'); }
     })(location.search, document.documentElement.classList);</script>
     <script defer src="../js/analytics.js"></script>
     <script defer src="../js/firebase-analytics.js"></script>
