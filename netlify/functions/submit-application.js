@@ -14,6 +14,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { serverError } = require('./_errors');
 const cors = require('./_cors');
+const rateLimit = require('./_rate-limit');
 const vehicle = require('./_vehicle');
 const multipart = require('./_multipart');
 const card = require('./_insurance-card');
@@ -172,6 +173,9 @@ exports.handler = async (event) => {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_KEY
     );
+
+    const rl = await rateLimit.hit(supabase, event, 'submit-application');
+    if (rl.limited) return rateLimit.tooMany(headers, rl.retryAfterSec);
 
     const insert = (row) => supabase.from('applications').insert([row]).select().single();
     // Columns from SQL files that may not be run yet are dropped on a
