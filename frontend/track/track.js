@@ -170,7 +170,12 @@
       else return;
       const res = await fetch(API_BASE + "/get-driver-location?" + params.toString(),
         currentToken ? { headers: { Authorization: "Bearer " + currentToken } } : undefined);
-      const json = await res.json();
+      // 404 = no location yet; 5xx/429 = try next tick. Either way the body
+      // is not a location, so don't read it, and don't log every 15s.
+      if (!res || !res.ok) return;
+      let json;
+      try { json = await res.json(); } catch (_) { return; } // HTML error page, proxy page, empty body
+      if (!json || typeof json !== "object") return;
       if (currentOrder && (isTerminal(currentOrder.status) || hasNoDriver(currentOrder))) return; // no live dot
       if (json.success && json.data && json.data.location) {
         updateDriverMarker(json.data.location.lat, json.data.location.lng);
