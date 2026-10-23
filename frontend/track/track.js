@@ -347,7 +347,12 @@
     const params = C ? C.parseOrderParams(window.location.search) : {};
     if (!params.track) return;
     document.getElementById("lookupOrderNum").value = params.track;
-    if (C && C.getTrackingToken(params.track)) lookupOrder(params.track, "");
+    if (C && C.getTrackingToken(params.track)) { lookupOrder(params.track, ""); return; }
+    // No saved token on this device (other browser, cleared storage): the
+    // phone is the only thing missing, so put the cursor there and say so.
+    const phone = document.getElementById("lookupPhone");
+    if (phone && phone.focus) phone.focus();
+    say("Enter the phone number used for this order to start tracking.");
   })();
 
   window.addEventListener("beforeunload", stopPolling);
