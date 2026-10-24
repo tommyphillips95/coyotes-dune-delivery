@@ -293,6 +293,19 @@ a:hover { color: var(--cc-coral-dark); }
 .progress-step.active .step-number, .progress-step.active .progress-dot { background: var(--cc-coral-strong); border-color: var(--cc-coral-strong); color: #fff; }
 .progress-step.completed .step-number, .progress-step.completed .progress-dot { background: var(--cc-seafoam-dark); border-color: var(--cc-seafoam-dark); color: #fff; }
 .service-option.selected, .detail-card.selected { border-color: var(--cc-coral); background: var(--cc-coral-soft); }
+/* Order Confirmed: one solid primary (Track); Back to Home as outline so the
+   two coral fills do not compete on the success screen at phone widths. Form
+   Next buttons keep filled secondary (--sand → coral) elsewhere. */
+.order-success a.btn-secondary {
+    background: transparent;
+    color: var(--cc-ink);
+    border: 2px solid var(--cc-ink);
+}
+.order-success a.btn-secondary:hover {
+    background: var(--cc-ink);
+    color: #fff;
+    border-color: var(--cc-ink);
+}
 .cc-track-link {
     display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
 }
