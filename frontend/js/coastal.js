@@ -342,7 +342,7 @@
   // result is CoyoteAPI's { ok:false, error, status }. 4xx/503 messages come
   // from our own validation / weather hold and are safe to show; 5xx bodies can
   // carry internal error text, so those get a generic line instead.
-  var SUPPORT_PHONE = "(361) 555-1234";
+  var SUPPORT_PHONE = "(361) 897-9670";
   // ── Slow / dropped connections (order + payment requests) ──
   var DEFAULT_TIMEOUT_MS = 15000;
   function requestTimeoutMs() {

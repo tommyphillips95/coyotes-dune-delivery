@@ -219,7 +219,7 @@ test("400 validation messages pass through", () => {
 test("500 never leaks internal error text", () => {
   const m = C.orderErrorMessage({ ok: false, error: 'duplicate key value violates unique constraint "customers_phone_key"', status: 500 });
   assert.ok(!/duplicate key|constraint/.test(m), m);
-  assert.ok(/\(361\) 555-1234/.test(m));
+  assert.ok(/\(361\) 897-9670/.test(m));
 });
 
 test("missing / generic result falls back to the support line", () => {

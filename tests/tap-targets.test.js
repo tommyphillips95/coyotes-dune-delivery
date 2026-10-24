@@ -30,7 +30,7 @@ test("consent checkbox: label gives a 44x44 hit area", () => {
   assert.ok(/<input type="checkbox" id="termsAgree"[^>]*>\s*<label for="termsAgree">/.test(order), "label must be tied to the checkbox");
 });
 test("footer text, links and contact info unchanged", () => {
-  for (const s of ['<a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a>', '<a href="tel:+13615551234">(361) 555-1234</a>',
+  for (const s of ['<a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a>', '<a href="tel:+13618979670">(361) 897-9670</a>',
     '<a href="#">Privacy Policy</a>', '<a href="#">Terms of Service</a>', '<a href="/apply/">Become a Driver</a>', '<a href="/driver/">Driver Portal</a>']) assert.ok(order.includes(s), s);
 });
 

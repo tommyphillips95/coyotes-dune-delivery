@@ -2,7 +2,7 @@
 /**
  * Track-order lookup (POST /api/get-orders { order_number, phone }) matches the
  * phone by digits. The order form stores the phone exactly as typed (its
- * placeholder is "(361) 555-1234"), so a customer who tracks with
+ * placeholder is "(361) 555-0100"), so a customer who tracks with
  * "3615550100" or "+1 361-555-0100" must still find their order. A wrong
  * number, or another customer's order, must still be refused. No network.
  */
