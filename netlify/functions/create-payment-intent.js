@@ -206,12 +206,13 @@ exports.handler = async (event) => {
 
   const stripe = getStripe();
   if (!stripe) {
+    // Log the missing env name server-side only — never echo it to the client.
     console.error("STRIPE_SECRET_KEY is not configured");
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
-        error: "Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.",
+        error: "Card payments are temporarily unavailable. Please try again shortly.",
       }),
     };
   }
