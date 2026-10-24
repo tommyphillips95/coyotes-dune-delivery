@@ -681,6 +681,9 @@
         if (paymentSubmitBtn) {
             paymentSubmitBtn.disabled = isLoading;
         }
+        // Pay Later must not fire mid-confirm (would show cash success while Stripe is still working).
+        const cancelBtn = document.getElementById('paymentCancelBtn');
+        if (cancelBtn) cancelBtn.disabled = isLoading;
         if (paymentSpinner) {
             paymentSpinner.innerHTML = isLoading
                 ? '<span class="spinner"></span> Processing...'
