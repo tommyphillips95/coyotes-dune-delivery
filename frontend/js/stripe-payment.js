@@ -194,6 +194,20 @@
                     align-items: center;
                     flex-wrap: wrap;
                 }
+                @media (max-width: 768px) {
+                    .payment-actions {
+                        position: sticky;
+                        bottom: 0;
+                        z-index: 6;
+                        margin-left: -8px;
+                        margin-right: -8px;
+                        padding: 12px 8px calc(12px + env(safe-area-inset-bottom, 0px));
+                        background: var(--pure-white);
+                        border-top: 1px solid var(--border);
+                        box-shadow: 0 -6px 16px rgba(44, 62, 80, 0.06);
+                    }
+                    .payment-actions .btn-pay, .payment-actions .btn-ghost { min-height: 48px; }
+                }
                 .payment-actions .btn {
                     flex: 1;
                     min-width: 140px;
