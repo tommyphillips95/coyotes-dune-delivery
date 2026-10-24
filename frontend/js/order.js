@@ -587,8 +587,12 @@
                 result = { ok: false, status: 0, error: 'unreadable response', timedOut: true, network: true };
             }
             const netKind = C && C.networkFailureKind ? C.networkFailureKind(result) : null;
+            // 5xx/429: same Retry affordance as a dropped connection — Place Order
+            // is re-enabled either way, but the message says "try again" and the
+            // dedicated Retry button is what offline/timeout already use.
+            const serverBusy = C && C.paymentServerBusy ? C.paymentServerBusy(result) : false;
             lastFailureWasNetwork = !!netKind;
-            showRetry(!!netKind);
+            showRetry(!!netKind || (!!serverBusy && !result.ok));
             announce(result.ok ? 'Order placed.' : '');
             // This checkout already made an order (first try's answer was lost).
             if (!result.ok && showCheckoutConflict(result)) {

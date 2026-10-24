@@ -387,7 +387,7 @@
         if (!orderNumber || !phone) { say("Enter both your order number and the phone number used for the order."); (orderNumber ? document.getElementById("lookupPhone") : document.getElementById("lookupOrderNum")).focus(); return; }
         token = await mintToken(orderNumber, phone);
       }
-      const UNAVAILABLE = "We couldn't look up your order right now. Your order is not affected. Please try again in a minute.";
+      const UNAVAILABLE = "We couldn't look up your order right now. Your order is not affected. Tap Track Order to try again in a minute.";
       if (token && token.unavailable) { say(UNAVAILABLE); return; }
       if (!token) { say("We couldn't find that order. Check the order number and phone number."); return; }
       let r = await trackWithToken(token);
@@ -407,7 +407,7 @@
       }
     } catch (err) {
       console.error(err);
-      say("We couldn't look up your order right now. Check your signal and try again.");
+      say("We couldn't look up your order right now. Check your signal and tap Track Order to try again.");
     } finally {
       lookupBtn.disabled = false;
       lookupBtn.textContent = "Track Order";
