@@ -139,7 +139,7 @@
         if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
             return 'Hey there! How can we help you today?';
         }
-        return 'Thanks for reaching out! For more specific questions, email us at <a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a> or call (361) 555-1234.';
+        return 'Thanks for reaching out! For more specific questions, email us at <a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a> or call (361) 897-9670.';
     }
 
     function escapeHtml(text) {

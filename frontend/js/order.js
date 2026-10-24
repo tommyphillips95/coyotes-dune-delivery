@@ -375,7 +375,7 @@
     function orderErrorMessage(result) {
         const C = window.CoyoteCoastal;
         if (C && typeof C.orderErrorMessage === 'function') return C.orderErrorMessage(result);
-        return 'Something went wrong placing your order. Please try again or call (361) 555-1234.';
+        return 'Something went wrong placing your order. Please try again or call (361) 897-9670.';
     }
 
     // Inline, screen-reader-announced errors instead of alert() popups.
