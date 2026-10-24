@@ -1391,7 +1391,9 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     background: var(--pure-white);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    overflow: hidden;
+    /* visible (not hidden): sticky .form-nav on phones must stick to the
+       viewport; overflow:hidden on this ancestor was clipping that away. */
+    overflow: visible;
     border: 1px solid var(--border);
 }
 
@@ -1400,6 +1402,7 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     color: var(--pure-white);
     padding: 36px 44px;
     text-align: center;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .form-header h1 {
@@ -1863,6 +1866,19 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     .form-nav-right { width: 100%; }
     .form-nav-right .btn { flex: 1; }
     .form-nav .btn { min-height: 48px; } /* comfortable thumb targets on phones */
+    /* Keep Next / Place Order reachable when the keyboard shrinks the viewport
+       or the review summary is long: stick the step's nav to the visible bottom. */
+    .form-step.active .form-nav {
+        position: sticky;
+        bottom: 0;
+        z-index: 6;
+        margin-left: -24px;
+        margin-right: -24px;
+        padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+        background: var(--pure-white);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -6px 16px rgba(44, 62, 80, 0.06);
+    }
     .nav-toggle { width: 44px; height: 44px; }
     .form-step h2:focus { outline: none; } /* focused programmatically on step change */
     .form-success { padding: 40px 24px; }
