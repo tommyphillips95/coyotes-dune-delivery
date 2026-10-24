@@ -168,6 +168,11 @@ a:hover { color: var(--cc-coral-dark); }
     flex: 1; border: 0; outline: 0; font-size: 1rem; color: var(--cc-text); background: transparent; min-width: 0;
 }
 .cc-search input { min-height: 44px; } /* whole field is the tap target, not just the text line */
+/* outline:0 on the borderless input kills *:focus-visible; ring the group instead */
+.cc-search:focus-within {
+    outline: 2.5px solid var(--cc-coral-strong);
+    outline-offset: 2px;
+}
 .cc-search .btn { padding: 12px 22px; min-height: 48px; }
 .cc-location {
     margin-top: 12px; max-width: 640px;
@@ -180,6 +185,11 @@ a:hover { color: var(--cc-coral-dark); }
     min-height: 44px;
 }
 .cc-location select option { color: var(--cc-text); }
+/* Same as .cc-search: borderless control, so ring the group on keyboard focus */
+.cc-location:focus-within {
+    outline: 2.5px solid #fff;
+    outline-offset: 2px;
+}
 .cc-hero-cta { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; }
 .cc-hero-cta .btn-outline { color: #fff; border-color: rgba(255,255,255,0.4); }
 .cc-hero-cta .btn-outline:hover { background: rgba(255,255,255,0.1); color: #fff; }
