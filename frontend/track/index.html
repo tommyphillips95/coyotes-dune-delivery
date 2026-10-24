@@ -35,7 +35,8 @@
         .lookup-form button { border: none; background: #FF6B4A; color: #fff; font-weight: 600; cursor: pointer; }
         .eta-box { background: #10202E; color: #fff; border-radius: 14px; padding: 20px; text-align: center; }
         .eta-value { font-size: 1.8rem; font-weight: 700; }
-        .map-container { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; }
+        /* padding:0 — style.css .map-container is for the home illustration (40px); must not shrink the live Leaflet map on phones. */
+        .map-container { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; padding: 0; }
         #map { width: 100%; height: 100%; min-height: 500px; }
         /* Phones/tablets (single column): map sized to the screen instead of a fixed 500px block. */
         @media (max-width: 900px) {
