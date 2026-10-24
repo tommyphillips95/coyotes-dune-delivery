@@ -457,9 +457,13 @@
                 // Bank still confirming; the webhook marks it paid.
                 showPaymentProcessing();
             } else if (paymentIntent.status === 'requires_action') {
-                // 3D Secure or additional authentication required
-                // Stripe.js handles this automatically in confirmCardPayment
+                // confirmCardPayment normally completes 3DS itself; if we still
+                // see requires_action, offer Retry (re-enters create-payment-intent,
+                // which checks already_paid / processing before charging again).
                 showPaymentError('Additional authentication is required. Please check your bank app or email.');
+                if (retryBtn) retryBtn.hidden = false;
+                say('');
+                return;
             } else {
                 // Never surface the raw Stripe status string (e.g. requires_payment_method).
                 console.error('Unexpected PaymentIntent status:', paymentIntent && paymentIntent.status);
