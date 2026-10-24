@@ -447,7 +447,12 @@
                 // Stripe.js handles this automatically in confirmCardPayment
                 showPaymentError('Additional authentication is required. Please check your bank app or email.');
             } else {
-                throw new Error(`Payment status: ${paymentIntent.status}`);
+                // Never surface the raw Stripe status string (e.g. requires_payment_method).
+                console.error('Unexpected PaymentIntent status:', paymentIntent && paymentIntent.status);
+                showPaymentError('We couldn\'t finish this payment. Try again or use a different card.');
+                if (retryBtn) retryBtn.hidden = false;
+                say('');
+                return;
             }
 
         } catch (err) {
