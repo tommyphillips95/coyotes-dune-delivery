@@ -59,12 +59,15 @@
     </style>
 </head>
 <body>
-    <nav class="navbar"><div class="container nav-container">
+    <nav class="navbar" id="navbar"><div class="container nav-container">
         <a href="/" class="logo">
             <svg class="logo-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span class="logo-text">Coyote's Dune Delivery<span class="logo-sub">Texas Gulf Coast</span></span>
         </a>
-        <ul class="nav-menu">
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="hamburger"></span>
+        </button>
+        <ul class="nav-menu" id="navMenu">
             <li><a href="/">Home</a></li>
             <li><a href="/#planner">Pricing</a></li>
             <li><a href="/order/" class="btn btn-primary">Order Now</a></li>
@@ -125,6 +128,7 @@
     </main>
     <script defer src="/vendor/leaflet-1.9.4/leaflet.js"></script>
     <script defer src="../js/coastal.js"></script>
+    <script defer src="../js/main.js"></script>
     <script defer src="track.js"></script>
 </body>
 </html>

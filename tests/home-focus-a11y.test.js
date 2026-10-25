@@ -40,9 +40,8 @@ test("chatInput has an accessible name (not placeholder-only)", () => {
   assert.match(home, /id="chatInput"[^>]*aria-label="Message"/);
 });
 
-test("navToggle starts with aria-expanded=false on home and order (track has no hamburger)", () => {
-  assert.doesNotMatch(track, /id="navToggle"/, "track keeps the simple nav");
-  for (const [name, html] of [["home", home], ["order", order]]) {
+test("navToggle starts with aria-expanded=false on home, order, and track", () => {
+  for (const [name, html] of [["home", home], ["order", order], ["track", track]]) {
     assert.match(html, /id="navToggle"[^>]*aria-expanded="false"/, name);
   }
 });
