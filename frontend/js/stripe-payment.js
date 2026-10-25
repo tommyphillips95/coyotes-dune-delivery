@@ -276,7 +276,7 @@
             <p class="payment-subtitle">Your card information is encrypted and secure.</p>
             <span class="payment-amount" id="paymentAmount">$0.00</span>
             <div class="card-element-wrapper" id="cardElement"></div>
-            <div class="payment-error" id="paymentError" role="alert" aria-live="assertive"></div>
+            <div class="payment-error" id="paymentError" tabindex="-1" role="alert" aria-live="assertive"></div>
             <button type="button" class="btn btn-secondary cc-retry-btn" id="paymentRetryBtn" hidden>Retry</button>
             <p class="cc-sr-only" id="paymentStatusLive" role="status" aria-live="polite"></p>
             <div class="payment-actions">
@@ -671,6 +671,10 @@
         if (paymentErrorDisplay) {
             paymentErrorDisplay.textContent = message;
             paymentErrorDisplay.classList.add('visible');
+            // Keyboard users land on the message (role=alert also announces to SR).
+            // Matches #orderSubmitError focus behavior on the Place Order step.
+            paymentErrorDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            try { paymentErrorDisplay.focus({ preventScroll: true }); } catch (_) { paymentErrorDisplay.focus(); }
         }
     }
 

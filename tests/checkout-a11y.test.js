@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Checkout accessibility: heading order on the card step, focus moves when
- * the visible step changes (card form, decline, success / Pay Later), and
+ * the visible step changes (card form, decline, success / Pay Later),
+ * payment errors take keyboard focus like orderSubmitError, and
  * WCAG AA contrast for the payment error text and the "Paid" badge.
  */
 "use strict";
@@ -49,6 +50,14 @@ test("showSuccess focuses the confirmation heading", () => {
   const b = body(order, "showSuccess");
   assert.ok(/querySelector\('h2'\)[\s\S]*?setAttribute\('tabindex', '-1'\)[\s\S]*?\.focus\(/.test(b));
   assert.ok(b.indexOf(".focus(") > b.indexOf("classList.add('active')"), "focus after it is visible");
+});
+
+test("showPaymentError focuses the alert (tabindex + focus), like orderSubmitError", () => {
+  assert.ok(/id="paymentError" tabindex="-1" role="alert"/.test(sp), "markup is focusable");
+  const b = body(sp, "showPaymentError");
+  assert.ok(/\.focus\(/.test(b), "focus moves to the alert");
+  assert.ok(/scrollIntoView/.test(b));
+  assert.ok(b.indexOf(".focus(") > b.indexOf("classList.add('visible')"), "focus after it is visible");
 });
 
 test("payment error text and Paid badge meet AA 4.5:1", () => {
