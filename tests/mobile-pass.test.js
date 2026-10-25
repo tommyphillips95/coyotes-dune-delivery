@@ -91,6 +91,23 @@ test("Stripe.js is not render-blocking; initStripe loads it on demand", () => {
   assert.ok(init.indexOf("await loadStripeJs()") > 0 && init.indexOf("await loadStripeJs()") < init.indexOf("typeof Stripe === 'undefined'"));
 });
 
+test("track: ships nav-toggle + navMenu ids so the mobile menu can open", () => {
+  assert.match(TRACK, /id="navToggle"/);
+  assert.match(TRACK, /class="nav-toggle"[^>]*id="navToggle"/);
+  assert.match(TRACK, /aria-label="Toggle navigation"/);
+  assert.match(TRACK, /id="navMenu"/);
+  assert.match(TRACK, /<ul class="nav-menu" id="navMenu">/);
+});
+
+test("track: loads main.js so nav-toggle wiring runs (same as order/home)", () => {
+  assert.match(TRACK, /src="\.\.\/js\/main\.js"/);
+});
+
+test("track: navbar has id=navbar for scroll effect parity with other pages", () => {
+  assert.match(TRACK, /<nav class="navbar" id="navbar">/);
+});
+
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log("ok -", name); }
