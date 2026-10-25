@@ -106,7 +106,7 @@ test("wiring: order + payment use the timeout, Retry re-enters the guarded submi
   assert(/retry\.addEventListener\('click', handlePaymentSubmit\)/.test(pay), "payment Retry restarts at create-payment-intent");
   assert.strictEqual((pay.match(/await stripe\.confirmCardPayment\(/g) || []).length, 1, "single confirmCardPayment call site");
   assert(/if \(paying\) return;/.test(pay));
-  assert(/id="paymentError" role="alert"/.test(pay) && /id="paymentStatusLive" role="status" aria-live="polite"/.test(pay));
+  assert(/id="paymentError" tabindex="-1" role="alert"/.test(pay) && /id="paymentStatusLive" role="status" aria-live="polite"/.test(pay));
 });
 
 (async () => {
