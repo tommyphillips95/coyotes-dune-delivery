@@ -845,12 +845,19 @@
         if (next) { next.textContent = C.confirmationNextSteps(lastBooking); next.hidden = false; }
     }
 
+    function setPostBookChrome(on) {
+        // Card step + confirmation: hide the page hero ("Book a Ride…") and the
+        // "Track an Existing Order" block so they don't sit under the real CTA.
+        if (formContainer) formContainer.classList.toggle('cc-post-book', !!on);
+    }
+
     function showSuccess(ctx) {
         checkoutState.clear(); // order finished: the next booking is a new order
         const c = ctx || {};
         renderConfirmationDetails(c.paid);
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
+        setPostBookChrome(true);
         const quoteBox = document.getElementById('ccLiveQuote');
         if (quoteBox) quoteBox.hidden = true;
         const note = document.getElementById('ccPrefillNote');
@@ -914,7 +921,7 @@
         const termsBox = document.getElementById('termsAgree');
         if (termsBox) termsBox.addEventListener('change', () => { if (termsBox.checked) setTermsError(false); });
         form.addEventListener('submit', submitOrder);
-        window.CoyoteOrder = { showSuccess: showSuccess, goToStep: goToStep, currentQuote: currentQuote };
+        window.CoyoteOrder = { showSuccess: showSuccess, goToStep: goToStep, currentQuote: currentQuote, setPostBookChrome: setPostBookChrome };
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
