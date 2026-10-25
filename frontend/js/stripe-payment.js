@@ -349,6 +349,7 @@
         }
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
+        setPostBookChrome(true);
         orderSuccess.classList.add('active');
     }
 
@@ -554,6 +555,7 @@
         if (old) old.remove();
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
+        setPostBookChrome(true);
 
         const panel = document.createElement('section');
         panel.id = 'paymentStatusPanel';
@@ -634,6 +636,7 @@
         if (old) old.remove();
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
+        setPostBookChrome(true);
 
         const reason = piResult && piResult.data && piResult.data.reason;
         const copy = window.CoyoteCoastal && window.CoyoteCoastal.orderClosedScreen
@@ -800,6 +803,15 @@
         return t ? { Authorization: 'Bearer ' + t } : {};
     }
 
+
+    function setPostBookChrome(on) {
+        if (window.CoyoteOrder && typeof window.CoyoteOrder.setPostBookChrome === 'function') {
+            window.CoyoteOrder.setPostBookChrome(on);
+            return;
+        }
+        if (formContainer) formContainer.classList.toggle('cc-post-book', !!on);
+    }
+
     async function afterOrderCreated(ctx) {
         currentOrderId = ctx.orderId;
         currentOrderNumber = ctx.orderNumber;
@@ -811,6 +823,7 @@
         if (!(await initStripe())) return false; // no publishable key → pay driver
         if (form) form.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
+        setPostBookChrome(true);
         const quoteBox = document.getElementById('ccLiveQuote');
         if (quoteBox) quoteBox.hidden = true;
         createPaymentForm();

@@ -1417,6 +1417,15 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     font-size: 0.95rem;
 }
 
+/* After Place Order (card step / confirmed): drop the "Book a Ride" hero and the
+   secondary track form so they are not confusing chrome under Secure Payment /
+   Order Confirmed. */
+.form-container.cc-post-book > .form-header,
+.form-container.cc-post-book > .tracking-section {
+    display: none;
+}
+
+
 /* Progress Bar */
 .progress-bar {
     display: flex;
