@@ -417,6 +417,7 @@
             const conflict = window.CoyoteCoastal ? window.CoyoteCoastal.paymentConflictKind(piResult) : null;
             if (conflict === 'already_paid') { showAlreadyPaid(); return; }
             if (conflict === 'payment_processing') { showPaymentProcessing(); return; }
+            if (conflict === 'order_closed') { showOrderClosed(piResult); return; }
 
             if (!piResult.ok || !piResult.data?.client_secret) {
                 throw new Error(piResult.data?.error || piResult.error || 'Failed to initialize payment');
@@ -621,6 +622,87 @@
         panel.querySelector('#paymentStatusOrder').textContent = currentOrderNumber || '';
         panel.querySelector('#paymentStatusTrack').href = trackUrl();
         panel.querySelector('#paymentCheckBtn').addEventListener('click', checkPaymentStatus);
+        focusHeading(panel.querySelector('h2'));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Cancelled / refunded while the customer is still on Pay Now (#53 sibling).
+    // Card form must go away — tapping Pay again only re-hits the same 409.
+    function showOrderClosed(piResult) {
+        if (paymentFormContainer) paymentFormContainer.remove();
+        const old = document.getElementById('paymentStatusPanel');
+        if (old) old.remove();
+        if (form) form.style.display = 'none';
+        if (progressBar) progressBar.style.display = 'none';
+
+        const reason = piResult && piResult.data && piResult.data.reason;
+        const copy = window.CoyoteCoastal && window.CoyoteCoastal.orderClosedScreen
+            ? window.CoyoteCoastal.orderClosedScreen(reason)
+            : { title: 'Order Cancelled', message: "This order was cancelled, so it can't be paid." };
+        const serverMsg = piResult && piResult.data && typeof piResult.data.error === 'string'
+            ? piResult.data.error
+            : null;
+        const message = serverMsg || copy.message;
+
+        const panel = document.createElement('section');
+        panel.id = 'paymentStatusPanel';
+        panel.className = 'payment-status-panel';
+        panel.setAttribute('aria-labelledby', 'paymentStatusTitle');
+        panel.setAttribute('data-payment-state', 'order_closed');
+        panel.innerHTML = `
+            <style>
+                .payment-status-panel {
+                    background: var(--warm-white);
+                    border: 1.5px solid var(--border);
+                    border-radius: var(--radius-lg);
+                    padding: 32px 24px;
+                    margin-top: 24px;
+                    text-align: center;
+                    animation: fadeInUp 0.4s ease;
+                }
+                .payment-status-panel h2 {
+                    font-family: var(--font-display);
+                    color: var(--navy);
+                    font-size: 1.4rem;
+                    margin: 12px 0 8px;
+                }
+                .payment-status-panel h2:focus { outline: none; }
+                .payment-status-panel p { color: var(--muted); margin-bottom: 12px; }
+                .payment-status-panel .status-icon {
+                    width: 56px; height: 56px; margin: 0 auto;
+                    border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    background: rgba(201, 168, 124, 0.15); color: var(--sand);
+                }
+                .payment-status-panel .order-id { margin: 8px 0 16px; }
+                .payment-status-panel .status-actions {
+                    display: flex; flex-direction: column; gap: 12px; margin-top: 8px;
+                }
+                .payment-status-panel .status-actions .btn {
+                    min-height: 48px; width: 100%; font-size: 1rem;
+                }
+                @media (min-width: 560px) {
+                    .payment-status-panel .status-actions { flex-direction: row; }
+                    .payment-status-panel .status-actions > * { flex: 1; }
+                }
+            </style>
+            <div class="status-icon" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+            </div>
+            <h2 id="paymentStatusTitle"></h2>
+            <p class="payment-status-msg" id="paymentStatusMsg" role="status" aria-live="polite"></p>
+            <div class="order-id" id="paymentStatusOrder"></div>
+            <div class="status-actions">
+                <a class="btn btn-secondary" id="paymentStatusTrack" href="/track/">Track this order</a>
+            </div>
+        `;
+        if (form && form.parentNode) form.parentNode.insertBefore(panel, form.nextSibling);
+        panel.querySelector('#paymentStatusTitle').textContent = copy.title;
+        panel.querySelector('#paymentStatusMsg').textContent = message;
+        panel.querySelector('#paymentStatusOrder').textContent = currentOrderNumber || '';
+        panel.querySelector('#paymentStatusTrack').href = trackUrl();
         focusHeading(panel.querySelector('h2'));
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }

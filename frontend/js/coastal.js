@@ -434,12 +434,29 @@
 
   // /api/create-payment-intent answers 409 with a machine-readable code when
   // the order must NOT be charged again. Returns "already_paid",
-  // "payment_processing", or null (anything else: normal error handling).
+  // "payment_processing", "order_closed", or null (anything else: normal error handling).
   function paymentConflictKind(result) {
     if (!result || result.ok) return null;
     if (Number(result.status) !== 409) return null;
     var code = result.data && typeof result.data === "object" ? result.data.code : null;
-    return code === "already_paid" || code === "payment_processing" ? code : null;
+    return code === "already_paid" || code === "payment_processing" || code === "order_closed"
+      ? code
+      : null;
+  }
+
+  // Titles + fallback copy for the order_closed checkout screen. Prefer the
+  // server's error string when present; these match create-payment-intent.js.
+  function orderClosedScreen(reason) {
+    if (reason === "refunded") {
+      return {
+        title: "Payment Refunded",
+        message: "This order's payment was refunded, so it can't be paid again.",
+      };
+    }
+    return {
+      title: "Order Cancelled",
+      message: "This order was cancelled, so it can't be paid.",
+    };
   }
 
   // Read-only "check payment status" on the processing screen uses the
@@ -613,6 +630,7 @@
   api.orderErrorMessage = orderErrorMessage;
   api.trackErrorMessage = trackErrorMessage;
   api.paymentConflictKind = paymentConflictKind;
+  api.orderClosedScreen = orderClosedScreen;
   api.paymentStatusKind = paymentStatusKind;
   api.paymentBadge = paymentBadge;
   api.statusLabel = statusLabel;

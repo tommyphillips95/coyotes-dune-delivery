@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Checkout "already paid" / "payment processing" screens (#53 409 codes) and
+ * Checkout "already paid" / "payment processing" / "order closed" screens (#53 409 codes) and
  * the LAUNCH.md Stripe section staying in sync with the code. No network.
  */
 "use strict";
@@ -18,12 +18,23 @@ const test = (name, fn) => tests.push([name, fn]);
 test("paymentConflictKind: only a 409 with a known code counts", () => {
   assert.strictEqual(C.paymentConflictKind({ ok: false, status: 409, data: { code: "already_paid", error: "This order is already paid." } }), "already_paid");
   assert.strictEqual(C.paymentConflictKind({ ok: false, status: 409, data: { code: "payment_processing" } }), "payment_processing");
+  assert.strictEqual(C.paymentConflictKind({ ok: false, status: 409, data: { code: "order_closed", reason: "cancelled" } }), "order_closed");
   assert.strictEqual(C.paymentConflictKind({ ok: false, status: 409, data: { error: "This order is already paid." } }), null, "message text alone is not trusted");
   assert.strictEqual(C.paymentConflictKind({ ok: false, status: 400, data: { code: "already_paid" } }), null);
   assert.strictEqual(C.paymentConflictKind({ ok: false, status: 409, data: { code: "something_else" } }), null);
   assert.strictEqual(C.paymentConflictKind({ ok: false, status: 409, data: "<html>" }), null);
   assert.strictEqual(C.paymentConflictKind({ ok: true, status: 200, data: { code: "already_paid" } }), null);
   assert.strictEqual(C.paymentConflictKind(null), null);
+});
+
+test("orderClosedScreen copy matches create-payment-intent (cancelled + refunded)", () => {
+  const c = C.orderClosedScreen("cancelled");
+  assert.strictEqual(c.title, "Order Cancelled");
+  assert.strictEqual(c.message, "This order was cancelled, so it can't be paid.");
+  const r = C.orderClosedScreen("refunded");
+  assert.strictEqual(r.title, "Payment Refunded");
+  assert.strictEqual(r.message, "This order's payment was refunded, so it can't be paid again.");
+  assert.strictEqual(C.orderClosedScreen(null).title, "Order Cancelled");
 });
 
 test("paymentStatusKind maps the order row for the read-only status check", () => {
@@ -55,6 +66,7 @@ test("payment step branches on the 409 code BEFORE treating it as an error", () 
   assert.ok(branch < submit.indexOf("if (!piResult.ok || !piResult.data?.client_secret)"));
   assert.ok(/conflict === 'already_paid'\) \{ showAlreadyPaid\(\); return; \}/.test(submit));
   assert.ok(/conflict === 'payment_processing'\) \{ showPaymentProcessing\(\); return; \}/.test(submit));
+  assert.ok(/conflict === 'order_closed'\) \{ showOrderClosed\(piResult\); return; \}/.test(submit), "cancelled/refunded must leave the card form");
   assert.ok(/paymentIntent\.status === 'processing'\) \{[\s\S]*?showPaymentProcessing\(\)/.test(submit), "card 'processing' shows the wait screen, not success");
 });
 
@@ -83,6 +95,20 @@ test("'Check payment status' is read-only: GET /api/get-orders, never create-pay
   assert.ok(/method: 'GET'/.test(body));
   assert.ok(!/create-payment-intent|confirmCardPayment/.test(body));
   assert.ok(/Bearer ' \+ currentTrackingToken/.test(body));
+});
+
+test("order_closed screen: no card form, track link, heading focused, live status", () => {
+  const body = fnBody("showOrderClosed");
+  assert.ok(/paymentFormContainer\.remove\(\)/.test(body));
+  assert.ok(/data-payment-state', 'order_closed'/.test(body));
+  assert.ok(/role="status" aria-live="polite"/.test(body));
+  assert.ok(/id="paymentStatusTrack"/.test(body));
+  assert.ok(/Track this order/.test(body));
+  assert.ok(/focusHeading\(/.test(body));
+  assert.ok(/min-height: 48px/.test(body), "tap targets");
+  assert.ok(/orderClosedScreen/.test(body), "titles/copy come from coastal helper");
+  assert.ok(/piResult\.data\.error/.test(body), "prefer server error string when present");
+  assert.ok(!/create-payment-intent|confirmCardPayment/.test(body));
 });
 
 test("LAUNCH.md webhook events == events payment-webhook.js handles", () => {
