@@ -29,6 +29,31 @@
     box.textContent = text || "";
     box.hidden = !text;
   }
+  // Mirror order/apply: flag empty lookup fields and point SR at #lookupMessage
+  // only while that message is showing (describedby is read even when hidden).
+  function linkLookupMessage(input, show) {
+    // Real inputs always have these; some vm test mocks omit them.
+    if (!input || typeof input.getAttribute !== "function" || typeof input.setAttribute !== "function") return;
+    const ids = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter((x) => x && x !== "lookupMessage");
+    if (show) ids.push("lookupMessage");
+    if (ids.length) input.setAttribute("aria-describedby", ids.join(" "));
+    else if (typeof input.removeAttribute === "function") input.removeAttribute("aria-describedby");
+  }
+  function setLookupInvalid(orderMissing, phoneMissing) {
+    const num = document.getElementById("lookupOrderNum");
+    const phone = document.getElementById("lookupPhone");
+    if (num && typeof num.setAttribute === "function") {
+      num.setAttribute("aria-invalid", orderMissing ? "true" : "false");
+      linkLookupMessage(num, !!orderMissing);
+    }
+    if (phone && typeof phone.setAttribute === "function") {
+      phone.setAttribute("aria-invalid", phoneMissing ? "true" : "false");
+      linkLookupMessage(phone, !!phoneMissing);
+    }
+  }
+  function clearLookupInvalid() {
+    setLookupInvalid(false, false);
+  }
   function showCard(id) { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); }
   function defaultCenter(order) {
     if (order && order.pickup_lat && order.pickup_lng) return [parseFloat(order.pickup_lat), parseFloat(order.pickup_lng)];
@@ -380,11 +405,17 @@
     lookupBtn.disabled = true;
     lookupBtn.textContent = "Tracking...";
     say("");
+    clearLookupInvalid();
     try {
       orderNumber = (orderNumber || "").toUpperCase();
       let token = C ? C.getTrackingToken(orderNumber) : null;
       if (!token) {
-        if (!orderNumber || !phone) { say("Enter both your order number and the phone number used for the order."); (orderNumber ? document.getElementById("lookupPhone") : document.getElementById("lookupOrderNum")).focus(); return; }
+        if (!orderNumber || !phone) {
+          setLookupInvalid(!orderNumber, !phone);
+          say("Enter both your order number and the phone number used for the order.");
+          (orderNumber ? document.getElementById("lookupPhone") : document.getElementById("lookupOrderNum")).focus();
+          return;
+        }
         token = await mintToken(orderNumber, phone);
       }
       const UNAVAILABLE = "We couldn't look up your order right now. Your order is not affected. Tap Track Order to try again in a minute.";

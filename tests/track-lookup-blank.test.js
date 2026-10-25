@@ -19,10 +19,15 @@ const BOTH = /Enter both your order number and the phone number used for the ord
 
 function el(id) {
   const classes = new Set();
+  const attrs = Object.create(null);
   return {
     id, textContent: "", value: "", hidden: false, disabled: false, listeners: {},
     classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c), toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) },
     addEventListener(t, f) { this.listeners[t] = f; }, focus() { this._focused = true; },
+    setAttribute(k, v) { attrs[k] = String(v); },
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
+    removeAttribute(k) { delete attrs[k]; },
+    hasAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k); },
   };
 }
 
@@ -71,6 +76,10 @@ test("both blank: message, no fetch, Track Order re-enabled", async () => {
   assert.strictEqual(t.els.lookupBtn.disabled, false);
   assert.strictEqual(t.els.lookupBtn.textContent, "Track Order");
   assert.ok(t.els.lookupOrderNum._focused, "focus order number when both blank");
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-invalid"), "true");
+  assert.strictEqual(t.els.lookupPhone.getAttribute("aria-invalid"), "true");
+  assert.match(t.els.lookupOrderNum.getAttribute("aria-describedby") || "", /lookupMessage/);
+  assert.match(t.els.lookupPhone.getAttribute("aria-describedby") || "", /lookupMessage/);
 });
 
 test("order number only: same message, focus phone, no fetch", async () => {
@@ -79,6 +88,10 @@ test("order number only: same message, focus phone, no fetch", async () => {
   assert.match(t.msg(), BOTH);
   assert.deepStrictEqual(t.calls, []);
   assert.ok(t.els.lookupPhone._focused, "focus phone when order is present");
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-invalid"), "false");
+  assert.strictEqual(t.els.lookupPhone.getAttribute("aria-invalid"), "true");
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-describedby"), null);
+  assert.match(t.els.lookupPhone.getAttribute("aria-describedby") || "", /lookupMessage/);
 });
 
 test("phone only: same message, focus order number, no fetch", async () => {
@@ -87,6 +100,23 @@ test("phone only: same message, focus order number, no fetch", async () => {
   assert.match(t.msg(), BOTH);
   assert.deepStrictEqual(t.calls, []);
   assert.ok(t.els.lookupOrderNum._focused);
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-invalid"), "true");
+  assert.strictEqual(t.els.lookupPhone.getAttribute("aria-invalid"), "false");
+  assert.match(t.els.lookupOrderNum.getAttribute("aria-describedby") || "", /lookupMessage/);
+  assert.strictEqual(t.els.lookupPhone.getAttribute("aria-describedby"), null);
+});
+
+test("blank then retry with both filled clears aria-invalid before fetch", async () => {
+  const t = load();
+  await t.submit("", "");
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-invalid"), "true");
+  // Next submit will hit fetch (throws in this harness) after clearing invalid flags.
+  await t.submit("CDD-ABC", "3615550100");
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-invalid"), "false");
+  assert.strictEqual(t.els.lookupPhone.getAttribute("aria-invalid"), "false");
+  assert.strictEqual(t.els.lookupOrderNum.getAttribute("aria-describedby"), null);
+  assert.strictEqual(t.els.lookupPhone.getAttribute("aria-describedby"), null);
+  assert.ok(t.calls.length >= 1, "fetch attempted after fields filled");
 });
 
 (async () => {
