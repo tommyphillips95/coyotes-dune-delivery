@@ -50,6 +50,13 @@ sandbox credentials, and optional Firebase test project service-account JSON.
 No usable keys or default passwords are supplied. Blank keys mean those API
 integrations cannot run; this environment does not mock them.
 
+**Firebase / GA4 stay off by default.** Browser placeholders (`YOUR_FIREBASE_*`,
+`G-XXXXXXXXXX`) must not download the vendor SDK or hit Google. Leave
+`FIREBASE_*` / GA4 IDs blank in Netlify until a real project is configured;
+do not "turn on" analytics as part of ordinary launch SQL or deploy work.
+Production credential rotation is Tommy-only — see LAUNCH.md **Credential
+rotation (issue #9)**.
+
 Existing browser-side service configuration is separate and must be reviewed
 before submitting orders, applications, payments, or sending notifications.
 The environment setup does not provision a database, import `schema.sql`,
