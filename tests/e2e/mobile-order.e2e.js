@@ -65,6 +65,23 @@ async function track(p, num, phone) {
 const tests = [];
 const test = (n, f) => tests.push([n, f]);
 
+async function assertBookingChromeHidden(p) {
+  const state = await p.evaluate(() => {
+    const fc = document.getElementById("formContainer");
+    const hdr = document.querySelector(".form-header");
+    const track = document.getElementById("trackingSection");
+    return {
+      postBook: !!(fc && fc.classList.contains("cc-post-book")),
+      hdr: hdr ? getComputedStyle(hdr).display : null,
+      track: track ? getComputedStyle(track).display : null,
+    };
+  });
+  assert.strictEqual(state.postBook, true, "cc-post-book on formContainer");
+  assert.strictEqual(state.hdr, "none", "form-header display:none after Place Order");
+  assert.strictEqual(state.track, "none", "trackingSection display:none after Place Order");
+}
+
+
 test("card checkout: order -> pay -> confirmation -> track shows Paid", async () => {
   const p = await page();
   await fillOrder(p); await noOverflow(p);
@@ -74,6 +91,7 @@ test("card checkout: order -> pay -> confirmation -> track shows Paid", async ()
   await p.waitForSelector("#orderSuccess", { state: "visible", timeout: 15000 });
   const num = (await text(p, "#orderIdDisplay")) || "";
   assert.ok(/^CDD-/.test(num), "order number shown: " + num);
+  await assertBookingChromeHidden(p);
   await noOverflow(p); await shot(p, "e2e-card-success");
   await p.goto(B + "/track/?order=" + encodeURIComponent(num));
   await p.waitForFunction(() => /Paid/.test((document.getElementById("detailPayment") || {}).textContent || ""), null, { timeout: 15000 });
@@ -90,6 +108,21 @@ test("card declined: inline error, Pay Now usable again", async () => {
   await p.waitForFunction(() => /declined/.test(document.getElementById("paymentError").textContent));
   assert.strictEqual(await p.isEnabled("#paymentSubmitBtn"), true);
   await noOverflow(p); await shot(p, "e2e-card-declined");
+});
+
+
+test("pay later: booking chrome stays hidden on Order Confirmed", async () => {
+  const p = await page();
+  await fillOrder(p);
+  await p.click("#submitBtn");
+  await p.waitForSelector("#paymentCancelBtn", { timeout: 15000 });
+  await p.click("#paymentCancelBtn");
+  await p.waitForSelector("#orderSuccess", { state: "visible", timeout: 15000 });
+  await assertBookingChromeHidden(p);
+  const title = await text(p, "#orderSuccess h2");
+  assert.match(title || "", /Order Confirmed/);
+  await noOverflow(p); await shot(p, "e2e-paylater-chrome-hidden");
+  assert.deepStrictEqual(p.errors, []);
 });
 
 test("validation: past date, bad ZIP, terms unchecked", async () => {

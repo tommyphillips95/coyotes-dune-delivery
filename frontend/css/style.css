@@ -1751,6 +1751,7 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
 /* Summary table */
 .summary-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     margin-bottom: 28px;
 }
@@ -1760,6 +1761,8 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     padding: 10px 14px;
     text-align: left;
     border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .summary-table th {
@@ -1825,6 +1828,8 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
     font-size: 1.7rem;
     color: var(--navy);
     margin-bottom: 10px;
+    overflow-wrap: anywhere;
+    max-width: 100%;
 }
 
 .form-success p {
@@ -1935,4 +1940,8 @@ html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
   .footer-brand .logo { min-width: 0; }
   .footer-brand .logo-text { white-space: normal; overflow-wrap: break-word; min-width: 0; }
   .footer-links a { overflow-wrap: anywhere; }
+  /* Confirm + review at 200% text: titles and summary cells wrap instead of clipping. */
+  .form-success h2 { overflow-wrap: anywhere; max-width: 100%; }
+  .summary-table { table-layout: fixed; width: 100%; }
+  .summary-table th, .summary-table td { overflow-wrap: anywhere; word-break: break-word; }
 }

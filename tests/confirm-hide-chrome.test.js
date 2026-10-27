@@ -57,6 +57,22 @@ test("payment processing + order_closed panels turn on cc-post-book", () => {
   assert.match(body(sp, "showOrderClosed"), /setPostBookChrome\(true\)/);
 });
 
+test("pay-later + card success both go through finish() → showSuccess (chrome hide)", () => {
+  const fin = body(sp, "finish");
+  assert.match(fin, /CoyoteOrder\.showSuccess/);
+  assert.match(fin, /setPostBookChrome\(true\)/);
+  assert.match(body(sp, "showPaymentSkippedSuccess"), /finish\(/);
+  assert.match(body(sp, "showPaymentSuccess"), /finish\(/);
+});
+
+test("CSS rule sets display:none on both form-header and tracking-section", () => {
+  const m = css.match(
+    /\.form-container\.cc-post-book\s*>\s*\.form-header\s*,\s*\.form-container\.cc-post-book\s*>\s*\.tracking-section\s*\{[^}]*display:\s*none/
+  );
+  assert.ok(m, "single rule must hide both .form-header and .tracking-section");
+});
+
+
 let failed = 0;
 for (const [n, f] of tests) {
   try { f(); console.log("ok -", n); }
