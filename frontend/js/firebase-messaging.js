@@ -29,6 +29,7 @@
   // Placeholder config: skip init (and the service-worker registration).
   const CONFIGURED = !/^(YOUR_|$)/.test(String(FIREBASE_CONFIG.apiKey || '')) &&
     !/^(YOUR_|$)/.test(String(FIREBASE_CONFIG.projectId || '')) && !/^(YOUR_|$)/.test(String(VAPID_KEY || ''));
+  window.__CDD_FIREBASE_MESSAGING_CONFIGURED__ = CONFIGURED;
 
   // ── Internal state ──
   let messaging = null;
@@ -123,17 +124,39 @@
     }
   }
 
+  // Load Firebase app + messaging SDK only when config is real (avoids ~CDN hit + API_KEY_INVALID on placeholders).
+  function loadFirebaseSdk() {
+    return new Promise((resolve, reject) => {
+      if (typeof firebase !== 'undefined' && firebase.messaging) {
+        resolve();
+        return;
+      }
+      const appScript = document.createElement('script');
+      appScript.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js';
+      appScript.onload = function () {
+        const msgScript = document.createElement('script');
+        msgScript.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js';
+        msgScript.onload = () => resolve();
+        msgScript.onerror = () => reject(new Error('firebase-messaging-compat failed to load'));
+        document.head.appendChild(msgScript);
+      };
+      appScript.onerror = () => reject(new Error('firebase-app-compat failed to load'));
+      document.head.appendChild(appScript);
+    });
+  }
+
   // ── Initialize Firebase Messaging ──
   async function initMessaging() {
+    if (!CONFIGURED) return false;
     injectStyles();
 
-    // Check if Firebase SDK is loaded
-    if (typeof firebase === 'undefined') {
-      console.warn('[FCM] Firebase SDK not loaded. Skipping messaging initialization.');
-      return false;
-    }
-
     try {
+      await loadFirebaseSdk();
+      if (typeof firebase === 'undefined') {
+        console.warn('[FCM] Firebase SDK not loaded. Skipping messaging initialization.');
+        return false;
+      }
+
       firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
       messaging = firebase.messaging();
       console.log('[FCM] Firebase Messaging initialized.');
@@ -245,8 +268,8 @@
     getCurrentToken: () => currentToken || localStorage.getItem('fcm_token'),
   };
 
-  // Auto-init on DOM ready if Firebase SDK is present and configured
-  const autoInit = () => { if (CONFIGURED && typeof firebase !== 'undefined') initMessaging(); };
+  // Auto-init on DOM ready only when configured (SDK is loaded by initMessaging).
+  const autoInit = () => { if (CONFIGURED) initMessaging(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoInit);
   else autoInit();
 })();

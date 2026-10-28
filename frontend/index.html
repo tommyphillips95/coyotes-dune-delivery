@@ -20,10 +20,7 @@
     (function (w) { var q = w.__cddAnalyticsQueue = w.__cddAnalyticsQueue || []; ['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent', 'firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties'].forEach(function (n) { if (!w[n]) w[n] = function () { q.push([n, Array.prototype.slice.call(arguments)]); }; }); })(window);</script>
     <script defer src="js/analytics.js"></script>
     <script defer src="js/firebase-analytics.js"></script>
-    <!-- Firebase SDK (required for FCM) -->
-    <!-- defer: never block first paint; firebase-messaging.js (also deferred) runs after them -->
-    <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
+    <!-- FCM SDK is loaded by js/firebase-messaging.js only when real Firebase config is set (not YOUR_* placeholders). -->
 </head>
 <body>
     <!-- Navigation -->
