@@ -1,14 +1,20 @@
 /**
  * Netlify Function: Update Order Status (with SMS notifications)
  * PATCH /api/orders/:id
- * Body: { status, note, driver_id }
+ * Body: { id, status?, note?, driver_id?, confirm? }  (admin JWT)
+ * Validation + audit log live in _order-admin.js (shared with the admin router).
  *
- * Sends SMS notifications on key status changes:
- * - assigned: "Your driver [Name] is on the way! Track: [URL]"
+ * Customer SMS:
+ * - assigned: sent by _order-admin.changeOrder (_assign-sms.js), same as the
+ *   admin dashboard: driver first name + SITE_ORIGIN/track/?order=… link, once
  * - completed: "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!"
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
+const { requireAdmin, jsonError } = require('./_auth');
+const { changeOrder, ruleResponse, PAYMENT_FIELDS } = require('./_order-admin');
 
 /**
  * Helper: Send SMS via Twilio
@@ -53,11 +59,10 @@ async function logSMS(supabase, { order_id, phone_number, message, status, twili
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'PATCH, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -67,117 +72,40 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  // Verify admin token
+  // Admin JWT only (401 no/invalid token, 403 other roles).
+  let admin;
   try {
-    const jwt = require('jsonwebtoken');
-    const token = (event.headers.authorization || '').replace('Bearer ', '');
-    if (!token || !process.env.JWT_SECRET) throw new Error('Unauthorized');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'admin') throw new Error('Admin access required');
+    admin = requireAdmin(event);
   } catch (err) {
-    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    return jsonError(headers, err);
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    let body;
+    try { body = JSON.parse(event.body || '{}'); } catch (e) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
+    }
     const orderId = body.id || body.order_id;
-
-    if (!orderId) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Order ID is required' }),
-      };
-    }
-
-    if (!body.status) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Status is required' }),
-      };
-    }
-
-    const validStatuses = ['pending', 'assigned', 'in_progress', 'completed', 'cancelled'];
-    if (!validStatuses.includes(body.status)) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }),
-      };
-    }
-
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_KEY
     );
 
-    // ── Fetch current order to check status transition ──────
-    const { data: currentOrder, error: fetchError } = await supabase
-      .from('orders')
-      .select('id, status, customer_id, order_number')
-      .eq('id', orderId)
-      .single();
-
-    if (fetchError) throw fetchError;
-
-    if (!currentOrder) {
-      return {
-        statusCode: 404,
-        headers,
-        body: JSON.stringify({ error: 'Order not found' }),
-      };
+    // Same rules as PUT /api/admin/orders/:id: transition map, driver
+    // eligibility, no payment fields, audit log with the admin from the JWT
+    // (body.changed_by is ignored).
+    const change = { status: body.status, driver_id: body.driver_id, note: body.note, confirm: body.confirm };
+    PAYMENT_FIELDS.forEach((f) => { if (Object.prototype.hasOwnProperty.call(body, f)) change[f] = body[f]; });
+    let result;
+    try {
+      result = await changeOrder(supabase, orderId, change, admin.user || 'admin');
+    } catch (e) {
+      const rule = ruleResponse(headers, e);
+      if (rule) return rule;
+      throw e;
     }
-
-    // Prevent duplicate notifications for same status
-    const isStatusChange = currentOrder.status !== body.status;
-
-    // Build update object
-    const updateData = {
-      status: body.status,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (body.driver_id) {
-      updateData.driver_id = body.driver_id;
-      updateData.assigned_at = new Date().toISOString();
-    }
-
-    if (body.final_price !== undefined) {
-      updateData.final_price = parseFloat(body.final_price);
-    }
-
-    if (body.status === 'completed') {
-      updateData.completed_at = new Date().toISOString();
-    }
-
-    // Update order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .update(updateData)
-      .eq('id', orderId)
-      .select()
-      .single();
-
-    if (orderError) throw orderError;
-
-    if (!order) {
-      return {
-        statusCode: 404,
-        headers,
-        body: JSON.stringify({ error: 'Order not found' }),
-      };
-    }
-
-    // Log status change
-    await supabase
-      .from('order_status_logs')
-      .insert([{
-        order_id: orderId,
-        status: body.status,
-        note: body.note || `Status updated to ${body.status}`,
-        changed_by: body.changed_by || 'system',
-      }]);
+    const order = result.order;
+    const isStatusChange = result.from !== result.to;
 
     // ── Send SMS notifications on status changes ──────────────
     const smsEnabled = !!(
@@ -186,7 +114,7 @@ exports.handler = async (event) => {
       process.env.TWILIO_PHONE_NUMBER
     );
 
-    if (smsEnabled && isStatusChange) {
+    if (smsEnabled && isStatusChange && order.customer_id) {
       // Fetch customer phone
       const { data: customer } = await supabase
         .from('customers')
@@ -199,24 +127,9 @@ exports.handler = async (event) => {
       if (customerPhone && customerPhone.length >= 10) {
         let smsMessage = null;
 
-        if (body.status === 'assigned') {
-          // Fetch driver name if driver_id is provided
-          let driverName = 'Your driver';
-          if (body.driver_id) {
-            const { data: driver } = await supabase
-              .from('applications')
-              .select('first_name, last_name')
-              .eq('id', body.driver_id)
-              .maybeSingle();
-            if (driver) {
-              driverName = `${driver.first_name} ${driver.last_name}`;
-            }
-          }
-          const trackUrl = `https://coyotes-dune-delivery.netlify.app/order/?track=${order.order_number}`;
-          smsMessage = `Your driver ${driverName} is on the way! Track your order: ${trackUrl} — Coyote's Dune Delivery`;
-        }
+        // 'assigned' is texted by changeOrder (_assign-sms.js), not here.
 
-        if (body.status === 'completed') {
+        if (result.to === 'completed') {
           smsMessage = `Your delivery is complete. Thanks for choosing Coyote's Dune Delivery! — Coyote's Dune Delivery`;
         }
 
@@ -227,7 +140,7 @@ exports.handler = async (event) => {
           });
 
           await logSMS(supabase, {
-            order_id: orderId,
+            order_id: order.id,
             phone_number: customerPhone,
             message: smsMessage,
             status: smsResult.success ? 'sent' : 'failed',
@@ -241,14 +154,9 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, data: order }),
+      body: JSON.stringify({ success: true, data: order, warnings: result.warnings }),
     };
   } catch (err) {
-    console.error('Error updating order:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to update order', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to update order', 'update-order');
   }
 };

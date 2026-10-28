@@ -3,9 +3,13 @@
  * POST /api/create-order
  */
 
+const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { headers: corsHeaders } = require("./_cors");
+const rateLimit = require("./_rate-limit");
+const { phoneKey, samePhone, phoneVariants } = require("./_phone");
 const { priceQuote } = require("./zones");
+const { checkTrip } = require("./_service-area");
 const { issueTrackingToken } = require("./_auth");
 const { weatherShutdownActive, weatherShutdownPayload } = require("./_weather");
 
@@ -14,6 +18,264 @@ function generateOrderNumber() {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 5).toUpperCase();
   return `${prefix}-${timestamp}-${random}`;
+}
+
+// ── Server-side input checks (the browser checks too, but is not trusted) ──
+const ZIP_RE = /^\d{5}(-?\d{4})?$/; // 5-digit ZIP, optional +4 (matches the order form)
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+const SERVICE_TZ = "America/Chicago";
+
+function isValidZip(zip) {
+  return ZIP_RE.test(String(zip == null ? "" : zip).trim());
+}
+
+/** Wall-clock "YYYY-MM-DDTHH:MM" in America/Chicago for an instant. */
+function chicagoWallClock(now) {
+  const parts = {};
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: SERVICE_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now || new Date()).forEach((p) => { parts[p.type] = p.value; });
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+// ISO 8601 with an explicit offset (or Z), e.g. "2026-10-18T21:30:00-05:00".
+const ISO_OFFSET_RE = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d{1,3})?)?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+
+/**
+ * Resolve the requested schedule.
+ *   { asap: true }                      -> ASAP (no schedule, or "later" missing date/time)
+ *   { date, time }                      -> Central wall-clock date/time to store
+ *   { error }                           -> 400 message
+ * scheduled_at (explicit offset) wins over scheduled_date/time, so a phone set
+ * to another zone can't be misread as Central. Without it, date/time are
+ * taken as Central wall clock (the order form's convention).
+ */
+function resolveSchedule(body, now) {
+  if (!body || body.schedule !== "later") return { asap: true };
+  const at = body.scheduled_at == null ? "" : String(body.scheduled_at).trim();
+  if (at) {
+    const m = ISO_OFFSET_RE.exec(at);
+    const instant = m ? new Date(at) : null;
+    if (!m || Number.isNaN(instant.getTime())) return { error: "Please choose a valid date and time." };
+    // Reject impossible calendar dates (Date() would roll 2026-02-30 to March).
+    const check = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (check.getUTCMonth() !== +m[2] - 1 || check.getUTCDate() !== +m[3]) return { error: "Please choose a valid date and time." };
+    if (instant.getTime() < Math.floor((now || new Date()).getTime() / 60000) * 60000) {
+      return { error: "That pickup time has already passed. Please choose a future time." };
+    }
+    const [date, time] = chicagoWallClock(instant).split("T");
+    return { date, time };
+  }
+  if (!body.scheduled_date || !body.scheduled_time) return { asap: true };
+  const bad = scheduleError(body.scheduled_date, body.scheduled_time, now);
+  if (bad) return { error: bad };
+  return { date: String(body.scheduled_date).trim(), time: String(body.scheduled_time).trim() };
+}
+
+/** Returns an error string for a bad scheduled date/time, or null if OK. */
+function scheduleError(date, time, now) {
+  const d = String(date || "").trim();
+  const t = String(time || "").trim();
+  if (!DATE_RE.test(d) || !TIME_RE.test(t)) return "Please choose a valid date and time.";
+  const dt = new Date(d + "T00:00:00Z");
+  if (Number.isNaN(dt.getTime()) || dt.toISOString().slice(0, 10) !== d) return "Please choose a valid date and time.";
+  if (`${d}T${t.slice(0, 5)}` < chicagoWallClock(now)) return "That pickup time has already passed. Please choose a future time.";
+  return null;
+}
+
+// ── Idempotency (one order per checkout attempt) ──
+// The order form sends idempotency_key (a random UUID) and reuses it when the
+// customer retries after a dropped connection. A repeat key returns the
+// original order instead of creating a second one. Needs
+// schema/order_idempotency.sql; until it is applied we log and create normally.
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
+
+function isMissingIdempotencyColumn(err) {
+  if (!err) return false;
+  const msg = String(err.message || "");
+  return err.code === "42703" || err.code === "PGRST204" || (/idempotency_/.test(msg) && /column/i.test(msg));
+}
+
+function isUniqueViolation(err) {
+  return !!err && err.code === "23505";
+}
+
+// Service types the order form sends (input[name="serviceType"] on /order/).
+const SERVICE_TYPES = ["ride", "package_delivery"];
+const text = (v) => (typeof v === "string" || typeof v === "number" ? String(v).trim() : "");
+const bad = (headers, error, extra) => ({ statusCode: 400, headers, body: JSON.stringify(Object.assign({ error }, extra || {})) });
+const blankValue = (v) => v == null || (typeof v === "string" && v.trim() === "");
+// Passenger count: absent/blank -> null (default 1); otherwise a whole number >= 1, else undefined (invalid).
+function parseCount(v) {
+  if (blankValue(v)) return null;
+  const s = String(v).trim();
+  if (typeof v === "boolean" || !/^\d+$/.test(s) || Number(s) < 1) return undefined;
+  return Number(s);
+}
+// Tip: absent/blank -> 0; otherwise a finite number >= 0, else undefined (invalid).
+function parseTip(v) {
+  if (blankValue(v)) return 0;
+  if (typeof v === "boolean") return undefined;
+  const n = Number(String(v).trim());
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n;
+}
+
+const digits = (p) => String(p || "").replace(/\D/g, "");
+
+// Fields that define "the same order". A reused key must come with the same
+// values (after trimming; phone as digits, email lowercased) or it is refused.
+// scheduled_at is listed so an explicit-offset schedule is covered once sent.
+const PAYLOAD_FIELDS = [
+  "first_name", "last_name", "phone", "email", "service_type",
+  "pickup_address", "pickup_city", "pickup_zip",
+  "dropoff_address", "dropoff_city", "dropoff_zip",
+  "schedule", "scheduled_date", "scheduled_time", "scheduled_at",
+  "passenger_count", "package_size", "package_description", "special_instructions", "tip_amount",
+];
+
+function normalizeField(field, value) {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (field === "phone") return digits(s);
+  if (field === "email") return s.toLowerCase();
+  return s;
+}
+
+/** sha256 hex of the order-defining fields, stored next to the idempotency key. */
+// The 78418 island/mainland answers count too, but only when sent, so hashes
+// stored before they existed (no answer) still match a retry of that checkout.
+const OPTIONAL_PAYLOAD_FIELDS = ["pickup_zip_area", "dropoff_zip_area"];
+
+function orderPayloadHash(body) {
+  const canon = PAYLOAD_FIELDS.map((f) => [f, normalizeField(f, body && body[f])]);
+  OPTIONAL_PAYLOAD_FIELDS.forEach((f) => {
+    const v = normalizeField(f, body && body[f]);
+    if (v != null) canon.push([f, v.toLowerCase()]);
+  });
+  return crypto.createHash("sha256").update(JSON.stringify(canon)).digest("hex");
+}
+
+/** { order } when the key was seen, { order: null } when not, { unsupported: true } before the migration. */
+async function findOrderByIdempotencyKey(supabase, key) {
+  const { data, error } = await supabase.from("orders").select("*").eq("idempotency_key", key).maybeSingle();
+  if (error) {
+    if (isMissingIdempotencyColumn(error)) {
+      console.warn("[create-order] orders.idempotency_key missing; run schema/order_idempotency.sql");
+      return { unsupported: true, order: null };
+    }
+    throw error;
+  }
+  return { order: data || null };
+}
+
+/** Same response shape as a fresh create, for a repeated key from the same customer. */
+async function replayResponse(supabase, headers, order, body) {
+  const phone = body.phone;
+  const { data: customer, error } = await supabase.from("customers").select("id, phone").eq("id", order.customer_id).maybeSingle();
+  if (error) throw error;
+  if (!customer || digits(customer.phone) !== digits(phone)) {
+    // Not the same customer: reveal nothing about the order.
+    return { statusCode: 409, headers, body: JSON.stringify({ code: "checkout_used", error: "This checkout was already used with a different phone number. Start a new order to continue." }) };
+  }
+  // Same key, different order details: never create a second order or apply
+  // the edits. The first attempt DID create this order (e.g. its response was
+  // lost to a timeout), so tell the customer about it. Safe to return: the key
+  // is a random UUID only the browser that made it holds, and the phone above
+  // matched the order's customer. Only this order's own summary is returned.
+  // (Rows saved before the hash column existed have no hash; the phone check above still applies.)
+  if (order.idempotency_payload_hash && order.idempotency_payload_hash !== orderPayloadHash(body)) {
+    const trackingToken = issueTrackingToken(order);
+    return { statusCode: 422, headers, body: JSON.stringify({
+      code: "checkout_changed",
+      error: "This checkout changed after it was sent. Your first order already went through with the details you sent first.",
+      existingOrder: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        status: order.status,
+        paymentStatus: order.payment_status || null,
+        estimatedPrice: order.estimated_price,
+        pickupCity: order.pickup_city,
+        dropoffCity: order.dropoff_city || null,
+        isAsap: order.is_asap !== false,
+        scheduledDate: order.scheduled_date || null,
+        scheduledTime: order.scheduled_time || null,
+        trackingToken: trackingToken || undefined,
+      },
+    }) };
+  }
+  const priced = priceQuote(order.pickup_city, order.dropoff_city || order.pickup_city, {
+    service_type: order.service_type,
+    passenger_count: order.passenger_count,
+    package_size: order.package_size,
+  });
+  const trackingToken = issueTrackingToken(order);
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify({
+      success: true,
+      replayed: true,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      estimatedPrice: order.estimated_price,
+      miles: priced.miles,
+      requiredClass: order.required_vehicle_class || priced.requiredClass,
+      status: order.status,
+      trackingToken: trackingToken || undefined,
+    }),
+  };
+}
+
+/**
+ * Reuse a customer by phone without ever 500-ing on duplicates.
+ * customers.phone is not unique and is stored as typed, so several rows can
+ * share one number. Match by digits (same rule as the track lookup) and take
+ * the oldest row (created_at, then id) so every order lands on the same one.
+ * Uses customers.phone_normalized when schema/customer_phone_normalize.sql has
+ * been applied; otherwise matches the common typed formats of the number.
+ */
+const CUSTOMER_LOOKUP_LIMIT = 25;
+
+function oldestCustomer(rows) {
+  const list = (rows || []).slice();
+  list.sort((a, b) => {
+    const ca = a.created_at ? Date.parse(a.created_at) : Infinity;
+    const cb = b.created_at ? Date.parse(b.created_at) : Infinity;
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
+  });
+  return list[0] || null;
+}
+
+function isMissingPhoneNormalized(error) {
+  if (!error) return false;
+  const text = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
+  return (error.code === "42703" || error.code === "PGRST204" || /does not exist|could not find/i.test(text)) && /phone_normalized/.test(text);
+}
+
+async function findCustomerByPhone(supabase, rawPhone) {
+  const key = phoneKey(rawPhone);
+  if (key.length === 10) {
+    const { data, error } = await supabase
+      .from("customers").select("id, phone, created_at")
+      .eq("phone_normalized", key)
+      .order("created_at", { ascending: true })
+      .limit(CUSTOMER_LOOKUP_LIMIT);
+    if (error && !isMissingPhoneNormalized(error)) throw error;
+    if (!error && data && data.length) return oldestCustomer(data);
+  }
+  const { data, error } = await supabase
+    .from("customers").select("id, phone, created_at")
+    .in("phone", phoneVariants(rawPhone))
+    .order("created_at", { ascending: true })
+    .limit(CUSTOMER_LOOKUP_LIMIT);
+  if (error) throw error;
+  const rows = key.length >= 10 ? (data || []).filter((r) => samePhone(r.phone, rawPhone)) : data;
+  return oldestCustomer(rows);
 }
 
 async function sendSMS({ to_phone, message_body }) {
@@ -52,17 +314,76 @@ exports.handler = async (event) => {
   }
 
   try {
-    const body = JSON.parse(event.body || "{}");
-
-    if (!body.first_name || !body.last_name || !body.phone) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "First name, last name, and phone are required" }) };
+    let body;
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch (_) {
+      return bad(headers, "We couldn't read that order. Please try again.");
     }
-    if (!body.pickup_address || !body.pickup_city) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Pickup address and city are required" }) };
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return bad(headers, "We couldn't read that order. Please try again.");
+    }
+
+    // Required text must have something besides spaces; it is stored trimmed.
+    if (!text(body.first_name) || !text(body.last_name) || !text(body.phone)) {
+      return bad(headers, "First name, last name, and phone are required", { field: !text(body.first_name) ? "first_name" : !text(body.last_name) ? "last_name" : "phone" });
+    }
+    if (!text(body.pickup_address) || !text(body.pickup_city)) {
+      return bad(headers, "Pickup address and city are required", { field: !text(body.pickup_address) ? "pickup_address" : "pickup_city" });
     }
     if (!body.service_type) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Service type is required" }) };
+      return bad(headers, "Service type is required");
     }
+    if (!SERVICE_TYPES.includes(body.service_type)) {
+      return bad(headers, "Please choose a ride or a package delivery.", { field: "service_type" });
+    }
+    // Stored values are built from these (body itself is left as sent: the
+    // idempotency payload hash is computed from it and already ignores spaces).
+    const optText = (v) => text(v) || null;
+    const passengers = parseCount(body.passenger_count);
+    if (passengers === undefined) {
+      return bad(headers, "Please choose how many passengers.", { field: "passenger_count" });
+    }
+    const tip = parseTip(body.tip_amount);
+    if (tip === undefined) {
+      return bad(headers, "Tip can't be negative.", { field: "tip_amount" });
+    }
+    for (const [field, label] of [["pickup_zip", "pickup"], ["dropoff_zip", "dropoff"]]) {
+      if (body[field] != null && String(body[field]).trim() !== "" && !isValidZip(body[field])) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: `Please enter a 5-digit ZIP code for ${label}.` }) };
+      }
+    }
+    // Towns must be ones we price; ZIPs must fit the town (see _service-area.js).
+    const area = checkTrip(body);
+    if (!area.ok) {
+      return { statusCode: area.status, headers, body: JSON.stringify({ error: area.error, code: area.code, field: area.field, zip: area.zip || undefined }) };
+    }
+    // scheduled_at (explicit offset) first, else Central date/time; "later" without them is ASAP.
+    const schedule = resolveSchedule(body);
+    if (schedule.error) return { statusCode: 400, headers, body: JSON.stringify({ error: schedule.error }) };
+
+    let idempotencyKey = null;
+    if (body.idempotency_key != null && body.idempotency_key !== "") {
+      idempotencyKey = String(body.idempotency_key).trim();
+      if (!IDEMPOTENCY_KEY_RE.test(idempotencyKey)) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid idempotency_key" }) };
+      }
+    }
+
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+    // A retry of a checkout that already created an order gets that order back
+    // (even if a weather hold started in between). No new rows, no second SMS.
+    let idempotencySupported = true;
+    if (idempotencyKey) {
+      const seen = await findOrderByIdempotencyKey(supabase, idempotencyKey);
+      if (seen.unsupported) idempotencySupported = false;
+      else if (seen.order) return await replayResponse(supabase, headers, seen.order, body);
+    }
+
+    // Counted only for new orders: a retry that matched its idempotency key above never hits this.
+    const rl = await rateLimit.hit(supabase, event, "create-order");
+    if (rl.limited) return rateLimit.tooMany(headers, rl.retryAfterSec);
 
     if (weatherShutdownActive()) {
       return {
@@ -72,41 +393,46 @@ exports.handler = async (event) => {
       };
     }
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-
     let customerId;
-    const { data: existingCustomer, error: customerLookupError } = await supabase
-      .from("customers").select("id").eq("phone", body.phone.trim()).maybeSingle();
-    if (customerLookupError) throw customerLookupError;
+    const existingCustomer = await findCustomerByPhone(supabase, body.phone);
 
     if (existingCustomer) {
       customerId = existingCustomer.id;
     } else {
       const { data: newCustomer, error: customerError } = await supabase.from("customers").insert([{
-        first_name: body.first_name.trim(),
-        last_name: body.last_name.trim(),
-        phone: body.phone.trim(),
+        first_name: text(body.first_name),
+        last_name: text(body.last_name),
+        phone: text(body.phone),
         email: body.email ? body.email.trim() : null,
       }]).select().single();
-      if (customerError) throw customerError;
-      customerId = newCustomer.id;
+      if (customerError) {
+        // Once the optional unique index exists, a concurrent first order from
+        // the same number loses the insert race: reuse the winner, don't 500.
+        const winner = customerError.code === "23505" ? await findCustomerByPhone(supabase, body.phone) : null;
+        if (!winner) throw customerError;
+        customerId = winner.id;
+      } else {
+        customerId = newCustomer.id;
+      }
     }
 
     const orderNumber = generateOrderNumber();
     let isAsap = true;
     let scheduledDate = null;
     let scheduledTime = null;
-    if (body.schedule === "later" && body.scheduled_date && body.scheduled_time) {
+    if (!schedule.asap) {
       isAsap = false;
-      scheduledDate = body.scheduled_date;
-      scheduledTime = body.scheduled_time;
+      scheduledDate = schedule.date;
+      scheduledTime = schedule.time;
     }
 
-    const pickupCity = body.pickup_city.trim();
-    const dropoffCity = (body.dropoff_city || body.pickup_city).trim();
+    // Priced town per end: the picked town, except a 78418 "island" answer,
+    // which prices and dispatches as Padre Island (see _service-area.js).
+    const pickupCity = area.pickupTown;
+    const dropoffCity = area.dropoffTown;
     const priced = priceQuote(pickupCity, dropoffCity, {
       service_type: body.service_type,
-      passenger_count: body.passenger_count,
+      passenger_count: passengers,
       package_size: body.package_size,
     });
     const miles = priced.miles;
@@ -118,38 +444,55 @@ exports.handler = async (event) => {
       customer_id: customerId,
       service_type: body.service_type,
       status: "pending",
-      pickup_address: body.pickup_address.trim(),
+      pickup_address: text(body.pickup_address),
       pickup_city: pickupCity,
       pickup_zip: body.pickup_zip ? body.pickup_zip.trim() : null,
-      dropoff_address: body.dropoff_address ? body.dropoff_address.trim() : null,
-      dropoff_city: body.dropoff_city ? body.dropoff_city.trim() : null,
+      dropoff_address: optText(body.dropoff_address),
+      dropoff_city: body.dropoff_city ? dropoffCity : null,
       dropoff_zip: body.dropoff_zip ? body.dropoff_zip.trim() : null,
       scheduled_date: scheduledDate,
       scheduled_time: scheduledTime,
       is_asap: isAsap,
-      passenger_count: body.passenger_count ? parseInt(body.passenger_count, 10) : 1,
-      package_description: body.package_description ? body.package_description.trim() : null,
+      passenger_count: passengers == null ? 1 : passengers,
+      package_description: optText(body.package_description),
       package_size: body.package_size || null,
-      special_instructions: body.special_instructions ? body.special_instructions.trim() : (vehicle === "4x4" ? "Beach access — 4x4 required." : null),
+      special_instructions: optText(body.special_instructions) || (vehicle === "4x4" ? "Beach access — 4x4 required." : null),
       estimated_price: estimatedPrice,
       final_price: null,
-      tip_amount: body.tip_amount ? parseFloat(body.tip_amount) : 0,
+      tip_amount: tip,
       required_vehicle_class: vehicle,
       weather_hold: false,
     };
 
-    const { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single();
+    if (idempotencyKey && idempotencySupported) {
+      orderData.idempotency_key = idempotencyKey;
+      orderData.idempotency_payload_hash = orderPayloadHash(body);
+    }
+
+    let { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single();
+    if (orderError && orderData.idempotency_key && isMissingIdempotencyColumn(orderError)) {
+      console.warn("[create-order] orders.idempotency_* columns missing on insert; creating without them");
+      delete orderData.idempotency_key;
+      delete orderData.idempotency_payload_hash;
+      ({ data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single());
+    }
+    if (orderError && idempotencyKey && isUniqueViolation(orderError)) {
+      // Two requests with the same key raced; the other one won. Return its order.
+      const seen = await findOrderByIdempotencyKey(supabase, idempotencyKey);
+      if (seen.order) return await replayResponse(supabase, headers, seen.order, body);
+    }
     if (orderError) throw orderError;
 
     await supabase.from("order_status_logs").insert([{
       order_id: order.id,
       status: "pending",
-      note: "Order received. " + miles + " mi. Required class " + vehicle + ".",
+      note: "Order received. " + miles + " mi. Required class " + vehicle + "." + (area.notes.length ? " " + area.notes.join(" ") : "") + (area.flags.length ? " Address check: " + area.flags.join(" ") : ""),
       changed_by: "system",
     }]);
 
     const smsEnabled = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
-    const customerPhone = body.phone.trim().replace(/\D/g, "");
+    const customerPhone = text(body.phone).replace(/\D/g, "");
+    let smsSent = false;
     if (smsEnabled && customerPhone.length >= 10) {
       const smsMessage = "Your order " + order.order_number + " has been received. We'll assign a driver shortly. — Coyote's Dune Delivery";
       const smsResult = await sendSMS({ to_phone: customerPhone, message_body: smsMessage });
@@ -161,6 +504,7 @@ exports.handler = async (event) => {
         twilio_sid: smsResult.messageSid || null,
         error: smsResult.error || null,
       });
+      smsSent = !!smsResult.success;
     }
 
     const trackingToken = issueTrackingToken(order);
@@ -176,11 +520,17 @@ exports.handler = async (event) => {
         miles: miles,
         requiredClass: vehicle,
         status: order.status,
+        // Lets the confirmation screen say "we texted you" only when we did.
+        smsSent: smsSent,
         trackingToken: trackingToken || undefined,
       }),
     };
   } catch (err) {
     console.error("Error creating order:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to create order", message: err.message }) };
+    // Details stay in the function log; the browser shows this message, so no DB/internal text.
+    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to create order", message: "We couldn't place your order. Please try again." }) };
   }
 };
+
+// Exposed for unit tests.
+exports._validation = { isValidZip, chicagoWallClock, scheduleError, resolveSchedule, isMissingIdempotencyColumn, IDEMPOTENCY_KEY_RE, orderPayloadHash };

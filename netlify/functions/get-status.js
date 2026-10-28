@@ -2,13 +2,16 @@
  * Netlify Function: Get Application Status (Driver Portal)
  * POST /api/get-status
  *
- * Possession check: applicantId + email. On success, issues a driver JWT
- * ({ role: 'driver', driver_id }) for offer/GPS endpoints (#6).
+ * Possession check: applicantId + email. Approved drivers only: anyone else
+ * gets 403 pending_review and no token. On success, issues a driver JWT
+ * ({ role: 'driver', driver_id }) and only the fields the portal shows.
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { issueDriverToken } = require("./_auth");
+const { publicProfile, pendingReview } = require("./_driver-profile");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -37,7 +40,7 @@ exports.handler = async (event) => {
 
     const { data, error } = await supabase
       .from("applications")
-      .select("*, documents(*)")
+      .select("*")
       .eq("id", applicantId)
       .eq("email", email.toLowerCase())
       .single();
@@ -46,22 +49,11 @@ exports.handler = async (event) => {
       return { statusCode: 404, headers, body: JSON.stringify({ error: "Application not found" }) };
     }
 
-    const token = issueDriverToken(data.id);
+    if (data.status !== "approved") return pendingReview(headers);
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        ...data,
-        name: `${data.first_name} ${data.last_name}`,
-        dob: data.date_of_birth,
-        vehicle_plate: data.license_plate,
-        insurance_policy: data.insurance_policy_number,
-        token,
-      }),
-    };
+    const token = issueDriverToken(data.id);
+    return { statusCode: 200, headers, body: JSON.stringify({ ...publicProfile(data), token }) };
   } catch (err) {
-    console.error("Error fetching status:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, "Failed to fetch status", "get-status");
   }
 };

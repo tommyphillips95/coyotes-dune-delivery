@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#10202E">
     <title>Coyote's Dune Delivery — Admin Dashboard</title>
+    <link rel="preload" href="/fonts/inter-v20-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="admin.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
-    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
-    <script src="../js/analytics.js"></script>
-    <script src="../js/firebase-analytics.js"></script>
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';
+    // Analytics loads deferred; until then calls queue here and are replayed on load.
+    (function (w) { var q = w.__cddAnalyticsQueue = w.__cddAnalyticsQueue || []; ['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent', 'firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties'].forEach(function (n) { if (!w[n]) w[n] = function () { q.push([n, Array.prototype.slice.call(arguments)]); }; }); })(window);</script>
+    <script defer src="../js/analytics.js"></script>
+    <script defer src="../js/firebase-analytics.js"></script>
 </head>
 <body>
     <!-- LOGIN SCREEN -->
@@ -84,6 +89,9 @@
                     <span id="admin-name">Admin</span>
                 </div>
             </header>
+
+            <!-- Orders needing a person (payment, dispatch, address checks) -->
+            <a class="orders-alert" id="orders-alert" href="#orders-section" hidden></a>
 
             <!-- Stats Cards -->
             <section class="stats-grid">
@@ -185,19 +193,31 @@
             </section>
 
             <!-- Orders + weather hold (#33) -->
-            <section class="table-section orders-weather">
-                <h3>Orders &amp; Weather Hold</h3>
+            <section class="table-section orders-weather" id="orders-section" aria-labelledby="orders-heading">
+                <h3 id="orders-heading">Orders &amp; Weather Hold</h3>
                 <div id="weather-banner" class="weather-banner">Loading weather status…</div>
+                <div class="orders-toolbar">
+                    <label for="orders-filter">Show</label>
+                    <select id="orders-filter" class="filter-select">
+                        <option value="all">All recent orders</option>
+                        <option value="attention">Needs attention</option>
+                        <option value="payment">Payment problems</option>
+                        <option value="unpaid">Not paid by card</option>
+                    </select>
+                    <span id="orders-attention-count" class="orders-attention-count" role="status" aria-live="polite"></span>
+                </div>
                 <div class="table-wrapper">
                     <table class="data-table" id="orders-table">
                         <thead>
                             <tr>
-                                <th>Order</th>
-                                <th>Route</th>
-                                <th>Vehicle</th>
-                                <th>Status</th>
-                                <th>Weather hold</th>
-                                <th>Action</th>
+                                <th scope="col">Order</th>
+                                <th scope="col">Route</th>
+                                <th scope="col">Vehicle</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Payment</th>
+                                <th scope="col">Driver</th>
+                                <th scope="col">Weather hold</th>
+                                <th scope="col">Action</th>
                             </tr>
                         </thead>
                         <tbody id="orders-table-body">

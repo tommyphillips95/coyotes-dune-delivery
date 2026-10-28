@@ -2,21 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#10202E">
     <title>Coyote's Dune Delivery — Coastal Delivery & Rides</title>
     <meta name="description" content="Coyote's Dune Delivery connects drivers and passengers between Port Aransas and Padre Island. Fast, reliable, coastal delivery.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="preload" href="/fonts/inter-v20-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/dm-sans-v17-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
-    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
-    <script src="js/analytics.js"></script>
-    <script src="js/firebase-analytics.js"></script>
-    <!-- Firebase SDK (required for FCM) -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';
+    // Analytics loads deferred; until then calls queue here and are replayed on load.
+    (function (w) { var q = w.__cddAnalyticsQueue = w.__cddAnalyticsQueue || []; ['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent', 'firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties'].forEach(function (n) { if (!w[n]) w[n] = function () { q.push([n, Array.prototype.slice.call(arguments)]); }; }); })(window);</script>
+    <script defer src="js/analytics.js"></script>
+    <script defer src="js/firebase-analytics.js"></script>
+    <!-- FCM SDK is loaded by js/firebase-messaging.js only when real Firebase config is set (not YOUR_* placeholders). -->
 </head>
 <body>
     <!-- Navigation -->
@@ -30,7 +34,7 @@
                 </svg>
                 <span class="logo-text">Coyote's Dune Delivery<span class="logo-sub">Texas Gulf Coast</span></span>
             </a>
-            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
                 <span class="hamburger"></span>
             </button>
             <ul class="nav-menu" id="navMenu">
@@ -46,6 +50,7 @@
         </div>
     </nav>
 
+    <main id="main">
     <!-- Hero Section (Coastal Coyote) -->
     <header class="cc-hero" id="top">
         <div class="container">
@@ -258,7 +263,7 @@
                         <p class="partner-location">Port Aransas</p>
                         <p class="partner-desc">Bold Tex-Mex, tacos, burritos, and fresh coastal flavors.</p>
                         <div class="partner-card-footer">
-                            <a href="#" class="partner-link">View Menu →</a>
+                            <a href="/order/?restaurant=texmexcoyote" class="partner-link" aria-label="Order from TexMexCoyote">Order →</a>
                             <span class="partner-hours">Daily: 10am–9pm</span>
                         </div>
                     </div>
@@ -284,7 +289,7 @@
                         <p class="partner-location">Corpus Christi</p>
                         <p class="partner-desc">Fresh produce, coastal essentials, and island pantry staples.</p>
                         <div class="partner-card-footer">
-                            <a href="#" class="partner-link">View Menu →</a>
+                            <a href="/order/?restaurant=heb-coastal-market" class="partner-link" aria-label="Order from H-E-B Coastal Market">Order →</a>
                             <span class="partner-hours">Daily: 6am–11pm</span>
                         </div>
                     </div>
@@ -309,7 +314,7 @@
                         <p class="partner-location">Port Aransas</p>
                         <p class="partner-desc">Live shrimp, frozen bait, tackle, and fishing gear for every catch.</p>
                         <div class="partner-card-footer">
-                            <a href="#" class="partner-link">View Menu →</a>
+                            <a href="/order/?restaurant=clems-bait-tackle" class="partner-link" aria-label="Order from Clem's Bait &amp; Tackle">Order →</a>
                             <span class="partner-hours">Daily: 5am–8pm</span>
                         </div>
                     </div>
@@ -336,7 +341,7 @@
                         <p class="partner-location">North Padre Island</p>
                         <p class="partner-desc">Gulf shrimp, oysters, and coastal catches served fresh daily.</p>
                         <div class="partner-card-footer">
-                            <a href="#" class="partner-link">View Menu →</a>
+                            <a href="/order/?restaurant=shells-seafood" class="partner-link" aria-label="Order from Shells Seafood">Order →</a>
                             <span class="partner-hours">Tue–Sun: 11am–10pm</span>
                         </div>
                     </div>
@@ -364,7 +369,7 @@
                         <p class="partner-location">Port Aransas</p>
                         <p class="partner-desc">Craft brews, coastal pub fare, and live music on the deck.</p>
                         <div class="partner-card-footer">
-                            <a href="#" class="partner-link">View Menu →</a>
+                            <a href="/order/?restaurant=stingrays-taphouse" class="partner-link" aria-label="Order from Stingray's Taphouse">Order →</a>
                             <span class="partner-hours">Daily: 11am–12am</span>
                         </div>
                     </div>
@@ -393,7 +398,7 @@
                         <p class="partner-location">North Padre Island</p>
                         <p class="partner-desc">Smash burgers, hand-cut fries, and island shakes made to order.</p>
                         <div class="partner-card-footer">
-                            <a href="#" class="partner-link">View Menu →</a>
+                            <a href="/order/?restaurant=padre-island-burger-co" class="partner-link" aria-label="Order from Padre Island Burger Co.">Order →</a>
                             <span class="partner-hours">Daily: 11am–10pm</span>
                         </div>
                     </div>
@@ -437,15 +442,15 @@
                 </div>
                 <div class="zones-info">
                     <div class="zone-card">
-                        <h4>Port Aransas</h4>
+                        <h3>Port Aransas</h3>
                         <p>Full coverage including downtown, ferry landing, and beach access roads.</p>
                     </div>
                     <div class="zone-card">
-                        <h4>Padre Island</h4>
+                        <h3>Padre Island</h3>
                         <p>North Padre Island, Corpus Christi Bayfront, and connecting routes.</p>
                     </div>
                     <div class="zone-card">
-                        <h4>Mustang Island</h4>
+                        <h3>Mustang Island</h3>
                         <p>Coming soon — express ferry and bridge corridor access.</p>
                     </div>
                 </div>
@@ -556,7 +561,7 @@
 
     <!-- Chat Widget -->
     <div class="chat-widget" id="chatWidget">
-        <button class="chat-toggle" id="chatToggle" aria-label="Open chat">
+        <button class="chat-toggle" id="chatToggle" aria-label="Open chat" aria-expanded="false">
             <svg class="chat-toggle-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
             </svg>
@@ -576,7 +581,7 @@
                 </div>
             </div>
             <div class="chat-input-wrap">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Type a message..." aria-label="Message">
                 <button class="chat-send" id="chatSend" aria-label="Send">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13"/>
@@ -586,6 +591,8 @@
             </div>
         </div>
     </div>
+
+    </main>
 
     <!-- Footer -->
     <footer class="footer">
@@ -603,7 +610,7 @@
                     <p>Connecting the Texas Gulf Coast, one delivery at a time.</p>
                 </div>
                 <div class="footer-links">
-                    <h4>Company</h4>
+                    <h2>Company</h2>
                     <ul>
                         <li><a href="/apply/">Become a Driver</a></li>
                         <li><a href="/driver/">Driver Portal</a></li>
@@ -613,16 +620,16 @@
                     </ul>
                 </div>
                 <div class="footer-links">
-                    <h4>Support</h4>
+                    <h2>Support</h2>
                     <ul>
                         <li><a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a></li>
-                        <li><a href="tel:+13615551234">(361) 555-1234</a></li>
+                        <li><a href="tel:+13618979670">(361) 897-9670</a></li>
                         <li><a href="#">FAQ</a></li>
                         <li><a href="#">Safety</a></li>
                     </ul>
                 </div>
                 <div class="footer-links">
-                    <h4>Legal</h4>
+                    <h2>Legal</h2>
                     <ul>
                         <li><a href="#">Privacy Policy</a></li>
                         <li><a href="#">Terms of Service</a></li>
@@ -631,17 +638,17 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>2025 Coyote's Dune Delivery. All rights reserved.</p>
+                <p>&copy; <span data-current-year>2026</span> Coyote's Dune Delivery. All rights reserved.</p>
                 <p class="footer-tagline">Born on the beach. Built for the coast.</p>
             </div>
         </div>
     </footer>
 
-    <script src="js/zones.js"></script>
-    <script src="js/coastal.js"></script>
-    <script src="js/main.js"></script>
-    <script src="js/home-planner.js"></script>
+    <script defer src="js/zones.js"></script>
+    <script defer src="js/coastal.js"></script>
+    <script defer src="js/main.js"></script>
+    <script defer src="js/home-planner.js"></script>
     <!-- Firebase Cloud Messaging -->
-    <script src="js/firebase-messaging.js"></script>
+    <script defer src="js/firebase-messaging.js"></script>
 </body>
 </html>

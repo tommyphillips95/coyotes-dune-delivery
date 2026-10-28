@@ -422,7 +422,7 @@ Use any future expiry date, any 3-digit CVC, and any ZIP code.
 | `GET` | `/api/get-applications` | List all applications | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?status=pending` | Filter by status | `Authorization: Bearer <token>` |
 | `GET` | `/api/get-applications?search=john` | Search by name/email/ID | `Authorization: Bearer <token>` |
-| `PATCH` | `/api/update-order` | Update order status | `Authorization: Bearer <token>` |
+| `PATCH` | `/api/update-order` | Update order status (admin JWT; same rules as `PUT /api/admin/orders/:id`, see docs/backend.md) | `Authorization: Bearer <token>` |
 | `POST` | `/api/send-sms` | Send a single SMS | `Authorization: Bearer <token>` |
 | `POST` | `/api/driver-sms-alert` | Send bulk SMS to all approved drivers | `Authorization: Bearer <token>` |
 | `POST` | `/api/checkr-initiate` | Start a Checkr background check | `Authorization: Bearer <token>` |
@@ -749,7 +749,7 @@ The app automatically sends SMS notifications to customers at key points in the 
 | Event | Trigger | Message |
 |-------|---------|---------|
 | **Order Created** | `create-order.js` | "Your order [ORDER-123] has been received. We'll assign a driver shortly." |
-| **Driver Assigned** | `update-order.js` (status → `assigned`) | "Your driver [Name] is on the way! Track: [URL]" |
+| **Driver Assigned** | `_assign-sms.js`, from `_order-admin.changeOrder` (admin dashboard assign and `update-order.js`) | "Your driver [First name] has been assigned to order CDD-…. Track: [URL] — Coyote's Dune Delivery" (no name: "A driver has been assigned…"). URL is `SITE_ORIGIN/track/?order=CDD-…` from `netlify/functions/_site-url.js`, no token. Sent once per driver; skipped if Twilio isn't set up (logged) or the number replied STOP |
 | **Order Completed** | `update-order.js` (status → `completed`) | "Your delivery is complete. Thanks for choosing Coyote's Dune Delivery!" |
 | **Driver Alert** | `driver-sms-alert.js` (manual/admin) | "New order available! Log in to accept: [driver portal URL]" |
 

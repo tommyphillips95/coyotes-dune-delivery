@@ -3,18 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#10202E">
     <title>Become a Driver — Coyote's Dune Delivery</title>
     <meta name="description" content="Apply to become a driver for Coyote's Dune Delivery. Flexible hours, competitive pay, coastal community.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <link rel="preload" href="/fonts/inter-v20-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="../css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
-    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
-    <script src="../js/analytics.js"></script>
-    <script src="../js/firebase-analytics.js"></script>
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';
+    // Analytics loads deferred; until then calls queue here and are replayed on load.
+    (function (w) { var q = w.__cddAnalyticsQueue = w.__cddAnalyticsQueue || []; ['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent', 'firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties'].forEach(function (n) { if (!w[n]) w[n] = function () { q.push([n, Array.prototype.slice.call(arguments)]); }; }); })(window);</script>
+    <script defer src="../js/analytics.js"></script>
+    <script defer src="../js/firebase-analytics.js"></script>
 </head>
 <body>
     <!-- Navigation -->
@@ -89,7 +93,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="phone">Phone Number <span class="required">*</span></label>
-                                <input type="tel" id="phone" name="phone" required autocomplete="tel" placeholder="(361) 555-1234">
+                                <input type="tel" id="phone" name="phone" required autocomplete="tel" placeholder="(361) 555-0100">
                                 <span class="error-message">Please enter a valid phone number.</span>
                             </div>
                         </div>
@@ -195,6 +199,18 @@
                             </div>
                         </div>
                         <div class="form-group">
+                            <label for="vehicleClass">Vehicle Type <span class="required">*</span></label>
+                            <select id="vehicleClass" name="vehicleClass" required aria-describedby="vehicleClassHelp">
+                                <option value="" disabled selected>Select vehicle type</option>
+                                <option value="2wd">Regular car, truck or van (2-wheel drive)</option>
+                                <option value="awd">All-wheel drive (AWD) car or SUV</option>
+                                <option value="4x4">4x4 truck or SUV (4-wheel drive)</option>
+                                <option value="utv">UTV / side-by-side</option>
+                            </select>
+                            <p class="form-hint" id="vehicleClassHelp">Beach and island orders need a 4x4, AWD or UTV. We check your vehicle before you get beach orders; until then you only get regular-road orders.</p>
+                            <span class="error-message">Please choose your vehicle type.</span>
+                        </div>
+                        <div class="form-group">
                             <label for="licensePlate">License Plate <span class="required">*</span></label>
                             <input type="text" id="licensePlate" name="licensePlate" required placeholder="ABC-1234">
                             <span class="error-message">Please enter the license plate.</span>
@@ -229,12 +245,12 @@
                             <span class="error-message">Please enter a valid future expiration date.</span>
                         </div>
                         <div class="form-group">
-                            <label>Upload Insurance Card (front) <span class="required">*</span></label>
+                            <label for="insuranceCard">Upload Insurance Card (front) <span class="required">*</span></label>
                             <div class="file-upload" id="insuranceUpload">
-                                <input type="file" id="insuranceCard" name="insuranceCard" accept="image/*,.pdf" required>
+                                <input type="file" id="insuranceCard" name="insuranceCard" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf" required aria-required="true">
                                 <div class="file-upload-icon">📄</div>
                                 <div class="file-upload-text">Click or drag to upload</div>
-                                <div class="file-upload-hint">JPG, PNG, or PDF up to 10 MB</div>
+                                <div class="file-upload-hint">JPG, PNG, HEIC or PDF up to 4 MB</div>
                             </div>
                             <div class="file-preview" id="insurancePreview" style="display: none;">
                                 <span class="file-preview-name" id="insuranceFileName"></span>
@@ -256,8 +272,8 @@
                         <p class="hint">Background checks run through Checkr after submit. Payouts use Stripe Connect later — we never store SSN or bank account numbers here.</p>
 
                         <p>Required for all driver applicants.</p>
-                        <div class="consent-text">
-                            <h4>Background Check Disclosure</h4>
+                        <div class="consent-text" tabindex="0" role="region" aria-label="Background check disclosure">
+                            <h3>Background Check Disclosure</h3>
                             <p>Coyote's Dune Delivery ("the Company") may obtain a consumer report and/or investigative consumer report about you for employment purposes. These reports may include information about your character, general reputation, personal characteristics, mode of living, and criminal history.</p>
                             <p>The Company will use this information solely to evaluate your suitability for a driver position, including compliance with applicable laws and safety standards.</p>
                             <p>You have the right to request a complete and accurate disclosure of the nature and scope of the investigation, and a written summary of your rights under the Fair Credit Reporting Act (FCRA).</p>
@@ -266,14 +282,17 @@
                         <div class="checkbox-group">
                             <input type="checkbox" id="bgConsent" name="bgConsent" required>
                             <label for="bgConsent">I consent to a background check and acknowledge the disclosure above. <span class="required">*</span></label>
+                            <span class="error-message" id="bgConsentError">Please consent to the background check to continue.</span>
                         </div>
                         <div class="checkbox-group">
                             <input type="checkbox" id="bgDisclosureRead" name="bgDisclosureRead" required>
                             <label for="bgDisclosureRead">I have read and understand the Background Check Disclosure and my rights under the FCRA. <span class="required">*</span></label>
+                            <span class="error-message" id="bgDisclosureReadError">Please confirm you have read the disclosure.</span>
                         </div>
                         <div class="checkbox-group">
                             <input type="checkbox" id="esignature" name="esignature" required>
                             <label for="esignature">By checking this box, I am providing my electronic signature and agreeing that this constitutes a legally binding signature. <span class="required">*</span></label>
+                            <span class="error-message" id="esignatureError">Please check this box to sign electronically.</span>
                         </div>
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="3">← Back</button>
@@ -295,8 +314,9 @@
                         <div class="checkbox-group">
                             <input type="checkbox" id="termsAgree" name="termsAgree" required>
                             <label for="termsAgree">I confirm that all information provided is accurate and complete. I agree to the <a href="#" target="_blank">Terms of Service</a> and <a href="#" target="_blank">Driver Agreement</a>. <span class="required">*</span></label>
+                            <span class="error-message" id="termsAgreeError">Please confirm your information and agree to the terms.</span>
                         </div>
-                        <div class="form-alert" id="submitError" role="alert" aria-live="assertive" hidden></div>
+                        <div class="form-alert" id="submitError" tabindex="-1" role="alert" aria-live="assertive" hidden></div>
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="4">← Back</button>
                             <div class="form-nav-right">

@@ -48,6 +48,9 @@
         const target = getStepEl(stepNum);
         if (target) target.classList.add('active');
         currentStep = stepNum;
+        // The review summary lives on the final step (also when a saved
+        // session is restored straight onto it).
+        if (stepNum === TOTAL_STEPS) buildSummary();
 
         // Update progress bar
         $$$('.progress-step').forEach(el => {
@@ -108,6 +111,7 @@
             return year >= 2000 && year <= 2030;
         },
         vehicleColor: (v) => v.trim().length >= 1,
+        vehicleClass: (v) => ['2wd', 'awd', '4x4', 'utv'].includes(v),
         licensePlate: (v) => v.trim().length >= 2,
         insuranceProvider: (v) => v.trim().length >= 1,
         policyNumber: (v) => v.trim().length >= 3,
@@ -122,6 +126,24 @@
         termsAgree: (v) => v === true || v === 'on',
     };
 
+    // Link an error element to its field only while it's showing: screen readers
+    // read aria-describedby text even when the element is hidden.
+    function linkError(input, err, show) {
+        if (!input || !err) return;
+        if (!err.id) err.id = (input.id || input.name) + 'Error';
+        const ids = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(x => x && x !== err.id);
+        if (show) ids.push(err.id);
+        if (ids.length) input.setAttribute('aria-describedby', ids.join(' '));
+        else input.removeAttribute('aria-describedby');
+        input.setAttribute('aria-invalid', show ? 'true' : 'false');
+    }
+
+    function focusField(el) {
+        if (!el) return;
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+        if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    }
+
     function validateField(input) {
         const name = input.name || input.id;
         const validator = validators[name];
@@ -135,15 +157,15 @@
         }
 
         if (group) {
+            const errMsg = group.querySelector('.error-message');
             if (!isValid) {
                 input.classList.add('error');
-                const errMsg = group.querySelector('.error-message');
                 if (errMsg) errMsg.classList.add('visible');
             } else {
                 input.classList.remove('error');
-                const errMsg = group.querySelector('.error-message');
                 if (errMsg) errMsg.classList.remove('visible');
             }
+            linkError(input, errMsg, !isValid);
         }
         return isValid;
     }
@@ -151,20 +173,31 @@
     function validateStep(stepNum) {
         const inputs = getStepInputEls(stepNum);
         let allValid = true;
+        let firstInvalid = null;
         inputs.forEach(input => {
-            if (!validateField(input)) allValid = false;
+            if (!validateField(input)) {
+                allValid = false;
+                if (!firstInvalid) firstInvalid = input;
+            }
         });
 
         // Special: file upload on step 3
         if (stepNum === 3) {
             if (!uploadedFiles.insuranceCard) {
+                insuranceError.textContent = INSURANCE_REQUIRED_MSG;
                 insuranceError.classList.add('visible');
+                linkError(insuranceInput, insuranceError, true);
                 allValid = false;
+                if (!firstInvalid) firstInvalid = insuranceInput;
             } else {
                 insuranceError.classList.remove('visible');
+                linkError(insuranceInput, insuranceError, false);
             }
         }
 
+        // Move focus to the first field to fix so keyboard and screen-reader
+        // users hear its error instead of staying on the Next/Submit button.
+        if (firstInvalid) focusField(firstInvalid);
         return allValid;
     }
 
@@ -193,7 +226,6 @@
                 if (validateStep(currentStep)) {
                     showStep(nextStep);
                     trackStepProgression(nextStep);
-                    if (nextStep === 6) buildSummary();
                 }
             });
         });
@@ -213,10 +245,22 @@
         insuranceInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
+                const problem = window.CoyoteApplySubmit ? window.CoyoteApplySubmit.checkInsuranceFile(file) : null;
+                if (problem) {
+                    uploadedFiles.insuranceCard = null;
+                    insuranceInput.value = '';
+                    insurancePreview.style.display = 'none';
+                    insuranceError.textContent = problem;
+                    insuranceError.classList.add('visible');
+                    linkError(insuranceInput, insuranceError, true);
+                    return;
+                }
+                insuranceError.textContent = INSURANCE_REQUIRED_MSG;
                 uploadedFiles.insuranceCard = file;
                 insuranceFileName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
                 insurancePreview.style.display = 'flex';
                 insuranceError.classList.remove('visible');
+                linkError(insuranceInput, insuranceError, false);
                 saveFormData();
             }
         });
@@ -230,6 +274,8 @@
             });
         }
     }
+
+    const INSURANCE_REQUIRED_MSG = 'Please upload your insurance card.';
 
     function formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -302,16 +348,20 @@
         state: 'State', zip: 'ZIP', emergencyName: 'Emergency Contact', emergencyPhone: 'Emergency Phone',
         licenseNumber: 'License Number', licenseState: 'License State', licenseExpiry: 'License Expiry',
         vehicleMake: 'Vehicle Make', vehicleModel: 'Vehicle Model', vehicleYear: 'Year',
-        vehicleColor: 'Color', licensePlate: 'License Plate',
+        vehicleColor: 'Color', vehicleClass: 'Vehicle Type', licensePlate: 'License Plate',
         insuranceProvider: 'Insurance Provider', policyNumber: 'Policy Number', policyExpiry: 'Policy Expiry',
     };
+
+    function escapeHtml(v) {
+        return String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
 
     function buildSummary() {
         if (!summaryBody) return;
         let html = '';
         const sections = [
             { title: 'Personal Info', fields: ['firstName', 'lastName', 'email', 'phone', 'dob', 'address', 'city', 'state', 'zip', 'emergencyName', 'emergencyPhone'] },
-            { title: 'Vehicle & License', fields: ['licenseNumber', 'licenseState', 'licenseExpiry', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehicleColor', 'licensePlate'] },
+            { title: 'Vehicle & License', fields: ['licenseNumber', 'licenseState', 'licenseExpiry', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehicleColor', 'vehicleClass', 'licensePlate'] },
             { title: 'Insurance', fields: ['insuranceProvider', 'policyNumber', 'policyExpiry'] },
         ];
 
@@ -321,7 +371,8 @@
                 const input = document.querySelector('[name="' + field + '"]');
                 if (!input) return;
                 let value = input.value;
-                html += '<tr><td>' + (LABEL_MAP[field] || field) + '</td><td>' + (value || '—') + '</td></tr>';
+                if (input.tagName === 'SELECT' && input.selectedIndex > 0) value = input.options[input.selectedIndex].text;
+                html += '<tr><td>' + (LABEL_MAP[field] || field) + '</td><td>' + (value ? escapeHtml(value) : '—') + '</td></tr>';
             });
         });
 
@@ -331,10 +382,26 @@
 
         if (uploadedFiles.insuranceCard) {
             html += '<tr><th colspan="2">Documents</th></tr>';
-            html += '<tr><td>Insurance Card</td><td>' + uploadedFiles.insuranceCard.name + '</td></tr>';
+            html += '<tr><td>Insurance Card</td><td>' + escapeHtml(uploadedFiles.insuranceCard.name) + '</td></tr>';
         }
 
         summaryBody.innerHTML = html;
+    }
+
+    // Before submit, check every step up to the real final one (TOTAL_STEPS),
+    // including the background-check consents (step 4) and the final
+    // confirm/terms box. On the first step with a problem, show that step with
+    // its linked errors and focus the first field to fix (e.g. an unticked box).
+    function validateAllSteps() {
+        for (let s = 1; s <= TOTAL_STEPS; s++) {
+            if (validateStep(s)) continue;
+            if (s !== currentStep) {
+                showStep(s);
+                validateStep(s); // re-run now it's visible so focus lands
+            }
+            return false;
+        }
+        return true;
     }
 
     // ── API Submission ──────────────────────────────────────
@@ -342,7 +409,7 @@
         e.preventDefault();
         if (isSubmitting) return;
 
-        if (!validateStep(6)) return;
+        if (!validateAllSteps()) return;
 
         isSubmitting = true;
         submitBtn.disabled = true;
@@ -386,7 +453,7 @@
             if (!result.ok) {
                 // Honest failure: keep the form and everything typed, no fake ID.
                 console.error('Application not submitted:', result.reason);
-                showSubmitError();
+                showSubmitError(result.message);
                 if (typeof logAnalyticsEvent === 'function') {
                     logAnalyticsEvent('application_submit_failed', { category: 'application', reason: result.reason });
                 }
@@ -422,13 +489,16 @@
 
     const SUBMIT_ERROR_FALLBACK = "We couldn't submit your application right now. Please try again later or contact us.";
 
-    function showSubmitError() {
+    // serverMessage: a 4xx reason from submit-application (e.g. file too large).
+    function showSubmitError(serverMessage) {
         const el = document.getElementById('submitError');
-        const msg = (window.CoyoteApplySubmit && window.CoyoteApplySubmit.SUBMIT_ERROR_MESSAGE) || SUBMIT_ERROR_FALLBACK;
+        const msg = serverMessage || (window.CoyoteApplySubmit && window.CoyoteApplySubmit.SUBMIT_ERROR_MESSAGE) || SUBMIT_ERROR_FALLBACK;
         if (!el) { alert(msg); return; }
         el.textContent = msg;
         el.hidden = false;
         if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Keyboard users land on the message (it's also role=alert for screen readers).
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
     }
 
     function hideSubmitError() {

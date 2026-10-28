@@ -4,13 +4,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -52,14 +53,14 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ applications: applications || [] }),
+      // DOB and insurance policy number are detail-only: GET /api/admin/applications/:id.
+      body: JSON.stringify({ applications: (applications || []).map((a) => {
+        const out = Object.assign({}, a);
+        delete out.date_of_birth; delete out.insurance_policy_number;
+        return out;
+      }) }),
     };
   } catch (err) {
-    console.error('Error fetching applications:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Failed to fetch applications', message: err.message }),
-    };
+    return serverError(headers, err, 'Failed to fetch applications', 'get-applications');
   }
 };

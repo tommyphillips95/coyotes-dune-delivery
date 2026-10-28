@@ -40,7 +40,8 @@ function order(over) {
   }, over);
 }
 function driver(id, cls, over) {
-  return Object.assign({ id, first_name: id, last_name: "D", phone: null, vehicle_class: cls, online: true, status: "approved" }, over);
+  // Verified by default (admin checked the vehicle); tests for unverified pass { vehicle_class_verified_at: null }.
+  return Object.assign({ id, first_name: id, last_name: "D", phone: null, vehicle_class: cls, vehicle_class_verified_at: "2026-10-01T15:00:00Z", online: true, status: "approved" }, over);
 }
 function loc(driverId, lat, lng, ts) {
   return { driver_id: driverId, lat, lng, timestamp: ts || "2026-10-10T12:00:00Z" };
@@ -236,7 +237,7 @@ test("respond-offer: method and input validation", async () => {
   assert.strictEqual((await respondOffer.handler({ httpMethod: "OPTIONS", headers: {} })).statusCode, 204);
   assert.strictEqual((await respondOffer.handler({ httpMethod: "POST", headers: {}, body: "{}" })).statusCode, 401);
   assert.strictEqual((await respond(createFakeSupabase({}), { offer_id: "of1", driver_id: "d1", action: "maybe" })).status, 400);
-  assert.strictEqual((await respond(createFakeSupabase({}), { offer_id: "nope", driver_id: "d1", action: "accept" })).status, 404);
+  assert.strictEqual((await respond(createFakeSupabase({ applications: [driver("d1", "4x4")] }), { offer_id: "nope", driver_id: "d1", action: "accept" })).status, 404);
 });
 
 test("respond-offer: wrong driver → 403", async () => {
@@ -293,6 +294,50 @@ test("respond-offer: accept on an already-assigned order → 409, offer expired"
   assert.strictEqual(r.body.error, "order already assigned");
   assert.strictEqual(fake.db.dispatch_offers[0].status, "expired");
   assert.strictEqual(fake.db.orders[0].driver_id, "someone");
+});
+
+// An offer that is still open when the order is cancelled, completed,
+// refunded in Stripe or put on weather hold must not put a driver on it.
+for (const [label, over] of [
+  ["cancelled", { status: "cancelled" }],
+  ["completed", { status: "completed" }],
+  ["refunded", { payment_status: "refunded" }],
+  ["weather hold", { weather_hold: true }],
+]) {
+  test(`respond-offer: accept on a ${label} order → 409, order untouched, offer expired`, async () => {
+    const fake = createFakeSupabase(offerSeed({}, { orders: [order(over)] }));
+    const before = Object.assign({}, fake.db.orders[0]);
+    const r = await respond(fake, { offer_id: "of1", driver_id: "d1", action: "accept" });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.body.code, "order_unavailable");
+    assert.deepStrictEqual(fake.db.orders[0], before);
+    assert.strictEqual(fake.db.dispatch_offers[0].status, "expired");
+    assert.ok(!(fake.db.order_status_logs || []).length, "no assigned log");
+  });
+}
+
+test("respond-offer: accept loses a race with another assign → 409, no overwrite", async () => {
+  const fake = createFakeSupabase(offerSeed());
+  // Another writer assigns the order between our read and our write.
+  const realFrom = fake.from;
+  let reads = 0;
+  fake.from = (name) => {
+    const q = realFrom(name);
+    if (name === "orders" && ++reads === 2) Object.assign(fake.db.orders[0], { driver_id: "d2", status: "assigned" });
+    return q;
+  };
+  const r = await respond(fake, { offer_id: "of1", driver_id: "d1", action: "accept" });
+  assert.strictEqual(r.status, 409);
+  assert.strictEqual(fake.db.orders[0].driver_id, "d2");
+  assert.strictEqual(fake.db.dispatch_offers[0].status, "expired");
+});
+
+test("offerNext: a refunded order is never offered to a driver", async () => {
+  const fake = createFakeSupabase({ orders: [order({ payment_status: "refunded" })], applications: [driver("d1", "4x4")], driver_locations: [loc("d1", PA[0], PA[1])] });
+  const r = await dispatch.offerNext(fake, "o1");
+  assert.strictEqual(r.offered, false);
+  assert.strictEqual(r.reason, "refunded");
+  assert.ok(!(fake.db.dispatch_offers || []).length);
 });
 
 (async () => {

@@ -10,7 +10,10 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
+const { phoneKey, samePhone } = require("./_phone");
+const rateLimit = require("./_rate-limit");
 const {
   requireAdminOrCustomer,
   issueTrackingToken,
@@ -27,6 +30,12 @@ const ORDER_SELECT = `
   order_items(*),
   status_logs:order_status_logs(*)
 `;
+
+const LOOKUP_UNAVAILABLE = "Order lookup is temporarily unavailable. Please try again.";
+// PostgREST "JSON object requested, multiple (or no) rows returned" with no rows.
+function isNoRows(error) {
+  return !!error && error.code === "PGRST116" && !/\b[1-9]\d* rows\b/.test(String(error.details || ""));
+}
 
 async function mintTrackingToken(event, headers) {
   let body;
@@ -49,19 +58,35 @@ async function mintTrackingToken(event, headers) {
   }
 
   const supabase = supabaseClient();
+  // Phone guessing: too many failed lookups from one IP blocks further lookups
+  // for the rest of the 15-minute window. Polling with a token (GET) never comes here.
+  const blocked = await rateLimit.over(supabase, event, "track-lookup-fail");
+  if (blocked.limited) return rateLimit.tooMany(headers, blocked.retryAfterSec);
+  const rl = await rateLimit.hit(supabase, event, "track-lookup");
+  if (rl.limited) return rateLimit.tooMany(headers, rl.retryAfterSec);
+  const notFound = async () => {
+    await rateLimit.hit(supabase, event, "track-lookup-fail");
+    return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+  };
   const { data: order, error } = await supabase
     .from("orders")
     .select("id, order_number, customer:customers(phone)")
     .eq("order_number", orderNumber.toUpperCase())
     .maybeSingle();
 
-  if (error || !order) {
-    return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+  if (error) {
+    // A database problem is not "not found": the track page tells the customer
+    // to try again instead of suggesting their order doesn't exist.
+    console.error("[get-orders] order lookup failed:", error.message || error);
+    return { statusCode: 503, headers, body: JSON.stringify({ error: LOOKUP_UNAVAILABLE }) };
+  }
+  if (!order) {
+    return await notFound();
   }
   const custPhone = order.customer && order.customer.phone;
-  if (!custPhone || String(custPhone).trim() !== phone) {
+  if (!custPhone || !samePhone(custPhone, phone)) {
     // Same message as not-found to avoid phone enumeration of order numbers.
-    return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
+    return await notFound();
   }
 
   const token = issueTrackingToken(order);
@@ -78,6 +103,17 @@ async function mintTrackingToken(event, headers) {
       orderNumber: order.order_number,
     }),
   };
+}
+
+// Status log notes are dispatcher text (driver names, "call them" warnings,
+// Stripe ids, SMS failures). A customer token gets status + time only.
+function customerView(order) {
+  if (!order || typeof order !== "object") return order;
+  const out = Object.assign({}, order);
+  for (const k of ["status_logs", "order_status_logs"]) {
+    if (Array.isArray(out[k])) out[k] = out[k].map((l) => ({ status: l && l.status, created_at: l && l.created_at }));
+  }
+  return out;
 }
 
 async function fetchOrders(event, headers, auth) {
@@ -113,7 +149,12 @@ async function fetchOrders(event, headers, auth) {
   }
 
   const { data, error } = await query;
-  if (error) throw error;
+  // .single() with zero rows is PostgREST's PGRST116: that is "not found",
+  // not an outage, so it falls through to the same 404 below.
+  if (error && !isNoRows(error)) {
+    console.error("[get-orders] order fetch failed:", error.message || error);
+    return { statusCode: 503, headers, body: JSON.stringify({ error: LOOKUP_UNAVAILABLE }) };
+  }
 
   if (!data || (Array.isArray(data) && data.length === 0)) {
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Order not found" }) };
@@ -122,7 +163,7 @@ async function fetchOrders(event, headers, auth) {
   return {
     statusCode: 200,
     headers,
-    body: JSON.stringify({ success: true, data }),
+    body: JSON.stringify({ success: true, data: auth.kind === "customer" ? customerView(data) : data }),
   };
 }
 
@@ -151,11 +192,8 @@ exports.handler = async (event) => {
   try {
     return await fetchOrders(event, headers, auth);
   } catch (err) {
-    console.error("Error fetching orders:", err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Failed to fetch orders", message: err.message }),
-    };
+    return serverError(headers, err, "Failed to fetch orders", "get-orders");
   }
 };
+
+exports._phone = { phoneKey, samePhone };

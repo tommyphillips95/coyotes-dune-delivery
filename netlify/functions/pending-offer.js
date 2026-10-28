@@ -1,8 +1,9 @@
 /** GET /api/pending-offer — driver_id from JWT (admin may pass ?driver_id=) */
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
 const { expireStale } = require("./dispatch");
-const { requireAdminOrDriver, jsonError } = require("./_auth");
+const { requireAdminOrDriver, jsonError, assertDriverActive } = require("./_auth");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -14,6 +15,7 @@ exports.handler = async (event) => {
     const driverId = auth.kind === "admin" ? qs.driver_id : auth.decoded.driver_id;
     if (!driverId) return { statusCode: 400, headers, body: JSON.stringify({ error: "driver_id required" }) };
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await assertDriverActive(supabase, auth);
     await expireStale(supabase);
     const { data, error } = await supabase
       .from("dispatch_offers")
@@ -26,6 +28,6 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, offer: data && data[0] ? data[0] : null }) };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return serverError(headers, err, "Failed to load offer", "pending-offer");
   }
 };

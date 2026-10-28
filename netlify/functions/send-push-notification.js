@@ -18,7 +18,10 @@
  */
 
 const admin = require('firebase-admin');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const { createClient } = require('@supabase/supabase-js');
+const { requireAdmin, jsonError } = require('./_auth');
 
 let firebaseAppInitialized = false;
 
@@ -51,12 +54,11 @@ function initFirebase() {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+  const headers = corsHeaders(event, {
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -68,6 +70,14 @@ exports.handler = async (event) => {
       headers,
       body: JSON.stringify({ error: 'Method not allowed. Use POST.' }),
     };
+  }
+
+  // Admin only: unauthenticated callers could push any title/body/link to
+  // any device token or topic (e.g. every driver) under our name.
+  try {
+    requireAdmin(event);
+  } catch (err) {
+    return jsonError(headers, err);
   }
 
   try {
@@ -187,15 +197,7 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('[send-push-notification] Error:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: 'Failed to send push notification',
-        message: err.message,
-      }),
-    };
+    return serverError(headers, err, 'Failed to send push notification', 'send-push-notification');
   }
 };
 

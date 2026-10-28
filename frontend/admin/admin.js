@@ -215,7 +215,7 @@
                 <td class="col-id" title="${esc(app.id)}">#${esc(String(app.id).slice(0, 8))}</td>
                 <td class="col-name">${esc(app.name)}</td>
                 <td class="col-email">${esc(app.email)}</td>
-                <td class="col-status"><span class="badge badge-${app.status}">${fmtStatus(app.status)}</span></td>
+                <td class="col-status"><span class="badge badge-${esc(app.status)}">${esc(fmtStatus(app.status))}</span></td>
                 <td class="col-date">${fmtDate(app.submitted || app.created_at)}</td>
                 <td class="col-actions">
                     <div class="actions-cell">
@@ -281,8 +281,18 @@
     /* ===== Detail Modal ===== */
     async function openDetail(id) {
         currentDetailId = id;
-        const app = currentApps.find(a => String(a.id) === id);
-        if (!app) return;
+        const listed = currentApps.find(a => String(a.id) === id);
+        if (!listed) return;
+        // The list leaves out DOB and policy number; fetch the full record.
+        let app;
+        try {
+            const res = await api('GET', `/applications/${encodeURIComponent(id)}`);
+            app = Object.assign({}, listed, res.application || {});
+        } catch (err) {
+            showToast(err.message || 'Failed to load application', 'error');
+            return;
+        }
+        if (currentDetailId !== id) return;
         modalStatus.value = app.status || 'pending';
         modalBody.innerHTML = buildDetailHTML(app);
         detailModal.style.display = '';
@@ -322,6 +332,7 @@
                     <div class="detail-field"><label>License Plate</label><span>${esc(app.vehicle_plate || '—')}</span></div>
                 </div>
             </div>
+            ${vehicleClassHTML(app)}
             <div class="detail-section">
                 <h4>Insurance</h4>
                 <div class="detail-grid">
@@ -349,6 +360,72 @@
         `;
     }
 
+    /* ===== Vehicle class: set + verify (beach / 4x4 eligibility) ===== */
+    const VEHICLE_CLASS_LABELS = {
+        '2wd': 'Regular car, truck or van (2-wheel drive)',
+        awd: 'All-wheel drive (AWD) car or SUV',
+        '4x4': '4x4 truck or SUV (4-wheel drive)',
+        utv: 'UTV / side-by-side',
+    };
+
+    function fmtWhen(iso) {
+        if (!iso) return '';
+        try { return new Date(iso).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' CT'; }
+        catch (e) { return iso; }
+    }
+
+    function vehicleClassHTML(app) {
+        const cls = app.vehicle_class || '2wd';
+        const reported = app.vehicle_class_reported;
+        const ready = app.vehicle_verification_ready !== false;
+        const status = !ready
+            ? '<p class="vehicle-status vehicle-unverified" role="status">Vehicle verification isn\'t set up yet: run <code>schema/vehicle_verification.sql</code> (LAUNCH.md, SQL run order step 7). Until then no driver counts as verified for beach (4x4) orders.</p>'
+            : app.vehicle_verified
+                ? `<p class="vehicle-status vehicle-verified">Verified: ${esc(VEHICLE_CLASS_LABELS[cls] || cls)}, by ${esc(app.vehicle_class_verified_by || 'admin')} on ${esc(fmtWhen(app.vehicle_class_verified_at))}.</p>`
+                : `<p class="vehicle-status vehicle-unverified">Not verified. This driver won't get beach (4x4) orders until you check the vehicle and mark it verified.</p>`;
+        const options = Object.keys(VEHICLE_CLASS_LABELS).map(k =>
+            `<option value="${k}"${k === cls ? ' selected' : ''}>${esc(VEHICLE_CLASS_LABELS[k])}</option>`).join('');
+        return `
+            <div class="detail-section" data-vehicle-section>
+                <h4>Vehicle Class (dispatch)</h4>
+                <p class="detail-paragraph">Driver picked: <strong>${esc(reported ? (VEHICLE_CLASS_LABELS[reported] || reported) : 'not recorded')}</strong>. Beach / island orders need a verified 4x4, AWD or UTV.</p>
+                ${status}
+                <div class="vehicle-controls">
+                    <label for="vehicle-class-select">Vehicle class</label>
+                    <select id="vehicle-class-select" class="filter-select"${ready ? '' : ' disabled'}>${options}</select>
+                    <button type="button" class="btn btn-success" data-vehicle-verify="true"${ready ? '' : ' disabled'}>Save &amp; mark verified</button>
+                    <button type="button" class="btn btn-secondary" data-vehicle-verify="false"${ready ? '' : ' disabled'}>Save as not verified</button>
+                </div>
+            </div>`;
+    }
+
+    async function onVehicleClick(e) {
+        const btn = e.target.closest('button[data-vehicle-verify]');
+        if (!btn || !currentDetailId) return;
+        const sel = document.getElementById('vehicle-class-select');
+        const verified = btn.dataset.vehicleVerify === 'true';
+        const id = currentDetailId;
+        btn.disabled = true;
+        try {
+            const res = await api('PUT', `/applications/${id}/vehicle`, { vehicle_class: sel.value, verified });
+            const i = currentApps.findIndex(a => String(a.id) === id);
+            if (i >= 0 && res.data) currentApps[i] = res.data;
+            const app = currentApps[i];
+            if (app && currentDetailId === id) {
+                const notesEl = document.getElementById('admin-notes');
+                if (notesEl) notesEl.value = app.admin_notes || '';
+                const section = modalBody.querySelector('[data-vehicle-section]');
+                if (section) section.outerHTML = vehicleClassHTML(app);
+            }
+            showToast(verified ? 'Vehicle class verified.' : 'Vehicle class saved as not verified.', 'success');
+            loadOrders();
+        } catch (err) {
+            showToast(err.message || 'Could not save vehicle class', 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
     function closeDetail() {
         detailModal.style.display = 'none';
         currentDetailId = null;
@@ -364,7 +441,7 @@
         const beach_permit_ok = permitEl ? permitEl.checked : undefined;
         const beach_access_notes = beachNotesEl ? beachNotesEl.value : undefined;
         try {
-            await api('PUT', `/applications/${currentDetailId}`, { status, admin_notes: notes, beach_permit_ok, beach_access_notes });
+            const res = await api('PUT', `/applications/${currentDetailId}`, { status, admin_notes: notes, beach_permit_ok, beach_access_notes });
             const app = currentApps.find(a => String(a.id) === currentDetailId);
             if (app) {
                 app.status = status;
@@ -376,6 +453,7 @@
             updateStats();
             closeDetail();
             showToast('Application updated', 'success');
+            if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Application status changed ──────────
             if (typeof trackEvent === 'function') {
@@ -449,12 +527,14 @@
         const ids = Array.from(selectedIds);
         if (!ids.length) return;
         try {
-            await api('POST', '/applications/bulk', { ids, status });
-            currentApps.forEach(a => { if (selectedIds.has(String(a.id))) a.status = status; });
+            const res = await api('POST', '/applications/bulk', { ids, status });
+            const changedIds = new Set((res && res.updated_ids || []).map(String));
+            currentApps.forEach(a => { if (changedIds.has(String(a.id))) a.status = status; });
             selectedIds.clear();
             applyFiltersAndSort();
             updateStats();
-            showToast(`Updated ${ids.length} applications`, 'success');
+            showToast(`Updated ${res && res.updated != null ? res.updated : ids.length} applications` + (res && res.skipped ? ` (${res.skipped} already ${fmtStatus(status)})` : ''), 'success');
+            if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Bulk status change ────────────────
             if (typeof trackEvent === 'function') {
@@ -477,12 +557,13 @@
 
     async function updateStatus(id, status) {
         try {
-            await api('PUT', `/applications/${id}`, { status });
+            const res = await api('PUT', `/applications/${id}`, { status });
             const app = currentApps.find(a => String(a.id) === id);
             if (app) app.status = status;
             applyFiltersAndSort();
             updateStats();
             showToast(`Status updated to ${fmtStatus(status)}`, 'success');
+            if (res && res.warning) showToast(res.warning, 'error');
 
             // ── Analytics: Status change from row action ─────
             if (typeof trackEvent === 'function') {
@@ -534,21 +615,154 @@
         }
     }
 
+    // Order states from #53-#65 (payment, refunds, dispatch, address checks)
+    // come shaped by GET /api/admin/orders: o.payment {cls,label},
+    // o.attention [{level,code,text}], o.history [{status,note,by,at}].
+    const ordersFilter = document.getElementById('orders-filter');
+    const ordersCount = document.getElementById('orders-attention-count');
+    const ordersAlert = document.getElementById('orders-alert');
+    const PAYMENT_CODES = ['stripe_paid_not_marked', 'second_payment', 'payment_failed'];
+    const ORDER_COLS = 8;
+    // Dispatcher status buttons; the server (_order-admin.js) decides what is
+    // allowed and sends o.allowed. 'assigned' is done with the driver select.
+    const STATUS_ACTIONS = {
+        in_progress: { label: 'Mark in progress', cls: 'btn-primary' },
+        completed: { label: 'Mark completed', cls: 'btn-success' },
+        pending: { label: 'Unassign driver', cls: 'btn-secondary' },
+        cancelled: { label: 'Cancel order', cls: 'btn-danger', confirm: true },
+    };
+
+    function needsAttention(o) {
+        return (o.attention || []).some(a => a.level === 'danger' || a.level === 'warn');
+    }
+    function orderMatchesFilter(o, f) {
+        if (f === 'attention') return needsAttention(o);
+        if (f === 'payment') return (o.attention || []).some(a => PAYMENT_CODES.includes(a.code));
+        if (f === 'unpaid') return !o.payment || !['paid', 'partial', 'refunded'].includes(o.payment.cls);
+        return true;
+    }
+    function fmtWhen(d) {
+        if (!d) return '';
+        const date = new Date(d);
+        if (isNaN(date)) return String(d);
+        return date.toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' CT';
+    }
+
     function renderOrders(orders) {
         if (!ordersBody) return;
-        if (!orders.length) {
-            ordersBody.innerHTML = '<tr><td colspan="6">No orders yet.</td></tr>';
+        const all = orders || [];
+        const flagged = all.filter(needsAttention).length;
+        const urgent = all.filter(o => (o.attention || []).some(a => a.level === 'danger')).length;
+        if (ordersCount) ordersCount.textContent = flagged ? `${flagged} of ${all.length} recent orders need attention${urgent ? ` (${urgent} payment problem${urgent === 1 ? '' : 's'})` : ''}.` : (all.length ? 'Nothing needs attention.' : '');
+        if (ordersAlert) {
+            ordersAlert.hidden = !flagged;
+            ordersAlert.className = 'orders-alert' + (urgent ? ' orders-alert-danger' : '');
+            ordersAlert.textContent = flagged ? `⚠ ${flagged} order${flagged === 1 ? '' : 's'} need${flagged === 1 ? 's' : ''} attention${urgent ? ` — ${urgent} payment problem${urgent === 1 ? '' : 's'}` : ''}. View orders ↓` : '';
+        }
+        const f = ordersFilter ? ordersFilter.value : 'all';
+        const list = all.filter(o => orderMatchesFilter(o, f));
+        if (!all.length) {
+            ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">No orders yet.</td></tr>`;
             return;
         }
-        ordersBody.innerHTML = orders.map(o => `
-            <tr>
-                <td>${esc(o.order_number || String(o.id).slice(0, 8))}</td>
-                <td>${esc(o.pickup_city || '—')} to ${esc(o.dropoff_city || o.pickup_city || '—')}</td>
-                <td>${esc(o.required_vehicle_class || '—')}</td>
-                <td><span class="badge badge-${esc(o.status)}">${fmtStatus(o.status || 'pending')}</span></td>
-                <td>${o.weather_hold ? '<span class="badge badge-on_hold">on hold</span>' : 'none'}</td>
-                <td><button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></td>
-            </tr>`).join('');
+        if (!list.length) {
+            ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">No orders match this filter.</td></tr>`;
+            return;
+        }
+        ordersBody.innerHTML = list.map(o => {
+            const status = o.status || 'pending';
+            const pay = o.payment || { cls: 'none', label: '—' };
+            const flags = (o.attention || []).map(a =>
+                `<li class="attn attn-${esc(a.level)}"><span class="attn-level">${a.level === 'danger' ? 'Urgent' : a.level === 'warn' ? 'Check' : 'Note'}:</span> ${esc(a.text)}</li>`).join('');
+            const history = (o.history || []).map(h =>
+                `<li><time>${esc(fmtWhen(h.at))}</time> <span class="hist-status">${esc(fmtStatus(h.status))}</span> ${esc(h.note || '')}${h.by ? ` <span class="hist-by">(${esc(h.by)})</span>` : ''}</li>`).join('');
+            const price = Number(o.final_price || o.estimated_price);
+            const detail = (flags || history) ? `
+            <tr class="order-detail-row${needsAttention(o) ? ' needs-attention' : ''}">
+                <td colspan="${ORDER_COLS}">
+                    ${flags ? `<ul class="attn-list">${flags}</ul>` : ''}
+                    ${history ? `<details class="order-history"><summary>History (${(o.history || []).length})</summary><ul>${history}</ul></details>` : ''}
+                </td>
+            </tr>` : '';
+            return `
+            <tr class="order-row${needsAttention(o) ? ' needs-attention' : ''}" data-order-id="${esc(o.id)}">
+                <td><strong>${esc(o.order_number || String(o.id).slice(0, 8))}</strong><br><small>${esc(fmtWhen(o.created_at))}${price ? ` · $${price.toFixed(2)}` : ''}</small></td>
+                <td data-label="Route">${esc(o.pickup_city || '—')} to ${esc(o.dropoff_city || o.pickup_city || '—')}</td>
+                <td data-label="Vehicle">${esc(o.required_vehicle_class || '—')}</td>
+                <td data-label="Status"><span class="badge badge-${esc(status)}">${esc(fmtStatus(status))}</span></td>
+                <td data-label="Payment"><span class="pay-badge pay-${esc(pay.cls)}">${esc(pay.label)}</span></td>
+                <td data-label="Driver">${driverCell(o)}</td>
+                <td data-label="Weather hold">${o.weather_hold ? '<span class="badge badge-on_hold">on hold</span>' : 'none'}</td>
+                <td data-label="Action"><div class="order-actions">${statusButtons(o)}<button class="btn ${o.weather_hold ? 'btn-success' : 'btn-warning'}" data-hold-id="${esc(o.id)}" data-hold-next="${o.weather_hold ? 'false' : 'true'}">${o.weather_hold ? 'Clear hold' : 'Set weather hold'}</button></div></td>
+            </tr>${detail}`;
+        }).join('');
+    }
+
+    function orderLabel(o) { return o.order_number || String(o.id).slice(0, 8); }
+
+    function driverCell(o) {
+        const status = o.status || 'pending';
+        const canAssign = status === 'pending' || status === 'assigned';
+        const name = o.driver_name ? `<span class="driver-name">${esc(o.driver_name)}</span>` : (canAssign ? '<span class="driver-none">No driver</span>' : '—');
+        const opts = o.driver_options || [];
+        if (!canAssign) return name;
+        if (!opts.length) return `${name}<small class="driver-hint">No approved drivers yet.</small>`;
+        const selId = `drv-${esc(o.id)}`;
+        const options = opts.map(d => {
+            const bits = [d.name, d.vehicle_class + (d.vehicle_verified ? ' (verified)' : ' (unverified)'), d.online ? 'online' : 'offline'];
+            if (!d.eligible) bits.push(d.reason || 'not eligible');
+            const current = String(d.id) === String(o.driver_id);
+            return `<option value="${esc(d.id)}"${d.eligible && !current ? '' : ' disabled'}>${esc(bits.join(' · '))}${current ? ' (current)' : ''}</option>`;
+        }).join('');
+        return `${name}
+            <div class="assign-row">
+                <label class="sr-only" for="${selId}">Driver for ${esc(orderLabel(o))}</label>
+                <select id="${selId}" class="filter-select driver-select" data-driver-for="${esc(o.id)}">
+                    <option value="">${o.driver_id ? 'Change driver…' : 'Choose driver…'}</option>${options}
+                </select>
+                <button type="button" class="btn btn-primary" data-assign-id="${esc(o.id)}" aria-label="Assign driver to ${esc(orderLabel(o))}">Assign</button>
+            </div>`;
+    }
+
+    function statusButtons(o) {
+        return (o.allowed || []).filter(s => STATUS_ACTIONS[s]).map(s => {
+            const a = STATUS_ACTIONS[s];
+            return `<button type="button" class="btn ${a.cls}" data-status-id="${esc(o.id)}" data-status-next="${esc(s)}" aria-label="${esc(a.label)}: ${esc(orderLabel(o))}">${esc(a.label)}</button>`;
+        }).join('');
+    }
+
+    function setRowBusy(id, busy) {
+        if (!ordersBody) return;
+        ordersBody.querySelectorAll(`tr[data-order-id="${CSS.escape(String(id))}"] button, tr[data-order-id="${CSS.escape(String(id))}"] select`).forEach(el => { el.disabled = busy; });
+    }
+
+    // Server first, then reload so status, driver, flags and history all come
+    // from the database (nothing is changed on screen before the 200).
+    const CUSTOMER_SMS_NOTES = {
+        twilio_not_configured: 'Customer not texted (Twilio isn\'t set up).',
+        already_sent: 'Customer already has the tracking text.',
+        opted_out: 'Customer not texted (they replied STOP).',
+        no_phone: 'Customer not texted (no phone on file).',
+        no_customer: 'Customer not texted (no phone on file).',
+    };
+    function customerSmsNote(c) {
+        if (!c) return '';
+        if (c.sent) return ' Customer texted the tracking link.';
+        return ' ' + (CUSTOMER_SMS_NOTES[c.reason] || 'Customer text failed; the assignment is saved.');
+    }
+
+    async function changeOrder(id, body, okText) {
+        setRowBusy(id, true);
+        try {
+            const res = await api('PUT', `/orders/${encodeURIComponent(id)}`, body);
+            await loadOrders();
+            const warn = (res.warnings || []).join(' ');
+            showToast(okText + customerSmsNote(res.customerSms) + (warn ? ` ${warn}` : ''), warn ? 'warning' : 'success');
+        } catch (err) {
+            setRowBusy(id, false);
+            if (err.status === 409 && err.data && err.data.code === 'conflict') loadOrders();
+            showToast(err.message || 'Could not update the order', 'error');
+        }
     }
 
     async function loadOrders() {
@@ -558,13 +772,37 @@
             currentOrders = data.orders || [];
             renderOrders(currentOrders);
             renderWeather(data.weather);
+            if (data.logsError) showToast('Order history could not be loaded; payment/dispatch flags may be missing.', 'warning');
+            if (data.vehicleSetupMessage) showToast(data.vehicleSetupMessage, 'warning');
         } catch (err) {
             console.error(err);
-            ordersBody.innerHTML = '<tr><td colspan="6">Could not load orders.</td></tr>';
+            ordersBody.innerHTML = `<tr><td colspan="${ORDER_COLS}">Could not load orders.</td></tr>`;
         }
     }
 
     async function onOrdersClick(e) {
+        const assignBtn = e.target.closest('button[data-assign-id]');
+        if (assignBtn) {
+            const id = assignBtn.dataset.assignId;
+            const o = currentOrders.find(x => String(x.id) === id) || {};
+            const sel = ordersBody.querySelector(`select[data-driver-for="${CSS.escape(id)}"]`);
+            if (!sel || !sel.value) { showToast('Choose a driver first.', 'warning'); if (sel) sel.focus(); return; }
+            const d = (o.driver_options || []).find(x => String(x.id) === sel.value);
+            return changeOrder(id, { driver_id: sel.value }, `${d ? d.name : 'Driver'} assigned to ${orderLabel(o)}.`);
+        }
+        const stBtn = e.target.closest('button[data-status-next]');
+        if (stBtn) {
+            const id = stBtn.dataset.statusId;
+            const next = stBtn.dataset.statusNext;
+            const o = currentOrders.find(x => String(x.id) === id) || {};
+            const a = STATUS_ACTIONS[next] || {};
+            const body = { status: next };
+            if (a.confirm) {
+                if (!window.confirm(`Cancel ${orderLabel(o)}? This can't be undone from the dashboard. Refunds are done in Stripe.`)) return;
+                body.confirm = true;
+            }
+            return changeOrder(id, body, `${orderLabel(o)}: ${fmtStatus(next)}.`);
+        }
         const btn = e.target.closest('button[data-hold-id]');
         if (!btn) return;
         const id = btn.dataset.holdId;
@@ -593,7 +831,7 @@
     }
 
     function fmtStatus(s) {
-        return s.replace(/_/g, ' ');
+        return String(s == null || s === '' ? 'unknown' : s).replace(/_/g, ' ');
     }
 
     function fmtDate(d) {
@@ -608,7 +846,7 @@
         toast.className = `toast ${type}`;
         toast.textContent = message;
         toastContainer.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        setTimeout(() => toast.remove(), type === 'error' ? 8000 : 3000);
     }
 
     function handleTokenExpired() {
@@ -624,6 +862,7 @@
         logoutBtn.addEventListener('click', onLogout);
         refreshBtn.addEventListener('click', () => { loadApplications(); loadOrders(); });
         if (ordersBody) ordersBody.addEventListener('click', onOrdersClick);
+        if (ordersFilter) ordersFilter.addEventListener('change', () => renderOrders(currentOrders));
         searchInput.addEventListener('input', debounce(applyFiltersAndSort, 250));
         statusFilter.addEventListener('change', applyFiltersAndSort);
         selectAll.addEventListener('change', onSelectAll);
@@ -633,6 +872,7 @@
         modalClose.addEventListener('click', closeDetail);
         modalCancel.addEventListener('click', closeDetail);
         modalSave.addEventListener('click', saveDetail);
+        modalBody.addEventListener('click', onVehicleClick);
         detailModal.addEventListener('click', (e) => { if (e.target === detailModal) closeDetail(); });
 
         deleteModalClose.addEventListener('click', closeDelete);

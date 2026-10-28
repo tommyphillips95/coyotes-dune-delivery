@@ -17,6 +17,8 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { serverError } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const crypto = require('crypto');
 
 /* ─── Config ─── */
@@ -26,9 +28,11 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 /* ─── Checkr signature verification ─── */
 function verifyCheckrSignature(body, signature) {
+  // Fail closed: without the secret anyone could post a "clear" report and
+  // auto-approve a driver (deriveApplicationStatus).
   if (!CHECKR_WEBHOOK_SECRET) {
-    console.warn('CHECKR_WEBHOOK_SECRET not set; skipping signature verification');
-    return true;
+    console.error('CHECKR_WEBHOOK_SECRET not set; rejecting Checkr webhook');
+    return false;
   }
   if (!signature) return false;
 
@@ -45,6 +49,12 @@ function verifyCheckrSignature(body, signature) {
   } catch {
     return false;
   }
+}
+
+function header(event, name) {
+  const h = (event && event.headers) || {};
+  for (const k of Object.keys(h)) if (k.toLowerCase() === name) return h[k];
+  return undefined;
 }
 
 /* ─── Map Checkr report status → application background_check_status ─── */
@@ -69,11 +79,10 @@ function deriveApplicationStatus(bgStatus) {
 
 /* ─── Main handler ─── */
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, X-Checkr-Signature, X-Checkr-Webhook-Signature',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -87,12 +96,10 @@ exports.handler = async (event) => {
     };
   }
 
-  const rawBody = event.body || '';
-  const signature =
-    event.headers['x-checkr-signature'] ||
-    event.headers['X-Checkr-Signature'] ||
-    event.headers['x-checkr-webhook-signature'] ||
-    event.headers['X-Checkr-Webhook-Signature'];
+  const rawBody = event.isBase64Encoded
+    ? Buffer.from(String(event.body || ''), 'base64').toString('utf8')
+    : typeof event.body === 'string' ? event.body : '';
+  const signature = header(event, 'x-checkr-signature') || header(event, 'x-checkr-webhook-signature');
 
   if (!verifyCheckrSignature(rawBody, signature)) {
     console.error('Checkr webhook signature verification failed');
@@ -107,7 +114,7 @@ exports.handler = async (event) => {
   try {
     payload = JSON.parse(rawBody);
   } catch (err) {
-    console.error('Failed to parse Checkr webhook payload:', err.message);
+    console.error('Failed to parse Checkr webhook payload');
     return {
       statusCode: 400,
       headers,
@@ -115,10 +122,13 @@ exports.handler = async (event) => {
     };
   }
 
-  const eventType = payload.type || payload.event || '';
-  const eventId = payload.id || 'unknown';
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON payload' }) };
+  }
+  const eventType = String(payload.type || payload.event || '');
+  const eventId = payload.id ? String(payload.id) : null;
 
-  console.log(`Received Checkr event: ${eventType} (id: ${eventId})`);
+  console.log(`Received Checkr event: ${eventType.slice(0, 60)} (id: ${String(eventId || 'none').slice(0, 60)})`);
 
   /* Only process events we care about */
   const supportedEvents = ['report.completed', 'report.updated', 'invitation.completed'];
@@ -130,8 +140,9 @@ exports.handler = async (event) => {
     };
   }
 
-  const report = payload.data?.object || payload.data || {};
-  const reportId = report.id;
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : {};
+  const report = data.object && typeof data.object === 'object' ? data.object : data;
+  const reportId = typeof report.id === 'string' || typeof report.id === 'number' ? String(report.id) : null;
   const reportStatus = report.status;
 
   if (!reportId) {
@@ -163,6 +174,21 @@ exports.handler = async (event) => {
       };
     }
 
+    /* ── 1b. Duplicate / replayed / out-of-order events: acknowledge, change nothing ──
+     * Checkr signatures carry no timestamp, so a captured event can be resent at
+     * any time. Every processed event is in background_check_logs.response_payload. */
+    const { data: seen, error: seenError } = await supabase
+      .from('background_check_logs')
+      .select('response_payload')
+      .eq('report_id', reportId);
+    if (seenError) throw seenError;
+    const prior = (seen || []).map((r) => r && r.response_payload).filter((p) => p && typeof p === 'object');
+    const ok200 = (reason) => ({ statusCode: 200, headers, body: JSON.stringify({ received: true, processed: false, reason }) });
+    if (eventId && prior.some((p) => String(p.id) === eventId)) return ok200('Duplicate event');
+    const ts = (p) => { const t = Date.parse(p && p.created_at); return Number.isFinite(t) ? t : null; };
+    const mine = ts(payload);
+    if (mine != null && prior.some((p) => ts(p) != null && ts(p) > mine)) return ok200('Older than an event already processed');
+
     /* ── 2. Map status and build update object ── */
     const newBgStatus = mapCheckrStatus(reportStatus);
     const updatePayload = {
@@ -174,7 +200,8 @@ exports.handler = async (event) => {
       updatePayload.background_check_completed_at = new Date().toISOString();
     }
 
-    const newAppStatus = deriveApplicationStatus(newBgStatus);
+    // A rejected application stays rejected: only an admin reopens it.
+    const newAppStatus = app.status === 'rejected' ? null : deriveApplicationStatus(newBgStatus);
     if (newAppStatus) {
       updatePayload.status = newAppStatus;
     }
@@ -186,7 +213,7 @@ exports.handler = async (event) => {
       .eq('id', app.id);
 
     if (updateError) {
-      console.error('Supabase update error:', updateError);
+      console.error('Supabase update error:', updateError.code || updateError.message || 'error');
       throw updateError;
     }
 
@@ -206,7 +233,7 @@ exports.handler = async (event) => {
 
     if (logError) {
       /* Non-fatal: log the error but don't fail the webhook */
-      console.error('Background-check log insert error:', logError);
+      console.error('Background-check log insert error:', logError.code || logError.message || 'error');
     }
 
     console.log(`Application ${app.id} updated → bg_status: ${newBgStatus}, status: ${newAppStatus || app.status}`);
@@ -223,11 +250,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Error processing Checkr webhook:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Internal server error', message: err.message }),
-    };
+    return serverError(headers, err, 'Internal server error', 'checkr-webhook');
   }
 };

@@ -18,6 +18,8 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { errorResponse } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 
 const CHECKR_BASE_URL = 'https://api.checkr.com/v1';
 const DEFAULT_PACKAGE = 'driver_pro';
@@ -74,11 +76,10 @@ function formatDob(isoDate) {
 }
 
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+  const headers = corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -134,7 +135,6 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify({
           error: 'Application not found',
-          details: fetchError?.message,
         }),
       };
     }
@@ -157,7 +157,6 @@ exports.handler = async (event) => {
       email: applicant.email,
       phone: applicant.phone || undefined,
       dob: formatDob(applicant.date_of_birth),
-      ssn: applicant.ssn || undefined,
     };
 
     // Remove undefined keys
@@ -229,18 +228,8 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    console.error('Checkr initiation error:', err);
-
-    const status = err.status || 500;
-    const payload = {
-      error: 'Failed to initiate background check',
-      message: err.message,
-    };
-
-    if (err.checkrError) {
-      payload.checkrError = err.checkrError;
-    }
-
-    return { statusCode: status, headers, body: JSON.stringify(payload) };
+    // Raw Checkr response (err.checkrError) is logged, not returned.
+    if (err.checkrError) console.error('Checkr response body:', err.checkrError);
+    return errorResponse(headers, err, 'Failed to initiate background check', 'checkr-initiate');
   }
 };

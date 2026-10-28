@@ -26,6 +26,32 @@
     { id: "packages", label: "Packages", blurb: "Send anything across the Coastal Bend", service: "package_delivery", note: "" }
   ];
 
+  // Partners listed on the home page (names/towns copied from frontend/index.html).
+  // `/order/?restaurant=<slug>` prefills the pickup; unknown slugs are ignored.
+  // `city` must be one of CITIES (the zone/pricing towns).
+  // Town mapping: Shells Seafood and Padre Island Burger Co. are listed as
+  // "North Padre Island" (Corpus Christi ZIP 78418). That area IS the
+  // "Padre Island" zone (hub 27.5772,-97.2736, NP mile markers; the home page
+  // describes the Padre Island zone as "North Padre Island, Corpus Christi
+  // Bayfront…"), so they map to "Padre Island" (beach, 4x4, same price table).
+  // Don't add a separate "North Padre Island" town: pricing is by town name and
+  // an unknown town falls back to a flat 10 mi with no beach surcharge.
+  var PARTNERS = [
+    { slug: "texmexcoyote", name: "TexMexCoyote", category: "food", city: "Port Aransas" },
+    { slug: "heb-coastal-market", name: "H-E-B Coastal Market", category: "groceries", city: "Corpus Christi" },
+    { slug: "clems-bait-tackle", name: "Clem's Bait & Tackle", category: "bait", city: "Port Aransas" },
+    { slug: "shells-seafood", name: "Shells Seafood", category: "food", city: "Padre Island" },
+    { slug: "stingrays-taphouse", name: "Stingray's Taphouse", category: "food", city: "Port Aransas" },
+    { slug: "padre-island-burger-co", name: "Padre Island Burger Co.", category: "food", city: "Padre Island" }
+  ];
+  function partnerBySlug(slug) {
+    // Trimmed: shared links often carry stray spaces (?restaurant=%20shells-seafood%20).
+    var s = String(slug || "").trim().toLowerCase();
+    if (!/^[a-z0-9-]{1,60}$/.test(s)) return null;
+    for (var i = 0; i < PARTNERS.length; i++) if (PARTNERS[i].slug === s) return PARTNERS[i];
+    return null;
+  }
+
   var KEYWORDS = {
     food: ["taco", "food", "restaurant", "pizza", "burger", "seafood", "shrimp", "lunch", "dinner", "breakfast"],
     groceries: ["grocery", "groceries", "market", "milk", "bread", "cooler", "beer", "ice", "drink", "water"],
@@ -41,6 +67,33 @@
 
   function isCity(name) {
     return CITIES.indexOf(String(name || "")) !== -1;
+  }
+
+  // US ZIP for the order form: 5 digits, optional +4. Spaces/dashes the
+  // phone keyboard adds around it are ignored.
+  function isValidZip(zip) {
+    return /^\d{5}(-?\d{4})?$/.test(String(zip == null ? "" : zip).trim());
+  }
+
+  // ZIP 78418 covers both North Padre Island and Flour Bluff (mainland Corpus
+  // Christi), per Census 2020 ZCTA-to-place data (see
+  // netlify/functions/_service-area.js). With a non-beach town picked, the
+  // customer must say which side; the server requires the same answer
+  // (<end>_zip_area) and prices "island" as Padre Island.
+  var ZIP_AREAS = { "78418": { island: "Padre Island", mainland: "Corpus Christi" } };
+  var BEACH_TOWNS = ["Port Aransas", "Mustang Island", "Padre Island"];
+
+  function zipAreaQuestion(town, zip) {
+    var z = /^(\d{5})/.exec(String(zip == null ? "" : zip).trim());
+    var sides = z && ZIP_AREAS[z[1]];
+    if (!sides || !isCity(town) || BEACH_TOWNS.indexOf(String(town)) !== -1) return null;
+    return { zip: z[1], island: sides.island, mainland: sides.mainland };
+  }
+
+  // Town to price an end as, given the customer's answer ("island"/"mainland").
+  function zipAreaTown(town, zip, answer) {
+    var q = zipAreaQuestion(town, zip);
+    return q && answer === "island" ? q.island : town;
   }
 
   function categoryById(id) {
@@ -112,7 +165,7 @@
 
   /** Parse and whitelist /order/ query params (never trust raw input). */
   function parseOrderParams(search) {
-    var out = { service: null, category: null, pickup: null, dropoff: null, q: null, track: null };
+    var out = { service: null, category: null, pickup: null, dropoff: null, q: null, track: null, restaurant: null, restaurantUnknown: false };
     var s = String(search || "").replace(/^\?/, "");
     if (!s) return out;
     s.split("&").forEach(function (pair) {
@@ -127,9 +180,72 @@
       else if (k === "dropoff" && isCity(val)) out.dropoff = val;
       else if (k === "q" && val) out.q = val.slice(0, 120);
       else if ((k === "track" || k === "order") && /^[A-Z0-9-]{4,40}$/i.test(val)) out.track = val.toUpperCase();
+      // Several restaurant= values: the first known partner wins (the order
+      // page head pre-paint check matches this).
+      else if (k === "restaurant" && !out.restaurant && partnerBySlug(val)) out.restaurant = partnerBySlug(val).slug;
+      // A restaurant= value that isn't one of PARTNERS (or can't be decoded):
+      // the page says so instead of silently starting a plain order. Empty or
+      // blank restaurant= is treated as absent.
+      else if (k === "restaurant" && (val.trim() || (raw && !val))) out.restaurantUnknown = true;
     });
+    if (out.restaurant) out.restaurantUnknown = false;
+    if (out.restaurant) {
+      var partner = partnerBySlug(out.restaurant);
+      if (!out.category) out.category = partner.category;
+      if (!out.pickup && partner.city && isCity(partner.city)) out.pickup = partner.city;
+    }
     if (out.category && !out.service) out.service = categoryById(out.category).service;
     return out;
+  }
+
+  // ── Checkout idempotency key (one per order, kept across edits/reloads) ──
+  // Kept in sessionStorage until an order succeeds, so an edit or a reload
+  // after a timeout reuses it. create-order then either creates the order
+  // (the first try never arrived) or, if the first try DID arrive, refuses the
+  // changed details (422 checkout_changed) and names the order it made.
+  var CHECKOUT_KEY_STORE = "cdd_checkout_key";
+  var CHECKOUT_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
+  function sessionStore() {
+    try { return root.sessionStorage || null; } catch (e) { return null; }
+  }
+  function checkoutSession(store, makeKey) {
+    var s = store === undefined ? sessionStore() : store;
+    var key = null, payload = null;
+    function read() {
+      try { var k = s && s.getItem(CHECKOUT_KEY_STORE); return k && CHECKOUT_KEY_RE.test(k) ? k : null; } catch (e) { return null; }
+    }
+    function write(k) {
+      try { if (s) { if (k) s.setItem(CHECKOUT_KEY_STORE, k); else s.removeItem(CHECKOUT_KEY_STORE); } } catch (e) { /* private mode: memory only */ }
+    }
+    return {
+      key: function () {
+        if (!key) key = read();
+        if (!key) { key = makeKey(); write(key); }
+        return key;
+      },
+      // A plain retry resends exactly what was sent (clock-derived fields such
+      // as ASAP-vs-later can't drift); an edit drops it so the new details go.
+      attemptPayload: function (data) {
+        if (!payload || payload.idempotency_key !== data.idempotency_key) payload = data;
+        return payload;
+      },
+      edited: function () { payload = null; },
+      clear: function () { key = null; payload = null; write(null); }
+    };
+  }
+  /**
+   * create-order refusal that means "this checkout already made an order":
+   *   { kind: "changed", order }  422 checkout_changed: the first try went through
+   *   { kind: "used" }            409 checkout_used: made with another phone (no details)
+   */
+  function checkoutConflict(result) {
+    var d = result && result.data;
+    if (!result || result.ok || !d) return null;
+    if (result.status === 422 && d.code === "checkout_changed" && d.existingOrder && d.existingOrder.orderNumber) {
+      return { kind: "changed", order: d.existingOrder };
+    }
+    if (result.status === 409 && d.code === "checkout_used") return { kind: "used" };
+    return null;
   }
 
   // ── Tracking token storage (customer JWT minted by create-order / get-orders) ──
@@ -175,8 +291,206 @@
     s.setItem(TOKEN_KEY, JSON.stringify(all));
   }
 
+  // ── Order confirmation copy (#confirmation clarity) ──
+  // Only claim a text was sent when create-order says it was (smsSent).
+  // No order-confirmation email exists, so never promise one.
+  function maskPhone(phone) {
+    var d = String(phone || "").replace(/\D/g, "");
+    return d.length >= 4 ? "(•••) •••-" + d.slice(-4) : "";
+  }
+  function confirmationNextSteps(o) {
+    var v = o || {};
+    var masked = maskPhone(v.phone);
+    var first = v.smsSent && masked
+      ? "We texted a confirmation to " + masked + "."
+      : "Save your order number above \u2014 you'll need it and your phone number to track this order.";
+    return first + " Tap \u201cTrack this order\u201d to see when a driver is assigned and follow them live.";
+  }
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // "2026-10-18", "18:30" -> "Sun, Oct 18 at 6:30 PM CT" (pure string math; no device time zone).
+  function formatServiceSlot(dateStr, timeStr) {
+    var dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ""));
+    var tm = /^(\d{2}):(\d{2})/.exec(String(timeStr || ""));
+    if (!dm || !tm) return "";
+    var y = +dm[1], mo = +dm[2], d = +dm[3], h = +tm[1], mi = tm[2];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23) return "";
+    var dow = DAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    return dow + ", " + MONTHS[mo - 1] + " " + d + " at " + h12 + ":" + mi + " " + (h < 12 ? "AM" : "PM") + " CT";
+  }
+  // Rows for the confirmation summary: [[label, value], ...]; values are plain text.
+  function confirmationSummary(o) {
+    var v = o || {};
+    var rows = [];
+    rows.push(["When", v.asap ? "As soon as possible" : (formatServiceSlot(v.date, v.time) || "Scheduled")]);
+    var from = [v.pickupAddress, v.pickupCity].filter(Boolean).join(", ");
+    var to = [v.dropoffAddress, v.dropoffCity].filter(Boolean).join(", ");
+    if (from) rows.push(["Pickup", from]);
+    if (to) rows.push(["Drop-off", to]);
+    var amt = Number(v.amount);
+    // Card payments already show a "Paid $X" badge; pay-later orders need the amount here.
+    if (amt > 0 && !v.paid) rows.push(["Estimated total", "$" + amt.toFixed(2) + " (pay your driver)"]);
+    return rows;
+  }
+
   function buildTrackUrl(orderNumber) {
     return "/track/?order=" + encodeURIComponent(String(orderNumber || "").toUpperCase());
+  }
+
+  // Customer-facing message for a failed /api/create-order call.
+  // result is CoyoteAPI's { ok:false, error, status }. 4xx/503 messages come
+  // from our own validation / weather hold and are safe to show; 5xx bodies can
+  // carry internal error text, so those get a generic line instead.
+  var SUPPORT_PHONE = "(361) 897-9670";
+  // ── Slow / dropped connections (order + payment requests) ──
+  var DEFAULT_TIMEOUT_MS = 15000;
+  function requestTimeoutMs() {
+    var o = root && root.__CDD_REQUEST_TIMEOUT_MS; // test hook (browser smoke); unset in production
+    return typeof o === "number" && o > 0 ? o : DEFAULT_TIMEOUT_MS;
+  }
+  function isOffline(nav) {
+    var n = nav || (root && root.navigator);
+    return !!(n && n.onLine === false);
+  }
+  /** fetch with an AbortController timeout. Rejects with err.timedOut / err.offline set. */
+  function timedFetch(fetchFn, url, config, ms, deps) {
+    var d = deps || {};
+    var AC = d.AbortController || (typeof AbortController !== "undefined" ? AbortController : null);
+    var setT = d.setTimeout || setTimeout, clearT = d.clearTimeout || clearTimeout;
+    var ctl = AC ? new AC() : null;
+    var cfg = Object.assign({}, config || {});
+    if (ctl) cfg.signal = ctl.signal;
+    var timedOut = false;
+    var timer = ms > 0 && ctl ? setT(function () { timedOut = true; ctl.abort(); }, ms) : null;
+    return Promise.resolve()
+      .then(function () { return fetchFn(url, cfg); })
+      .then(function (res) { if (timer) clearT(timer); return res; }, function (err) {
+        if (timer) clearT(timer);
+        // Always a fresh Error: browsers reject with a DOMException whose
+        // message is read-only (assigning it throws in strict mode).
+        var e = new Error(timedOut ? "timeout" : String((err && err.message) || err || "network error"));
+        if (timedOut) e.timedOut = true;
+        if (isOffline(d.navigator)) e.offline = true;
+        e.network = true;
+        throw e;
+      });
+  }
+  /** 'offline' | 'timeout' | 'network' for a CoyoteAPI failure with no server answer, else null. */
+  function networkFailureKind(result) {
+    if (!result || result.ok || Number(result.status) > 0) return null;
+    if (result.offline) return "offline";
+    if (result.timedOut) return "timeout";
+    return "network";
+  }
+  function orderNetworkMessage(kind) {
+    if (kind === "offline") return "You're offline. Reconnect, then tap Retry. Nothing was charged.";
+    if (kind === "timeout") return "This is taking longer than usual. Your order may already have gone through \u2014 tap Retry and we'll check without placing a second order.";
+    return "We couldn't reach Coyote's servers. Check your signal and tap Retry \u2014 it won't place a second order. Nothing was charged.";
+  }
+  // create-payment-intent answered 5xx or 429: the server or Stripe is having
+  // a moment. Retrying is safe (it checks for an existing payment first), so
+  // say that instead of the raw server text.
+  function paymentServerBusy(result) {
+    var st = Number(result && result.status) || 0;
+    return st >= 500 || st === 429;
+  }
+  var PAYMENT_BUSY_MESSAGE = "Card payment is temporarily unavailable. Wait a minute, then tap Retry \u2014 we check whether this order is already paid before charging. You haven't been charged.";
+  function paymentNetworkMessage(kind) {
+    if (kind === "offline") return "You're offline. Reconnect, then tap Retry. You haven't been charged.";
+    if (kind === "timeout") return "Payment setup is taking longer than usual. Tap Retry \u2014 we check whether this order is already paid before charging.";
+    return "We couldn't reach the payment server. Tap Retry \u2014 we check whether this order is already paid before charging.";
+  }
+
+  function orderErrorMessage(result) {
+    var generic = "Something went wrong placing your order. Please try again or call " + SUPPORT_PHONE + ".";
+    if (!result) return generic;
+    var r = result;
+    var status = Number(r.status) || 0;
+    var msg = String(r.error || "").trim();
+    if (status === 0) return orderNetworkMessage(networkFailureKind(r) || "network");
+    // Only create-order's weather hold (body.weather_hold) means "paused";
+    // any other 503 (gateway, maintenance page, overload) is a normal retry.
+    if (status === 503 && r.data && r.data.weather_hold === true) {
+      return msg && msg !== "Request failed" && msg !== "weather_hold" ? msg : "Deliveries are paused for weather. Please try again later.";
+    }
+    if (status >= 400 && status < 500 && msg && msg !== "Request failed") {
+      return msg;
+    }
+    return generic;
+  }
+
+  // Inline message for the "Track an Existing Order" box on /order/.
+  // kind: "missing" (a field is empty) or a CoyoteAPI failure result.
+  function trackErrorMessage(kind) {
+    if (kind === "missing") return "Enter both your order number and the phone number used for the order.";
+    var status = Number(kind && kind.status) || 0;
+    if (kind && kind.ok === false && status === 0) {
+      return "We couldn't reach Coyote's servers. Check your signal and try again.";
+    }
+    if (status >= 500) return "We couldn't look up your order right now. Please try again in a moment.";
+    return "We couldn't find that order. Check the order number and phone number.";
+  }
+
+  // /api/create-payment-intent answers 409 with a machine-readable code when
+  // the order must NOT be charged again. Returns "already_paid",
+  // "payment_processing", "order_closed", or null (anything else: normal error handling).
+  function paymentConflictKind(result) {
+    if (!result || result.ok) return null;
+    if (Number(result.status) !== 409) return null;
+    var code = result.data && typeof result.data === "object" ? result.data.code : null;
+    return code === "already_paid" || code === "payment_processing" || code === "order_closed"
+      ? code
+      : null;
+  }
+
+  // Titles + fallback copy for the order_closed checkout screen. Prefer the
+  // server's error string when present; these match create-payment-intent.js.
+  function orderClosedScreen(reason) {
+    if (reason === "refunded") {
+      return {
+        title: "Payment Refunded",
+        message: "This order's payment was refunded, so it can't be paid again.",
+      };
+    }
+    return {
+      title: "Order Cancelled",
+      message: "This order was cancelled, so it can't be paid.",
+    };
+  }
+
+  // Read-only "check payment status" on the processing screen uses the
+  // order row from GET /api/get-orders. Returns "paid", "failed" or "processing".
+  function paymentStatusKind(order) {
+    var s = String((order && order.payment_status) || "").toLowerCase();
+    if (s === "paid") return "paid";
+    if (s === "failed" || s === "refunded") return "failed";
+    return "processing";
+  }
+
+  // Customer-facing order status labels, shared by /track/ and the order
+  // page's tracking box. Unknown statuses fall back to every '_' -> ' '.
+  var STATUS_LABELS = { pending: "Pending", assigned: "Assigned", in_progress: "On the Way", completed: "Completed", cancelled: "Cancelled" };
+  function statusLabel(status) {
+    var s = String(status || "");
+    return STATUS_LABELS[s] || s.replace(/_/g, " ");
+  }
+
+  // Payment badge on the track box. A partial refund keeps payment_status
+  // 'paid' and adds a 'partial_refund' status log (payment-webhook).
+  // Orders have no payment-method column: a card checkout is the one that
+  // created a Stripe PaymentIntent (stripe_payment_intent_id); without one the
+  // customer pays the driver, so "Pending" would be misleading.
+  function paymentBadge(order) {
+    var s = String((order && order.payment_status) || "pending").toLowerCase();
+    var logs = (order && (order.status_logs || order.order_status_logs)) || [];
+    var partial = Array.isArray(logs) && logs.some(function (l) { return l && l.status === "partial_refund"; });
+    var card = !!(order && order.stripe_payment_intent_id);
+    if (s === "paid") return { cls: "paid", label: partial ? "Paid (partly refunded)" : "Paid" };
+    if (s === "refunded") return { cls: "refunded", label: "Refunded" };
+    if (!card) return { cls: "pending", label: "Pay your driver" };
+    if (s === "failed") return { cls: "failed", label: "Card payment failed" };
+    return { cls: "pending", label: "Card payment pending" };
   }
 
   var TERMINAL = ["completed", "cancelled", "delivered"];
@@ -184,11 +498,99 @@
     return TERMINAL.indexOf(String(status || "").toLowerCase()) !== -1;
   }
 
+  // <input type="date|time"> values are local wall-clock strings. Never derive
+  // them from toISOString() (UTC): after ~7 PM in Texas that rolls the date to
+  // tomorrow and blocks booking for tonight.
+  function pad2(n) {
+    return (n < 10 ? "0" : "") + n;
+  }
+  function localDateInputValue(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+  function localTimeInputValue(d) {
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+
+  // ── Central time (the service runs on Port Aransas time) ──
+  // The order form's date/time inputs are Central wall-clock values whatever
+  // time zone the customer's phone is set to (tourists often have Pacific or
+  // Eastern phones). They are sent as an ISO string with the Central offset.
+  var SERVICE_TZ = "America/Chicago";
+  var centralFmt = null;
+  function centralWall(d) {
+    if (!centralFmt) {
+      centralFmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: SERVICE_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+      });
+    }
+    var p = {};
+    centralFmt.formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+    return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute, s: +p.second };
+  }
+  // Minutes east of UTC for Central at an instant (-300 CDT, -360 CST).
+  function centralOffsetMinutes(instant) {
+    var w = centralWall(instant);
+    var asUtc = Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi, w.s);
+    return Math.round((asUtc - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
+  }
+  function centralParts(d) {
+    var w = centralWall(d);
+    return { date: w.y + "-" + pad2(w.mo) + "-" + pad2(w.d), time: pad2(w.h) + ":" + pad2(w.mi) };
+  }
+  // Instant for a Central wall-clock date ("YYYY-MM-DD") + time ("HH:MM").
+  function centralInstant(date, time) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+    var t = /^(\d{2}):(\d{2})/.exec(String(time || ""));
+    if (!m || !t) return null;
+    var wallUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +t[1], +t[2]);
+    var guess = new Date(wallUtc - centralOffsetMinutes(new Date(wallUtc)) * 60000);
+    var off = centralOffsetMinutes(guess); // re-check across a DST boundary
+    return new Date(wallUtc - off * 60000);
+  }
+  function formatOffset(min) {
+    var sign = min < 0 ? "-" : "+";
+    var a = Math.abs(min);
+    return sign + pad2(Math.floor(a / 60)) + ":" + pad2(a % 60);
+  }
+  // "2026-10-18T20:30:00-05:00" for the Central wall time.
+  function centralIso(date, time) {
+    var inst = centralInstant(date, time);
+    if (!inst) return null;
+    return date + "T" + String(time).slice(0, 5) + ":00" + formatOffset(centralOffsetMinutes(inst));
+  }
+  // "Sun, Oct 18, 8:30 PM CDT"
+  function formatCentral(instant) {
+    return instant.toLocaleString("en-US", {
+      timeZone: SERVICE_TZ, weekday: "short", month: "short", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short"
+    });
+  }
+
+  // Default slot for the order form: now + leadMinutes (default 30), plus the
+  // earliest selectable date (today), both in Central time.
+  function defaultServiceSlot(now, leadMinutes) {
+    var base = now ? new Date(now.getTime()) : new Date();
+    var slot = new Date(base.getTime() + (leadMinutes == null ? 30 : leadMinutes) * 60000);
+    var sp = centralParts(slot);
+    return {
+      date: sp.date,
+      time: sp.time,
+      minDate: centralParts(base).date
+    };
+  }
+
   var api = {
     CITIES: CITIES,
     SERVICES: SERVICES,
     CATEGORIES: CATEGORIES,
+    PARTNERS: PARTNERS,
+    partnerBySlug: partnerBySlug,
     isCity: isCity,
+    ZIP_AREAS: ZIP_AREAS,
+    zipAreaQuestion: zipAreaQuestion,
+    zipAreaTown: zipAreaTown,
+    isValidZip: isValidZip,
     categoryById: categoryById,
     matchCategory: matchCategory,
     planRoute: planRoute,
@@ -198,9 +600,41 @@
     getTrackingToken: getTrackingToken,
     clearTrackingToken: clearTrackingToken,
     buildTrackUrl: buildTrackUrl,
-    isTerminalStatus: isTerminalStatus
+    CHECKOUT_KEY_STORE: CHECKOUT_KEY_STORE,
+    checkoutSession: checkoutSession,
+    checkoutConflict: checkoutConflict,
+    DEFAULT_TIMEOUT_MS: DEFAULT_TIMEOUT_MS,
+    requestTimeoutMs: requestTimeoutMs,
+    isOffline: isOffline,
+    timedFetch: timedFetch,
+    networkFailureKind: networkFailureKind,
+    orderNetworkMessage: orderNetworkMessage,
+    paymentNetworkMessage: paymentNetworkMessage,
+    paymentServerBusy: paymentServerBusy,
+    paymentBusyMessage: function () { return PAYMENT_BUSY_MESSAGE; },
+    maskPhone: maskPhone,
+    confirmationNextSteps: confirmationNextSteps,
+    formatServiceSlot: formatServiceSlot,
+    confirmationSummary: confirmationSummary,
+    isTerminalStatus: isTerminalStatus,
+    localDateInputValue: localDateInputValue,
+    localTimeInputValue: localTimeInputValue,
+    defaultServiceSlot: defaultServiceSlot,
+    SERVICE_TZ: SERVICE_TZ,
+    centralParts: centralParts,
+    centralInstant: centralInstant,
+    centralIso: centralIso,
+    formatCentral: formatCentral
   };
 
+  api.orderErrorMessage = orderErrorMessage;
+  api.trackErrorMessage = trackErrorMessage;
+  api.paymentConflictKind = paymentConflictKind;
+  api.orderClosedScreen = orderClosedScreen;
+  api.paymentStatusKind = paymentStatusKind;
+  api.paymentBadge = paymentBadge;
+  api.statusLabel = statusLabel;
+  api.STATUS_LABELS = STATUS_LABELS;
   root.CoyoteCoastal = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

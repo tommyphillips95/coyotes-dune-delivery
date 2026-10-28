@@ -2,38 +2,72 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#10202E">
     <title>Track Your Driver — Coyote's Dune Delivery</title>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="description" content="Track your Coyote's Dune Delivery ride or drop-off in real time. Enter your order number and phone to see your driver on the map.">
+    <link rel="preload" href="/fonts/inter-v20-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="../css/style.css">
     <link rel="stylesheet" href="../css/coastal.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="/vendor/leaflet-1.9.4/leaflet.css"/>
     <style>
         body { margin: 0; }
         .track-page { max-width: 1200px; margin: 0 auto; padding: 100px 24px 24px; }
         .track-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; min-height: 600px; }
-        @media (max-width: 900px) { .track-layout { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { .track-layout { grid-template-columns: minmax(0, 1fr); } }
         .track-card { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
         .lookup-form { display: flex; flex-direction: column; gap: 10px; }
-        .lookup-form input, .lookup-form button { padding: 12px; border-radius: 6px; font-size: 0.95rem; }
+        /* 16px+ so iOS Safari doesn't zoom the page when a field is tapped; 48px tap targets */
+        .lookup-form input, .lookup-form button { padding: 12px; border-radius: 6px; font-size: 1rem; min-height: 48px; }
+        .lookup-form label { font-size: 0.85rem; font-weight: 600; margin-bottom: -4px; }
+        .lookup-message { margin: 10px 0 0; padding: 10px 12px; border-radius: 6px; background: rgba(196, 90, 62, 0.08); color: #A8432A; font-size: 0.92rem; }
+        .connection-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 6px; background: #FFF4D6; color: #6B4300; font-size: 0.92rem; }
+        .timeline-step { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: #6B7280; font-size: 0.92rem; }
+        .timeline-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #EADFCC; background: #fff; flex-shrink: 0; }
+        .timeline-dot.completed { background: #3FB8A6; border-color: #3FB8A6; }
+        .timeline-dot.active { background: #FF6B4A; border-color: #FF6B4A; }
+        .timeline-step:has(.timeline-dot.active) { color: #10202E; font-weight: 600; }
         .lookup-form input { border: 1.5px solid #EADFCC; }
         .lookup-form button { border: none; background: #FF6B4A; color: #fff; font-weight: 600; cursor: pointer; }
         .eta-box { background: #10202E; color: #fff; border-radius: 14px; padding: 20px; text-align: center; }
         .eta-value { font-size: 1.8rem; font-weight: 700; }
-        .map-container { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; }
+        /* padding:0 — style.css .map-container is for the home illustration (40px); must not shrink the live Leaflet map on phones. */
+        .map-container { background: #fff; border: 1px solid #EADFCC; border-radius: 14px; min-height: 500px; position: relative; overflow: hidden; padding: 0; }
         #map { width: 100%; height: 100%; min-height: 500px; }
+        /* Phones/tablets (single column): map sized to the screen instead of a fixed 500px block. */
+        @media (max-width: 900px) {
+            .map-container { min-height: 0; }
+            #map { min-height: 280px; height: 45vh; height: 45dvh; max-height: 440px; }
+            .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+        }
+        /* Touch screens: map zoom buttons big enough to hit (Leaflet default is 30x30). */
+        @media (pointer: coarse) {
+            .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 22px; }
+        }
+        .map-hint { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 500; background: rgba(16, 32, 46, 0.85); color: #fff; font-size: 0.8rem; padding: 6px 10px; border-radius: 999px; pointer-events: none; white-space: normal; max-width: calc(100% - 24px); text-align: center; }
+        /* h2 for heading order (h1 -> h2), sized like the old h3 */
+        .track-card-title { font-size: 1.17em; margin: 0 0 12px; }
         .hidden { display: none !important; }
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #3FB8A6; display: inline-block; }
-        .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EADFCC; font-size: 0.88rem; }
+        .order-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EADFCC; font-size: 0.88rem; gap: 12px; }
+        .order-detail-row > span:last-child { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+        .order-detail-row[hidden] { display: none; }
     </style>
 </head>
 <body>
-    <nav class="navbar"><div class="container nav-container">
+    <nav class="navbar" id="navbar"><div class="container nav-container">
         <a href="/" class="logo">
             <svg class="logo-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span class="logo-text">Coyote's Dune Delivery<span class="logo-sub">Texas Gulf Coast</span></span>
         </a>
-        <ul class="nav-menu">
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="hamburger"></span>
+        </button>
+        <ul class="nav-menu" id="navMenu">
             <li><a href="/">Home</a></li>
             <li><a href="/#planner">Pricing</a></li>
             <li><a href="/order/" class="btn btn-primary">Order Now</a></li>
@@ -41,21 +75,25 @@
     </div></nav>
     <main class="track-page">
         <h1 style="font-family: var(--font-display);">Track Your Delivery</h1>
-        <p>Live driver location and order status refresh every 15 seconds.</p>
+        <p>Enter your order number and the phone used for the order. Once tracking, the map and status refresh every 15 seconds.</p>
         <div class="track-layout">
             <aside>
                 <div class="track-card">
-                    <h3>Find Your Order</h3>
-                    <form class="lookup-form" id="lookupForm">
-                        <input type="text" id="lookupOrderNum" placeholder="Order number (CDD-...)">
-                        <input type="tel" id="lookupPhone" placeholder="Phone number">
+                    <h2 class="track-card-title">Find Your Order</h2>
+                    <form class="lookup-form" id="lookupForm" novalidate>
+                        <label for="lookupOrderNum">Order number</label>
+                        <input type="text" id="lookupOrderNum" placeholder="CDD-..." autocapitalize="characters" autocomplete="off" spellcheck="false">
+                        <label for="lookupPhone">Phone number used for the order</label>
+                        <input type="tel" id="lookupPhone" placeholder="(361) 555-0100" autocomplete="tel" inputmode="tel">
                         <button type="submit" id="lookupBtn">Track Order</button>
                     </form>
+                    <p class="lookup-message" id="lookupMessage" role="status" aria-live="polite" hidden></p>
+                    <p class="connection-notice" id="connectionNotice" role="status" aria-live="polite" hidden></p>
                 </div>
                 <div class="track-card hidden" id="etaCard">
                     <span class="live-dot"></span> Live Tracking
                     <div class="eta-box">
-                        <div>Estimated Arrival</div>
+                        <div id="etaLabel">Estimated arrival</div>
                         <div class="eta-value" id="etaValue">--</div>
                         <div id="etaUnit">minutes</div>
                     </div>
@@ -70,23 +108,27 @@
                     <div class="order-detail-row"><span>Pickup</span><span id="detailPickup">--</span></div>
                     <div class="order-detail-row"><span>Drop-off</span><span id="detailDropoff">--</span></div>
                     <div class="order-detail-row"><span>Status</span><span id="detailStatus">--</span></div>
+                    <div class="order-detail-row" id="detailPaymentRow" hidden><span>Payment</span><span id="detailPayment"></span></div>
                 </div>
+                <div class="cc-sr-only" id="trackStatusLive" role="status" aria-live="polite"></div>
                 <div class="track-card hidden" id="timelineCard">
-                    <div id="dotPending" class="timeline-dot"></div>
-                    <div id="dotAssigned" class="timeline-dot"></div>
-                    <div id="dotInProgress" class="timeline-dot"></div>
-                    <div id="dotCompleted" class="timeline-dot"></div>
+                    <div class="timeline-step"><div id="dotPending" class="timeline-dot"></div>Order received</div>
+                    <div class="timeline-step"><div id="dotAssigned" class="timeline-dot"></div>Driver assigned</div>
+                    <div class="timeline-step"><div id="dotInProgress" class="timeline-dot"></div>On the way</div>
+                    <div class="timeline-step"><div id="dotCompleted" class="timeline-dot"></div>Completed</div>
                 </div>
             </aside>
             <div class="map-container">
                 <div id="mapLoading">Enter your order details to see the live map.</div>
-                <div class="hidden" id="mapError"><h3>Map unavailable</h3></div>
+                <div class="hidden" id="mapError"><h2 class="track-card-title">Map unavailable</h2></div>
                 <div id="map" class="hidden"></div>
+                <div class="map-hint hidden" id="mapHint">Use two fingers to move the map</div>
             </div>
         </div>
     </main>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="../js/coastal.js"></script>
-    <script src="track.js"></script>
+    <script defer src="/vendor/leaflet-1.9.4/leaflet.js"></script>
+    <script defer src="../js/coastal.js"></script>
+    <script defer src="../js/main.js"></script>
+    <script defer src="track.js"></script>
 </body>
 </html>

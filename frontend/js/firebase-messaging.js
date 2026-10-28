@@ -26,11 +26,16 @@
   };
 
   const VAPID_KEY = window.__FIREBASE_VAPID_KEY__ || 'YOUR_VAPID_KEY';
+  // Placeholder config: skip init (and the service-worker registration).
+  const CONFIGURED = !/^(YOUR_|$)/.test(String(FIREBASE_CONFIG.apiKey || '')) &&
+    !/^(YOUR_|$)/.test(String(FIREBASE_CONFIG.projectId || '')) && !/^(YOUR_|$)/.test(String(VAPID_KEY || ''));
+  window.__CDD_FIREBASE_MESSAGING_CONFIGURED__ = CONFIGURED;
 
   // ── Internal state ──
   let messaging = null;
   let firebaseApp = null;
   let currentToken = null;
+  let swRegistration = null;
 
   // ── Toast / In-App Notification UI ──
   function showToast(title, body, icon) {
@@ -119,25 +124,49 @@
     }
   }
 
+  // Load Firebase app + messaging SDK only when config is real (avoids ~CDN hit + API_KEY_INVALID on placeholders).
+  function loadFirebaseSdk() {
+    return new Promise((resolve, reject) => {
+      if (typeof firebase !== 'undefined' && firebase.messaging) {
+        resolve();
+        return;
+      }
+      const appScript = document.createElement('script');
+      appScript.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js';
+      appScript.onload = function () {
+        const msgScript = document.createElement('script');
+        msgScript.src = 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js';
+        msgScript.onload = () => resolve();
+        msgScript.onerror = () => reject(new Error('firebase-messaging-compat failed to load'));
+        document.head.appendChild(msgScript);
+      };
+      appScript.onerror = () => reject(new Error('firebase-app-compat failed to load'));
+      document.head.appendChild(appScript);
+    });
+  }
+
   // ── Initialize Firebase Messaging ──
   async function initMessaging() {
+    if (!CONFIGURED) return false;
     injectStyles();
 
-    // Check if Firebase SDK is loaded
-    if (typeof firebase === 'undefined') {
-      console.warn('[FCM] Firebase SDK not loaded. Skipping messaging initialization.');
-      return false;
-    }
-
     try {
+      await loadFirebaseSdk();
+      if (typeof firebase === 'undefined') {
+        console.warn('[FCM] Firebase SDK not loaded. Skipping messaging initialization.');
+        return false;
+      }
+
       firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
       messaging = firebase.messaging();
       console.log('[FCM] Firebase Messaging initialized.');
 
       // Register service worker for background messages
-      const swReg = await registerServiceWorker();
-      if (swReg) {
-        messaging.useServiceWorker(swReg);
+      // SDK v9+ (compat 10.x) removed messaging.useServiceWorker(); the
+      // registration is passed to getToken() instead.
+      swRegistration = await registerServiceWorker();
+      if (swRegistration && typeof messaging.useServiceWorker === 'function') {
+        messaging.useServiceWorker(swRegistration);
       }
 
       // Handle foreground messages
@@ -172,7 +201,9 @@
         return null;
       }
 
-      currentToken = await messaging.getToken({ vapidKey: VAPID_KEY });
+      const opts = { vapidKey: VAPID_KEY };
+      if (swRegistration) opts.serviceWorkerRegistration = swRegistration;
+      currentToken = await messaging.getToken(opts);
 
       if (currentToken) {
         console.log('[FCM] FCM Token obtained:', currentToken.substring(0, 20) + '...');
@@ -237,16 +268,8 @@
     getCurrentToken: () => currentToken || localStorage.getItem('fcm_token'),
   };
 
-  // Auto-init on DOM ready if Firebase SDK is present
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      if (typeof firebase !== 'undefined') {
-        initMessaging();
-      }
-    });
-  } else {
-    if (typeof firebase !== 'undefined') {
-      initMessaging();
-    }
-  }
+  // Auto-init on DOM ready only when configured (SDK is loaded by initMessaging).
+  const autoInit = () => { if (CONFIGURED) initMessaging(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoInit);
+  else autoInit();
 })();

@@ -41,6 +41,11 @@ function createFakeSupabase(seed) {
         if (state.limitN != null) data = data.slice(0, state.limitN);
       }
       calls.push({ table: name, op: state.op, payload: state.payload });
+      // Like PostgREST: .maybeSingle()/.single() on more than one row is an
+      // error (PGRST116), not "the first row".
+      if (state.single && Array.isArray(data) && data.length > 1) {
+        return { data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+      }
       if (state.single === "maybe") return { data: Array.isArray(data) ? data[0] || null : data, error: null };
       if (state.single === "one") {
         const row = Array.isArray(data) ? data[0] : data;
@@ -55,7 +60,9 @@ function createFakeSupabase(seed) {
       update(patch) { state.op = "update"; state.payload = patch; return b; },
       eq(col, val) { state.filters.push((r) => r[col] === val); return b; },
       lt(col, val) { state.filters.push((r) => r[col] < val); return b; },
+      is(col, val) { state.filters.push((r) => (r[col] == null ? null : r[col]) === val); return b; },
       in(col, vals) { state.filters.push((r) => vals.includes(r[col])); return b; },
+      gte(col, v) { state.filters.push((r) => r[col] >= v); return b; },
       order(col, opts) { state.orderBy = { col, asc: !(opts && opts.ascending === false) }; return b; },
       limit(n) { state.limitN = n; return b; },
       maybeSingle() { state.single = "maybe"; return b; },

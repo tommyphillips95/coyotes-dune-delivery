@@ -5,8 +5,9 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
-const { requireAdminOrDriver, jsonError } = require("./_auth");
+const { requireAdminOrDriver, jsonError, assertDriverActive } = require("./_auth");
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -39,6 +40,7 @@ exports.handler = async (event) => {
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await assertDriverActive(supabase, auth);
     const now = new Date().toISOString();
     const online = body.online !== false;
 
@@ -62,11 +64,31 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid latitude or longitude values" }) };
     }
 
+    // The driver app doesn't send order_id, but /track/ looks fixes up by
+    // order. Stamp the driver's active (assigned / in_progress) order so the
+    // customer sees them. A failed lookup never blocks the location post.
+    let orderId = body.order_id || null;
+    if (!orderId) {
+      try {
+        const { data: active, error: activeErr } = await supabase
+          .from("orders")
+          .select("id, assigned_at")
+          .eq("driver_id", driverId)
+          .in("status", ["assigned", "in_progress"])
+          .order("assigned_at", { ascending: false })
+          .limit(1);
+        if (activeErr) throw activeErr;
+        if (active && active[0]) orderId = active[0].id;
+      } catch (e) {
+        console.error("[update-driver-location] active order lookup:", e);
+      }
+    }
+
     const locationData = {
       driver_id: driverId,
       lat: lat,
       lng: lng,
-      order_id: body.order_id || null,
+      order_id: orderId,
       accuracy: body.accuracy ? parseFloat(body.accuracy) : null,
       timestamp: now,
     };
@@ -94,11 +116,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    console.error("Error updating driver location:", err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Failed to update driver location", message: err.message }),
-    };
+    return serverError(headers, err, "Failed to update driver location", "update-driver-location");
   }
 };

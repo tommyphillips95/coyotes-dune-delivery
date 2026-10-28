@@ -166,6 +166,13 @@
             saveSession();
             renderStatus(data);
         } catch (err) {
+            // No longer approved (or gone): end the session, back to login.
+            if (err.status === 403 || err.status === 404) {
+                clearSession();
+                showLogin();
+                loginError.textContent = err.message;
+                return;
+            }
             showToast('Failed to refresh status', 'error');
             console.error(err);
         }
@@ -184,7 +191,7 @@
             approvedContent.style.display = '';
             nonApprovedMessage.style.display = 'none';
             renderProfile(data);
-            renderDocuments(data.documents || []);
+            renderDocuments();
         } else if (status === 'rejected') {
             statusTitle.textContent = `Hello, ${esc(name)}`;
             statusMessage.textContent = 'Your application was not approved at this time.';
@@ -213,12 +220,10 @@
             ['Full Name', data.name],
             ['Email', data.email],
             ['Phone', data.phone],
-            ['Date of Birth', data.dob],
             ['Address', [data.address, data.city, data.state, data.zip].filter(Boolean).join(', ')],
             ['Vehicle', [data.vehicle_year, data.vehicle_make, data.vehicle_model].filter(Boolean).join(' ')],
             ['License Plate', data.vehicle_plate],
             ['Insurance', data.insurance_provider],
-            ['Policy Number', data.insurance_policy],
             ['Payouts', 'Stripe Connect (bank details are not stored here)'],
         ];
         profileGrid.innerHTML = fields.map(([label, value]) => `
@@ -235,7 +240,10 @@
         document.getElementById('edit-vehicle-year').value = data.vehicle_year || '';
         document.getElementById('edit-vehicle-plate').value = data.vehicle_plate || '';
         document.getElementById('edit-insurance-provider').value = data.insurance_provider || '';
-        document.getElementById('edit-insurance-policy').value = data.insurance_policy || '';
+        // The policy number is never sent to the browser: blank keeps the one on file.
+        const policy = document.getElementById('edit-insurance-policy');
+        policy.value = '';
+        policy.placeholder = 'On file. Enter a new number to replace it.';
     }
 
     /* ===== Edit Profile ===== */
@@ -265,13 +273,15 @@
             insurance_policy: document.getElementById('edit-insurance-policy').value.trim(),
         };
         try {
-            await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), { ...payload, email: session.email });
-            Object.assign(session.data, payload);
+            if (!payload.insurance_policy) delete payload.insurance_policy;
+            const res = await api('PUT', '/update-application?' + new URLSearchParams({ applicantId: session.applicantId }), { ...payload, email: session.email });
+            Object.assign(session.data, (res && res.data) || {});
             saveSession();
             renderProfile(session.data);
             closeEdit();
             showToast('Profile updated', 'success');
         } catch (err) {
+            if (err.status === 401 || err.status === 403) { clearSession(); showLogin(); loginError.textContent = err.status === 401 ? 'Your session expired. Please log in again.' : err.message; return; }
             profileSaveError.textContent = err.message || 'Failed to save profile';
         }
     }
@@ -313,35 +323,53 @@
         renderUploadPreview();
     }
 
+    // Same rules as /api/upload-driver-document (and the apply page): 4 MB,
+    // JPG/PNG/WebP/HEIC/PDF. The server re-checks by the file's bytes.
+    const UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+    const UPLOAD_EXT = /\.(jpe?g|png|webp|heic|heif|pdf)$/i;
+
     async function onUploadSubmit() {
         if (!pendingFiles.length) return;
-        const fd = new FormData();
-        fd.append('applicantId', session.applicantId);
-        fd.append('email', session.email);
-        pendingFiles.forEach(f => fd.append('documents', f));
+        if (!session || !session.token) { clearSession(); showLogin(); loginError.textContent = 'Please log in again to upload documents.'; return; }
+        const bad = pendingFiles.find(f => !UPLOAD_EXT.test(f.name || ''));
+        if (bad) { showToast(bad.name + ': documents must be a JPG, PNG, WebP, HEIC or PDF file.', 'error'); return; }
+        const big = pendingFiles.find(f => f.size > UPLOAD_MAX_BYTES);
+        if (big) { showToast(big.name + ' is too large. The limit is 4 MB per file.', 'error'); return; }
+        uploadSubmit.disabled = true;
         try {
-            const res = await fetch(API_BASE + '/update-application/' + session.applicantId + '/documents', { method: 'POST', body: fd });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.message || 'Upload failed');
-            pendingFiles = [];
-            renderUploadPreview();
+            // One request per file keeps each under the function's size limit.
+            while (pendingFiles.length) {
+                const f = pendingFiles[0];
+                const fd = new FormData();
+                fd.append('document', f, f.name);
+                const res = await fetch(API_BASE + '/upload-driver-document', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + session.token },
+                    body: fd,
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 401 || res.status === 403) {
+                    clearSession(); showLogin();
+                    loginError.textContent = res.status === 401 ? 'Your session expired. Please log in again.' : (data.error || 'Your driver access is no longer active.');
+                    return;
+                }
+                if (!res.ok) throw new Error((f.name ? f.name + ': ' : '') + (data.error || data.message || 'Upload failed'));
+                pendingFiles.shift();
+                renderUploadPreview();
+            }
             showToast('Documents uploaded', 'success');
             loadStatus();
         } catch (err) {
+            renderUploadPreview();
             showToast(err.message || 'Upload failed', 'error');
+        } finally {
+            uploadSubmit.disabled = false;
         }
     }
 
-    function renderDocuments(docs) {
-        if (!docs.length) {
-            driverDocsList.innerHTML = '<p style="font-size:13px;color:var(--muted);">No documents on file.</p>';
-            return;
-        }
-        driverDocsList.innerHTML = docs.map(d => `
-            <div class="doc-list-item">
-                📄 <a href="${esc(d.url)}" target="_blank">${esc(d.name || d.filename || 'Document')}</a>
-            </div>
-        `).join('');
+    // Document files aren't sent to the portal; renewals are uploaded below.
+    function renderDocuments() {
+        driverDocsList.innerHTML = '<p style="font-size:13px;color:var(--muted);">Documents on file are kept private. Upload a new file above to renew.</p>';
     }
 
     /* ===== GPS / Go Online ===== */
@@ -505,6 +533,15 @@
                 }),
             });
             const data = await res.json().catch(() => ({}));
+            if (res.status === 401 || res.status === 403) {
+                // Driver access was revoked (or the token expired): stop
+                // sharing location and send them back to login.
+                stopGPSTracking();
+                clearSession();
+                showLogin();
+                showToast(data.error || 'Your driver access is no longer active.', 'error');
+                return;
+            }
             if (res.ok && data.success) {
                 console.log('Location posted successfully');
             } else {

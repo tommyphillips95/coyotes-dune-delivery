@@ -1,6 +1,11 @@
 const { createClient } = require("@supabase/supabase-js");
+const { serverError } = require("./_errors");
 const { headers: corsHeaders } = require("./_cors");
-const { requireLocationCaller, assertLocationAccess, jsonError } = require("./_auth");
+const { requireLocationCaller, assertLocationAccess, jsonError, assertDriverActive } = require("./_auth");
+
+const ACTIVE = ["assigned", "in_progress"];
+// Customers get the driver's first name and vehicle only: no last name or phone.
+const CUSTOMER_DRIVER_COLS = "first_name, vehicle_make, vehicle_model, vehicle_color";
 
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -28,9 +33,28 @@ exports.handler = async (event) => {
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await assertDriverActive(supabase, auth);
     let query = supabase.from("driver_locations").select("*");
     if (driverId) query = query.eq("driver_id", driverId);
-    else query = query.eq("order_id", orderId);
+    else {
+      // Per-order lookup (/track/ and the order page box): only the driver
+      // currently assigned to the order, and only fixes recorded since they
+      // were assigned. After a reassignment the previous driver's last GPS
+      // point would otherwise show until the new driver sends one.
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .select("id, driver_id, assigned_at, status")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (orderError) throw orderError;
+      // Customers see the driver only while the order is assigned / on the way.
+      const live = order && ACTIVE.includes(order.status);
+      if (!order || !order.driver_id || (auth.kind === "customer" && !live)) {
+        return { statusCode: 404, headers, body: JSON.stringify({ success: false, error: "No location found for this driver/order" }) };
+      }
+      query = query.eq("order_id", orderId).eq("driver_id", order.driver_id);
+      if (order.assigned_at) query = query.gte("timestamp", order.assigned_at);
+    }
     query = query.order("timestamp", { ascending: false }).limit(1);
     const { data, error } = await query;
     if (error) throw error;
@@ -45,10 +69,14 @@ exports.handler = async (event) => {
     if (location.driver_id) {
       const { data: driverData, error: driverError } = await supabase
         .from("applications")
-        .select("first_name, last_name, vehicle_make, vehicle_model, vehicle_color")
+        .select(auth.kind === "customer" ? CUSTOMER_DRIVER_COLS : "first_name, last_name, vehicle_make, vehicle_model, vehicle_color")
         .eq("id", location.driver_id)
         .maybeSingle();
-      if (!driverError && driverData) driverInfo = driverData;
+      if (!driverError && driverData) {
+        const keep = (auth.kind === "customer" ? CUSTOMER_DRIVER_COLS : "first_name, last_name, vehicle_make, vehicle_model, vehicle_color").split(", ");
+        driverInfo = {};
+        for (const k of keep) driverInfo[k] = driverData[k] == null ? null : driverData[k];
+      }
     }
 
     return {
@@ -72,7 +100,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     if (err.status) return jsonError(headers, err);
-    console.error("Error fetching driver location:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to fetch driver location", message: err.message }) };
+    return serverError(headers, err, "Failed to fetch driver location", "get-driver-location");
   }
 };

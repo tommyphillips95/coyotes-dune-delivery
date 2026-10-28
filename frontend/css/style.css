@@ -24,8 +24,8 @@
     --radius: 10px;
     --radius-lg: 16px;
     --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'Inter', 'Inter Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-display: 'DM Sans', 'DM Sans Fallback', 'Inter', 'Inter Fallback', -apple-system, sans-serif; /* same as coastal.css (Playfair Display was never shown) */
     --max-width: 1160px;
 }
 
@@ -82,6 +82,9 @@ a:hover {
     left: 0;
     right: 0;
     z-index: 1000;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
     background: rgba(250, 248, 245, 0.94);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -272,6 +275,7 @@ a:hover {
 .hero {
     position: relative;
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -641,11 +645,11 @@ a:hover {
 }
 
 .partner-restaurant .partner-category {
-    color: #C45A3E;
+    color: #C0563B; /* was #C45A3E (4.30:1 on white); 4.53:1 */
 }
 
 .partner-grocery .partner-category {
-    color: #3D8B5A;
+    color: #378555; /* was #3D8B5A (4.16:1 on white); 4.52:1 */
 }
 
 .partner-bait .partner-category {
@@ -700,6 +704,10 @@ a:hover {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    /* 44px tap target; negative margins keep the card layout where it was */
+    min-height: 44px;
+    margin: -10px 0;
+    padding-right: 8px;
 }
 
 .partner-link:hover {
@@ -881,6 +889,7 @@ a:hover {
 .zone-card:nth-child(2) { border-left-color: var(--navy-light); }
 .zone-card:nth-child(3) { border-left-color: var(--sand-muted); }
 
+.zone-card h3,
 .zone-card h4 {
     font-size: 1.05rem;
     color: var(--navy);
@@ -1015,7 +1024,9 @@ a:hover {
 .chat-widget {
     position: fixed;
     bottom: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     right: 24px;
+    right: calc(24px + env(safe-area-inset-right, 0px));
     z-index: 1001;
 }
 
@@ -1124,7 +1135,7 @@ a:hover {
     border-radius: 100px;
     padding: 9px 16px;
     font-family: var(--font-body);
-    font-size: 0.88rem;
+    font-size: 1rem; /* >=16px: iOS Safari zooms the page on focus below that */
     outline: none;
     transition: var(--transition);
     color: var(--charcoal);
@@ -1187,6 +1198,7 @@ a:hover {
     opacity: 0.8;
 }
 
+.footer-links h2,
 .footer-links h4 {
     color: var(--pure-white);
     font-size: 0.85rem;
@@ -1282,6 +1294,7 @@ a:hover {
     .nav-menu {
         position: fixed;
         top: 70px;
+        top: calc(70px + env(safe-area-inset-top, 0px));
         left: 0;
         right: 0;
         background: var(--warm-white);
@@ -1292,7 +1305,8 @@ a:hover {
         transform: translateY(-100%);
         opacity: 0;
         pointer-events: none;
-        transition: var(--transition);
+        visibility: hidden; /* closed menu links stay out of the tab order */
+        transition: var(--transition), visibility 0s linear 0.25s;
         border-bottom: 1px solid var(--border);
     }
 
@@ -1300,9 +1314,11 @@ a:hover {
         transform: translateY(0);
         opacity: 1;
         pointer-events: auto;
+        visibility: visible;
+        transition: var(--transition), visibility 0s;
     }
 
-    .nav-menu a { width: 100%; text-align: center; }
+    .nav-menu a { width: 100%; text-align: center; min-height: 44px; display: flex; align-items: center; justify-content: center; }
     .nav-menu .btn { margin-left: 0; }
 
     .hero { padding: 130px 24px 120px; }
@@ -1358,11 +1374,15 @@ a:hover {
 /* =============================================
    FORM STYLES (for apply page)
    ============================================= */
+html { scroll-padding-top: calc(88px + env(safe-area-inset-top, 0px)); }
+
 .form-page {
     background: var(--warm-white);
     min-height: 100vh;
+    min-height: 100dvh;
     padding-top: 96px;
     padding-bottom: 64px;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 }
 
 .form-container {
@@ -1371,7 +1391,9 @@ a:hover {
     background: var(--pure-white);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    overflow: hidden;
+    /* visible (not hidden): sticky .form-nav on phones must stick to the
+       viewport; overflow:hidden on this ancestor was clipping that away. */
+    overflow: visible;
     border: 1px solid var(--border);
 }
 
@@ -1380,6 +1402,7 @@ a:hover {
     color: var(--pure-white);
     padding: 36px 44px;
     text-align: center;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .form-header h1 {
@@ -1393,6 +1416,15 @@ a:hover {
     opacity: 0.8;
     font-size: 0.95rem;
 }
+
+/* After Place Order (card step / confirmed): drop the "Book a Ride" hero and the
+   secondary track form so they are not confusing chrome under Secure Payment /
+   Order Confirmed. */
+.form-container.cc-post-book > .form-header,
+.form-container.cc-post-book > .tracking-section {
+    display: none;
+}
+
 
 /* Progress Bar */
 .progress-bar {
@@ -1484,8 +1516,15 @@ a:hover {
     margin-bottom: 7px;
 }
 
+.form-group .form-hint {
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--cc-muted, #646F7A);
+}
+
 .form-group label .required {
-    color: #C45A3E;
+    color: #9E3F27;
     margin-left: 2px;
 }
 
@@ -1519,7 +1558,7 @@ a:hover {
 }
 
 .form-group .error-message {
-    color: #C45A3E;
+    color: #9E3F27;
     font-size: 0.82rem;
     margin-top: 5px;
     display: none;
@@ -1633,6 +1672,26 @@ a:hover {
     font-weight: 400;
 }
 
+/* Links inside consent labels: underline so they don't rely on colour alone, and dark enough on warm-white. */
+.checkbox-group label a {
+    color: var(--navy);
+    text-decoration: underline;
+}
+
+/* Inline error under a checkbox: wrap onto its own row inside the flex group. */
+.checkbox-group { flex-wrap: wrap; }
+.checkbox-group > label { flex: 1 1 0; min-width: 0; }
+.checkbox-group .error-message {
+    flex-basis: 100%;
+    color: #9E3F27;
+    font-size: 0.82rem;
+    margin: 2px 0 0 28px;
+    display: none;
+}
+.checkbox-group .error-message.visible { display: block; }
+.file-upload ~ .error-message.visible,
+.form-group .error-message.visible { display: block; }
+
 /* Consent text box */
 .consent-text {
     background: var(--warm-white);
@@ -1647,6 +1706,7 @@ a:hover {
     margin-bottom: 18px;
 }
 
+.consent-text h3,
 .consent-text h4 {
     color: var(--navy);
     margin-bottom: 7px;
@@ -1691,6 +1751,7 @@ a:hover {
 /* Summary table */
 .summary-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     margin-bottom: 28px;
 }
@@ -1700,6 +1761,8 @@ a:hover {
     padding: 10px 14px;
     text-align: left;
     border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .summary-table th {
@@ -1765,6 +1828,8 @@ a:hover {
     font-size: 1.7rem;
     color: var(--navy);
     margin-bottom: 10px;
+    overflow-wrap: anywhere;
+    max-width: 100%;
 }
 
 .form-success p {
@@ -1814,6 +1879,69 @@ a:hover {
     .form-nav { flex-direction: column; }
     .form-nav-right { width: 100%; }
     .form-nav-right .btn { flex: 1; }
+    .form-nav .btn { min-height: 48px; } /* comfortable thumb targets on phones */
+    /* Keep Next / Place Order reachable when the keyboard shrinks the viewport
+       or the review summary is long: stick the step's nav to the visible bottom. */
+    .form-step.active .form-nav {
+        position: sticky;
+        bottom: 0;
+        z-index: 6;
+        margin-left: -24px;
+        margin-right: -24px;
+        padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+        background: var(--pure-white);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -6px 16px rgba(44, 62, 80, 0.06);
+    }
+    .nav-toggle { width: 44px; height: 44px; }
+    .form-step h2:focus { outline: none; } /* focused programmatically on step change */
     .form-success { padding: 40px 24px; }
     .summary-table th, .summary-table td { padding: 8px 10px; font-size: 0.82rem; }
+}
+/* ── Tap targets (≥44px, WCAG 2.5.5 / Apple HIG) ──
+   Footer and nav text links and consent checkboxes were ~17-32px tall on
+   phones. Size and spacing only: same text, links and colours. */
+.logo { min-height: 44px; }
+.footer-links li { margin-bottom: 0; }
+.footer-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+}
+/* The checkbox stays 18px to look the same; its label (which toggles it)
+   gets a 44x44 hit area centred on the box. */
+.checkbox-group { position: relative; }
+.checkbox-group > label::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 3px;
+    width: 44px;
+    height: 44px;
+}
+
+/* Large text / zoom (WCAG 1.4.4, 1.4.10): let the logo wrap so the menu button stays on screen. */
+@media (max-width: 768px) {
+  .nav-container { height: auto; min-height: 70px; gap: 8px; }
+  .logo { min-width: 0; flex: 1 1 auto; }
+  .logo-text { white-space: normal; overflow-wrap: break-word; min-width: 0; }
+  .nav-toggle { flex-shrink: 0; }
+  /* Logo is branding: cap its growth so a fixed header never covers the page heading. */
+  .navbar .logo { font-size: min(1.2rem, 24px); }
+  .navbar .logo-sub { font-size: min(0.66rem, 13px); }
+}
+
+/* Large text (WCAG 1.4.4/1.4.10): checkout progress labels and footer logo must reflow at 320px. */
+@media (max-width: 768px) {
+  .progress-bar { flex-wrap: wrap; row-gap: 10px; }
+  .progress-step { min-width: max-content; }
+  .footer-grid { grid-template-columns: minmax(0, 1fr); }
+  .footer-brand .logo { min-width: 0; }
+  .footer-brand .logo-text { white-space: normal; overflow-wrap: break-word; min-width: 0; }
+  .footer-links a { overflow-wrap: anywhere; }
+  /* Confirm + review at 200% text: titles and summary cells wrap instead of clipping. */
+  .form-success h2 { overflow-wrap: anywhere; max-width: 100%; }
+  .summary-table { table-layout: fixed; width: 100%; }
+  .summary-table th, .summary-table td { overflow-wrap: anywhere; word-break: break-word; }
 }

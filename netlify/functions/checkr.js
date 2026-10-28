@@ -4,6 +4,8 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { errorResponse } = require('./_errors');
+const { headers: corsHeaders } = require('./_cors');
 const jwt = require('jsonwebtoken');
 
 const CHECKR_API_BASE = 'https://api.checkr.com/v1';
@@ -26,15 +28,17 @@ async function verifyAdmin(event) {
   return decoded;
 }
 
-function cors() {
-  return {
-    'Access-Control-Allow-Origin': '*',
+function cors(event) {
+  return corsHeaders(event, {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  };
+  });
 }
 
 /* ── route handlers ────────────────────────── */
+
+// Date of birth is never sent to the browser: only createCheck reads it, to
+// send to Checkr's candidate API server-side (Checkr needs it to match records).
 
 // GET /candidates  → list all applications with background-check info
 async function listCandidates(supabase) {
@@ -51,8 +55,6 @@ async function listCandidates(supabase) {
     name: `${app.first_name} ${app.last_name}`,
     email: app.email,
     phone: app.phone,
-    dob: app.date_of_birth,
-    ssn: app.ssn,
     address: app.address,
     city: app.city,
     state: app.state,
@@ -90,8 +92,6 @@ async function getCandidate(supabase, id) {
     name: `${data.first_name} ${data.last_name}`,
     email: data.email,
     phone: data.phone,
-    dob: data.date_of_birth,
-    ssn: data.ssn,
     address: data.address,
     city: data.city,
     state: data.state,
@@ -161,7 +161,6 @@ async function createCheck(supabase, id, pkg) {
       last_name: app.last_name,
       email: app.email,
       phone: app.phone || undefined,
-      ssn: app.ssn || undefined,
       dob: app.date_of_birth ? formatDate(app.date_of_birth) : undefined,
       zipcode: app.zip_code || undefined,
       driver_license_number: app.driver_license_number || undefined,
@@ -265,7 +264,7 @@ function formatDate(iso) {
 
 /* ── main handler ──────────────────────────── */
 exports.handler = async (event) => {
-  const headers = cors();
+  const headers = cors(event);
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
   }
@@ -317,8 +316,6 @@ exports.handler = async (event) => {
 
     return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
   } catch (err) {
-    console.error('Checkr router error:', err);
-    const status = err.status || 500;
-    return { statusCode: status, headers, body: JSON.stringify({ error: err.message }) };
+    return errorResponse(headers, err, 'Background check request failed', 'checkr');
   }
 };

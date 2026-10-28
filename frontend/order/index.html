@@ -2,18 +2,36 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#10202E">
     <title>Book a Ride or Delivery — Coyote's Dune Delivery</title>
     <meta name="description" content="Book a ride or schedule a delivery with Coyote's Dune Delivery. Serving Port Aransas, Padre Island, and the Texas Gulf Coast.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="preload" href="/fonts/inter-v20-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="../css/style.css">
     <link rel="stylesheet" href="../css/coastal.css">
     <!-- GA4 Measurement ID placeholder — override via Netlify env or window.__GA4_ID__ -->
-    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';</script>
-    <script src="../js/analytics.js"></script>
-    <script src="../js/firebase-analytics.js"></script>
+    <script>window.__GA4_ID__ = 'G-XXXXXXXXXX';
+    // Analytics loads deferred; until then calls queue here and are replayed on load.
+    (function (w) { var q = w.__cddAnalyticsQueue = w.__cddAnalyticsQueue || []; ['trackEvent', 'trackConversion', 'trackPageView', 'logAnalyticsEvent', 'firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties'].forEach(function (n) { if (!w[n]) w[n] = function () { q.push([n, Array.prototype.slice.call(arguments)]); }; }); })(window);</script>
+    <!-- Reserve room for the notes + live quote that order.js fills in from the URL
+         (?restaurant=/pickup=/category=), so the form is not pushed down after first paint.
+         Heights mirror what order.js renders; order.js drops these classes once filled.
+         P = the PARTNERS slugs in coastal.js (tests/partner-not-found.test.js keeps them
+         in sync): a known slug gets the prefill note + quote, an unknown one the
+         "couldn't find that partner" note. Same matching as partnerBySlug (trimmed, case-insensitive; blank = absent; with several restaurant= values the first known partner wins, as in parseOrderParams). -->
+    <script>(function (s, c) { var P = ['texmexcoyote', 'heb-coastal-market', 'clems-bait-tackle', 'shells-seafood', 'stingrays-taphouse', 'padre-island-burger-co'];
+        var re = /[?&]restaurant=([^&#]*)/g, m, r, known = false, bad = false;
+        while ((m = re.exec(s))) { r = ''; if (m[1]) { try { r = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim().toLowerCase(); } catch (e) { r = '?'; } }
+            if (P.indexOf(r) >= 0) { known = true; break; } if (r) bad = true; }
+        if (known) c.add('cc-pre-note-2', 'cc-pre-quote');
+        else { if (bad) c.add('cc-pre-partner'); if (/[?&](pickup|category)=./.test(s)) c.add('cc-pre-note-1'); if (/[?&]pickup=./.test(s)) c.add('cc-pre-quote'); }
+    })(location.search, document.documentElement.classList);</script>
+    <script defer src="../js/analytics.js"></script>
+    <script defer src="../js/firebase-analytics.js"></script>
     <style>
         /* Order-specific styles */
         .service-selector {
@@ -161,6 +179,7 @@
         }
 
         .detail-card {
+            position: relative;
             border: 1.5px solid var(--border);
             border-radius: var(--radius);
             padding: 16px 12px;
@@ -181,7 +200,13 @@
 
         .detail-card input {
             position: absolute;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            margin: 0;
             opacity: 0;
+            pointer-events: none;
         }
 
         .detail-card-label {
@@ -214,9 +239,16 @@
         .estimate-row {
             display: flex;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 4px 12px;
             padding: 8px 0;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.9rem;
+            min-width: 0;
+        }
+        .estimate-row > * {
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .estimate-row:last-child {
@@ -248,6 +280,9 @@
             font-size: 1.7rem;
             color: var(--navy);
             margin-bottom: 10px;
+            /* 320px + 200% text: "Order Confirmed" was clipping past the edge. */
+            overflow-wrap: anywhere;
+            max-width: 100%;
         }
 
         .order-success p {
@@ -269,6 +304,23 @@
             letter-spacing: 0.02em;
         }
 
+        /* Keep Track / Home above the summary so the primary CTA is on-screen
+           at 360x640 without scrolling (summary + next-steps pushed it below). */
+        .cc-confirm-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0 20px;
+        }
+        .cc-confirm-actions .btn {
+            min-width: min(280px, 100%);
+            justify-content: center;
+        }
+        .cc-confirm-actions .cc-book-another {
+            margin-top: 4px;
+        }
+
         .contact-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -280,7 +332,7 @@
         }
 
         .checkbox-group.order-terms a {
-            color: var(--sand);
+            color: #7A5F40; /* darker sand: 4.5:1+ on warm-white */
             text-decoration: underline;
         }
 
@@ -374,20 +426,70 @@
         .payment-status-badge.failed { background: rgba(196, 90, 62, 0.1); color: #C45A3E; }
         .payment-status-badge.refunded { background: rgba(100, 100, 100, 0.1); color: #666; }
 
+        .cc-radio-group { border: 0; padding: 0; min-width: 0; }
+        fieldset.cc-radio-group:not(.form-group) { margin: 0; }
+        .cc-radio-group .cc-legend { display: block; padding: 0; margin-bottom: 7px; font-weight: 600; font-size: 0.85rem; color: var(--charcoal); }
+        .cc-legend .required { color: #9E3F27; margin-left: 2px; }
+        .order-inline-error {
+            color: #9E3F27;
+            font-size: 0.85rem;
+            margin: 8px 0 0;
+        }
+
+        .track-message {
+            margin: 12px 0 0;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(196, 90, 62, 0.08);
+            color: #9E3F27;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .order-submit-error {
+            margin-top: 16px;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(196, 90, 62, 0.08);
+            border: 1px solid rgba(196, 90, 62, 0.35);
+            color: #9E3F27;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
         @media (max-width: 768px) {
             .service-selector { grid-template-columns: 1fr; }
             .location-group { flex-direction: column; gap: 0; }
             .location-icon { display: none; }
-            .route-connector { display: none; }
+            /* Swap stays available on phones: centered, full 44px tap target. */
+            .route-connector { justify-content: center; padding: 0 0 14px; }
+            .route-line { display: none; }
+            .route-swap { min-height: 44px; min-width: 44px; padding: 10px 18px; font-size: 0.9rem; }
             .datetime-row { grid-template-columns: 1fr; }
             .detail-cards { grid-template-columns: repeat(2, 1fr); }
             .contact-grid { grid-template-columns: 1fr; }
-            .estimate-box { padding: 22px 20px; }
+            .estimate-box { padding: 22px 20px; min-width: 0; }
             .order-success { padding: 40px 24px; }
+            /* Large text / zoom (WCAG 1.4.4/1.4.10): review summary + confirm title reflow at 320–360. */
+            .summary-table { table-layout: fixed; width: 100%; }
+            .summary-table th, .summary-table td { overflow-wrap: anywhere; word-break: break-word; }
+            #summaryContainer { min-width: 0; overflow-wrap: anywhere; }
             .tracking-section { padding: 22px 24px; }
             .tracking-detail { grid-template-columns: 1fr; }
+            /* iOS Safari zooms the page on focus when a field is under 16px. */
+            .form-group input, .form-group select, .form-group textarea,
+            .tracking-form input { font-size: 16px; }
+            /* 44px minimum tap targets for the small controls. */
+            .tracking-form .btn { min-height: 44px; }
+            .detail-card { min-height: 48px; display: flex; align-items: center; justify-content: center; }
+            .cc-book-another { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; }
+            .cc-confirm-actions .btn { min-height: 48px; width: min(280px, 100%); }
+            .cc-confirm-actions .cc-track-link { scroll-margin-top: 80px; }
+            /* Keep the pay / submit buttons clear of the on-screen keyboard and the home indicator. */
+            #submitBtn, #paymentSubmitBtn, .form-nav .btn { scroll-margin-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
         }
     </style>
+    <link rel="preconnect" href="https://js.stripe.com" crossorigin>
 </head>
 <body>
     <!-- Navigation -->
@@ -401,7 +503,7 @@
                 </svg>
                 <span class="logo-text">Coyote's Dune Delivery<span class="logo-sub">Texas Gulf Coast</span></span>
             </a>
-            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
                 <span class="hamburger"></span>
             </button>
             <ul class="nav-menu" id="navMenu">
@@ -441,6 +543,7 @@
                     </div>
                 </div>
 
+                <div class="cc-prefill-note cc-partner-note" id="ccPartnerNote" role="status" aria-live="polite" hidden></div>
                 <div class="cc-prefill-note" id="ccPrefillNote" hidden></div>
                 <div class="cc-live-quote" id="ccLiveQuote" hidden aria-live="polite">
                     <span id="ccLiveQuoteText">Estimated total</span>
@@ -455,6 +558,8 @@
                         <h2>Choose Your Service</h2>
                         <p>Select the type of service you need today.</p>
 
+                        <fieldset class="cc-radio-group">
+                        <legend class="cc-sr-only">Service type</legend>
                         <div class="service-selector">
                             <label class="service-option selected" id="optRide">
                                 <input type="radio" name="serviceType" value="ride" checked>
@@ -481,21 +586,23 @@
                                 <p>Send packages, groceries, or supplies across the islands. Tracked from pickup to dropoff.</p>
                             </label>
                         </div>
+                        </fieldset>
 
-                        <div class="form-group">
-                            <label>When do you need this service?</label>
+                        <fieldset class="form-group cc-radio-group" aria-describedby="serviceTzHint">
+                            <legend class="cc-legend">When do you need this service? <span class="required">*</span></legend>
                             <div class="datetime-row">
                                 <div>
                                     <label for="serviceDate" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Date</label>
                                     <input type="date" id="serviceDate" name="serviceDate" required>
                                 </div>
                                 <div>
-                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time</label>
+                                    <label for="serviceTime" style="font-weight: 400; color: var(--muted); font-size: 0.82rem; margin-bottom: 6px; display: block;">Time (Central)</label>
                                     <input type="time" id="serviceTime" name="serviceTime" required>
                                 </div>
                             </div>
-                            <span class="error-message" id="dateTimeError">Please select a valid future date and time.</span>
-                        </div>
+                            <span class="hint" id="serviceTzHint">Times are Central Time (Port Aransas), even if your phone is set to another time zone.</span>
+                            <span class="error-message" id="dateTimeError" role="alert">Please select a valid future date and time.</span>
+                        </fieldset>
 
                         <div class="form-nav">
                             <span></span>
@@ -538,8 +645,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="pickupZip">ZIP Code <span class="required">*</span></label>
-                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code">
-                                        <span class="error-message">Please enter a ZIP code.</span>
+                                        <input type="text" id="pickupZip" name="pickupZip" required placeholder="78373" maxlength="10" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{5}(-?[0-9]{4})?">
+                                        <span class="error-message">Please enter a 5-digit ZIP code.</span>
                                     </div>
                                 </div>
                             </div>
@@ -547,8 +654,8 @@
 
                         <div class="route-connector">
                             <div class="route-line"></div>
-                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <button type="button" class="route-swap" id="swapLocations" title="Swap pickup and dropoff" aria-label="Swap pickup and dropoff">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="17 1 21 5 17 9"/>
                                     <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
                                     <polyline points="7 23 3 19 7 15"/>
@@ -586,8 +693,8 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="dropoffZip">ZIP Code <span class="required">*</span></label>
-                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off">
-                                        <span class="error-message">Please enter a ZIP code.</span>
+                                        <input type="text" id="dropoffZip" name="dropoffZip" required placeholder="78418" maxlength="10" autocomplete="off" inputmode="numeric" pattern="[0-9]{5}(-?[0-9]{4})?">
+                                        <span class="error-message">Please enter a 5-digit ZIP code.</span>
                                     </div>
                                 </div>
                             </div>
@@ -613,8 +720,8 @@
 
                         <!-- Ride details -->
                         <div id="rideDetails">
-                            <div class="form-group">
-                                <label>Number of Passengers</label>
+                            <fieldset class="form-group cc-radio-group">
+                                <legend class="cc-legend">Number of Passengers</legend>
                                 <div class="detail-cards">
                                     <label class="detail-card selected">
                                         <input type="radio" name="passengers" value="1" checked>
@@ -633,13 +740,13 @@
                                         <span class="detail-card-label">4</span>
                                     </label>
                                 </div>
-                            </div>
+                            </fieldset>
                         </div>
 
                         <!-- Delivery details -->
                         <div id="deliveryDetails" style="display: none;">
-                            <div class="form-group">
-                                <label>Package Size</label>
+                            <fieldset class="form-group cc-radio-group">
+                                <legend class="cc-legend">Package Size</legend>
                                 <div class="detail-cards">
                                     <label class="detail-card selected">
                                         <input type="radio" name="packageSize" value="small" checked>
@@ -658,7 +765,7 @@
                                         <span class="detail-card-label">Oversized</span>
                                     </label>
                                 </div>
-                            </div>
+                            </fieldset>
                             <div class="form-group">
                                 <label for="itemDescription">What are we delivering? <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
                                 <input type="text" id="itemDescription" name="itemDescription" placeholder="Groceries, documents, equipment, etc.">
@@ -693,12 +800,12 @@
                         <div class="contact-grid">
                             <div class="form-group">
                                 <label for="customerEmail">Email Address</label>
-                                <input type="email" id="customerEmail" name="customerEmail" autocomplete="email" placeholder="you@example.com">
+                                <input type="email" id="customerEmail" name="customerEmail" autocomplete="email" inputmode="email" placeholder="you@example.com">
                                 <span class="error-message">Please enter a valid email address.</span>
                             </div>
                             <div class="form-group">
                                 <label for="customerPhone">Phone Number <span class="required">*</span></label>
-                                <input type="tel" id="customerPhone" name="customerPhone" required autocomplete="tel" placeholder="(361) 555-1234">
+                                <input type="tel" id="customerPhone" name="customerPhone" required autocomplete="tel" inputmode="tel" placeholder="(361) 555-0100">
                                 <span class="error-message">Please enter a valid phone number.</span>
                             </div>
                         </div>
@@ -744,6 +851,21 @@
                             </div>
                         </div>
 
+                        <fieldset class="cc-zip-area" id="pickupZipAreaGroup" data-end="pickup" hidden aria-describedby="pickupZipAreaHelp">
+                            <legend>Where is your pickup? <span class="required">*</span></legend>
+                            <p class="cc-zip-area-help" id="pickupZipAreaHelp">ZIP <span class="cc-zip-area-zip">78418</span> covers both Padre Island and Flour Bluff. Island trips need a 4x4 and include the beach surcharge. Your total updates when you choose.</p>
+                            <label class="cc-zip-area-option"><input type="radio" name="pickupZipArea" value="island"> <span>On Padre Island (beach)</span></label>
+                            <label class="cc-zip-area-option"><input type="radio" name="pickupZipArea" value="mainland"> <span>Flour Bluff / mainland Corpus Christi</span></label>
+                            <p class="order-inline-error" id="pickupZipAreaError" hidden>Choose one so we can price your trip.</p>
+                        </fieldset>
+                        <fieldset class="cc-zip-area" id="dropoffZipAreaGroup" data-end="dropoff" hidden aria-describedby="dropoffZipAreaHelp">
+                            <legend>Where is your drop-off? <span class="required">*</span></legend>
+                            <p class="cc-zip-area-help" id="dropoffZipAreaHelp">ZIP <span class="cc-zip-area-zip">78418</span> covers both Padre Island and Flour Bluff. Island trips need a 4x4 and include the beach surcharge. Your total updates when you choose.</p>
+                            <label class="cc-zip-area-option"><input type="radio" name="dropoffZipArea" value="island"> <span>On Padre Island (beach)</span></label>
+                            <label class="cc-zip-area-option"><input type="radio" name="dropoffZipArea" value="mainland"> <span>Flour Bluff / mainland Corpus Christi</span></label>
+                            <p class="order-inline-error" id="dropoffZipAreaError" hidden>Choose one so we can price your trip.</p>
+                        </fieldset>
+
                         <div id="summaryContainer">
                             <table class="summary-table" id="summaryTable">
                                 <tbody id="summaryBody"></tbody>
@@ -751,9 +873,24 @@
                         </div>
 
                         <div class="checkbox-group order-terms">
-                            <input type="checkbox" id="termsAgree" name="termsAgree" required>
+                            <input type="checkbox" id="termsAgree" name="termsAgree" required aria-required="true">
                             <label for="termsAgree">I confirm that all information provided is accurate. I agree to the <a href="#">Terms of Service</a> and understand that cancellation within 15 minutes of pickup may incur a fee. <span class="required">*</span></label>
                         </div>
+                        <p class="order-inline-error" id="termsError" hidden>Please check the box above to agree before placing your order.</p>
+
+                        <div class="order-submit-error" id="orderSubmitError" tabindex="-1" role="alert" aria-live="assertive" hidden></div>
+                        <button type="button" class="btn btn-secondary cc-retry-btn" id="orderRetryBtn" hidden>Retry</button>
+                        <p class="cc-sr-only" id="orderSubmitStatus" role="status" aria-live="polite"></p>
+                        <section class="cc-first-order" id="firstOrderPanel" aria-labelledby="firstOrderTitle" hidden>
+                            <h3 id="firstOrderTitle" tabindex="-1">Your first order went through</h3>
+                            <p id="firstOrderText"></p>
+                            <a class="btn btn-primary cc-first-order-btn" id="firstOrderTrack" href="/track/">Track this order</a>
+                            <button type="button" class="btn btn-primary cc-first-order-btn" id="firstOrderPay" hidden>Continue with this order</button>
+                            <div class="cc-first-order-new">
+                                <p>Need different details? This places a <strong>second, separate order</strong>; the first one stays active.</p>
+                                <button type="button" class="btn btn-ghost cc-first-order-btn" id="firstOrderNew">Place a different order</button>
+                            </div>
+                        </section>
 
                         <div class="form-nav">
                             <button type="button" class="btn btn-ghost prev-step" data-prev="4">Back</button>
@@ -774,21 +911,27 @@
                     </div>
                     <h2>Order Confirmed</h2>
                     <p>Thank you for booking with Coyote's Dune Delivery.</p>
-                    <p>Your driver will be assigned shortly. You will receive a confirmation text and email with driver details.</p>
+                    <p>Your driver will be assigned shortly.</p>
                     <div class="order-id" id="orderIdDisplay"></div>
-                    <p><a href="/track/" class="btn btn-primary cc-track-link" id="ccTrackLink">Track this order</a></p>
-                    <p style="margin-top: 8px;"><a href="/" class="btn btn-secondary">Back to Home</a></p>
-                    <p style="margin-top: 16px;"><a href="/order/">Book Another</a></p>
+                    <!-- Primary CTAs sit above the summary so Track is above the fold at 360px -->
+                    <div class="cc-confirm-actions" id="ccConfirmActions">
+                        <a href="/track/" class="btn btn-primary cc-track-link" id="ccTrackLink">Track this order</a>
+                        <a href="/" class="btn btn-secondary">Back to Home</a>
+                        <a href="/order/" class="cc-book-another">Book Another</a>
+                    </div>
+                    <dl class="cc-confirm-summary" id="ccConfirmSummary" hidden></dl>
+                    <p class="cc-next-steps" id="ccNextSteps" hidden></p>
                 </div>
 
                 <!-- Tracking Section -->
                 <div class="tracking-section" id="trackingSection">
                     <h3>Track an Existing Order</h3>
                     <div class="tracking-form">
-                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)">
-                        <input type="tel" id="trackPhone" placeholder="Phone number">
+                        <input type="text" id="trackOrderNumber" placeholder="Order number (e.g., CDD-ABC123)" aria-label="Order number" autocapitalize="characters" autocomplete="off" spellcheck="false">
+                        <input type="tel" id="trackPhone" placeholder="Phone number" aria-label="Phone number used for the order" autocomplete="tel" inputmode="tel">
                         <button class="btn btn-secondary" id="trackBtn">Track Order</button>
                     </div>
+                    <p class="track-message" id="trackMessage" role="status" aria-live="polite" hidden></p>
                     <div class="tracking-result" id="trackingResult">
                         <div class="tracking-result-header">
                             <h4 id="trackingOrderNum">Order #CDD-XXX</h4>
@@ -859,7 +1002,7 @@
                     <h4>Support</h4>
                     <ul>
                         <li><a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a></li>
-                        <li><a href="tel:+13615551234">(361) 555-1234</a></li>
+                        <li><a href="tel:+13618979670">(361) 897-9670</a></li>
                     </ul>
                 </div>
                 <div class="footer-links">
@@ -871,22 +1014,22 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>2025 Coyote's Dune Delivery. All rights reserved.</p>
+                <p>&copy; <span data-current-year>2026</span> Coyote's Dune Delivery. All rights reserved.</p>
                 <p class="footer-tagline">Born on the beach. Built for the coast.</p>
             </div>
         </div>
     </footer>
 
-    <!-- Stripe.js + payment UI (publishable key from /api/public-config or window.STRIPE_PUBLISHABLE_KEY) -->
-    <script src="https://js.stripe.com/v3/"></script>
+    <!-- Stripe.js is loaded on demand by stripe-payment.js (warmed on first form interaction);
+         publishable key from /api/public-config or window.STRIPE_PUBLISHABLE_KEY -->
     <script>
       // Optional override; leave empty to load from Netlify via /api/public-config
       window.STRIPE_PUBLISHABLE_KEY = window.STRIPE_PUBLISHABLE_KEY || '';
     </script>
-    <script src="../js/zones.js"></script>
-    <script src="../js/coastal.js"></script>
-    <script src="../js/main.js"></script>
-    <script src="../js/order.js"></script>
-    <script src="../js/stripe-payment.js"></script>
+    <script defer src="../js/zones.js"></script>
+    <script defer src="../js/coastal.js"></script>
+    <script defer src="../js/main.js"></script>
+    <script defer src="../js/order.js"></script>
+    <script defer src="../js/stripe-payment.js"></script>
 </body>
 </html>

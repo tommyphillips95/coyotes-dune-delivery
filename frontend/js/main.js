@@ -6,6 +6,11 @@
 (function() {
     'use strict';
 
+    // ── Footer year (static fallback in the HTML) ───────────
+    document.querySelectorAll('[data-current-year]').forEach(el => {
+        el.textContent = String(new Date().getFullYear());
+    });
+
     // ── Mobile Navigation ───────────────────────────────────
     const navToggle = document.getElementById('navToggle');
     const navMenu = document.getElementById('navMenu');
@@ -134,7 +139,7 @@
         if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
             return 'Hey there! How can we help you today?';
         }
-        return 'Thanks for reaching out! For more specific questions, email us at <a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a> or call (361) 555-1234.';
+        return 'Thanks for reaching out! For more specific questions, email us at <a href="mailto:support@coyotesdune.com">support@coyotesdune.com</a> or call (361) 897-9670.';
     }
 
     function escapeHtml(text) {
@@ -232,18 +237,36 @@
                 config.body = JSON.stringify(config.body);
             }
 
+            // Optional timeout (order + payment calls): abort after timeoutMs and
+            // report { status: 0, timedOut / offline } so callers can offer Retry.
+            const timeoutMs = config.timeoutMs;
+            delete config.timeoutMs;
+            const C = window.CoyoteCoastal;
             try {
-                const response = await fetch(url, config);
+                if (timeoutMs && C && typeof C.isOffline === 'function' && C.isOffline()) {
+                    const off = new Error('offline'); off.offline = true; off.network = true; throw off;
+                }
+                const response = (timeoutMs && C && typeof C.timedFetch === 'function')
+                    ? await C.timedFetch(fetch, url, config, timeoutMs)
+                    : await fetch(url, config);
                 const contentType = response.headers.get('content-type') || '';
                 let data = null;
                 if (contentType.includes('application/json')) {
                     data = await response.json();
                 } else {
                     data = await response.text();
+                    // Functions that omit Content-Type still send JSON; parse it so
+                    // callers get objects (e.g. create-order's orderId), not a string.
+                    const t = typeof data === 'string' ? data.trim() : '';
+                    if (t && (t[0] === '{' || t[0] === '[')) {
+                        try { data = JSON.parse(t); } catch (_) { /* keep text */ }
+                    }
                 }
 
                 if (!response.ok) {
-                    const error = new Error((data && data.message) || 'Request failed');
+                    // Our functions put the human message in `message` (e.g. weather hold) or
+                    // `error` (400 validation); surface whichever is there.
+                    const error = new Error((data && (data.message || data.error)) || 'Request failed');
                     error.status = response.status;
                     error.data = data;
                     throw error;
@@ -252,7 +275,10 @@
                 return { ok: true, data, status: response.status };
             } catch (err) {
                 console.error('API request failed:', err);
-                return { ok: false, error: err.message, status: err.status || 0 };
+                // Keep the JSON body (e.g. { code: "already_paid" }) so callers
+                // can branch on machine-readable codes, not message text.
+                return { ok: false, error: err.message, status: err.status || 0, data: err.data,
+                    timedOut: !!err.timedOut, offline: !!err.offline, network: !!err.network || !err.status };
             }
         },
 
@@ -271,8 +297,8 @@
         /**
          * POST helper
          */
-        async post(url, body) {
-            return this.request(url, { method: 'POST', body: body });
+        async post(url, body, opts) {
+            return this.request(url, Object.assign({ method: 'POST', body: body }, opts || {}));
         },
 
         /**

@@ -14,11 +14,18 @@
         measurementId: window.__FIREBASE_MEASUREMENT_ID__ || 'G-XXXXXXXXXX',
     };
 
+    // Placeholder config (no real Firebase project yet): don't download the SDK
+    // or call Google with a fake key (it answered 400 API_KEY_INVALID on every page).
+    const CONFIGURED = !/^(YOUR_|your-|$)/.test(String(FIREBASE_CONFIG.apiKey || '')) &&
+        !/^(YOUR_|your-|$)/.test(String(FIREBASE_CONFIG.projectId || ''));
+    window.__CDD_FIREBASE_ANALYTICS_CONFIGURED__ = CONFIGURED;
+
     let analytics = null;
     let isReady = false;
     const sessionId = window.__CDD_SESSION_ID__ || ('fb_sess_' + Date.now());
 
     async function loadFirebase() {
+        if (!CONFIGURED) return;
         if (window.firebase && window.firebase.analytics) {
             initFirebase();
             return;
@@ -82,4 +89,17 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
+
+    // Replay calls queued by the inline stub before this deferred script ran.
+    function replayQueued(names) {
+        const q = window.__cddAnalyticsQueue;
+        if (!Array.isArray(q)) return;
+        for (let i = 0; i < q.length; ) {
+            const item = q[i];
+            if (names.indexOf(item[0]) === -1) { i++; continue; }
+            q.splice(i, 1);
+            try { window[item[0]].apply(window, item[1]); } catch (_) { /* ignore */ }
+        }
+    }
+    replayQueued(['firebaseTrackEvent', 'firebaseTrackScreen', 'firebaseSetUserProperties']);
 })();

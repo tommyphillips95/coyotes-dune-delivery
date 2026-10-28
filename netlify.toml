@@ -39,6 +39,17 @@
   to = "/apply/index.html"
   status = 200
 
+# Old tracking links (/order/?track=CDD-…, the format update-order used to
+# text) go to the tracking page in the format it reads. Matches only
+# when track is the sole query param, so /order/?service=… prefill links
+# still open the order form. force: /order/index.html exists.
+[[redirects]]
+  from = "/order/"
+  to = "/track/?order=:track"
+  status = 301
+  force = true
+  query = {track = ":track"}
+
 [[redirects]]
   from = "/order/*"
   to = "/order/index.html"
@@ -75,6 +86,13 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Self-hosted fonts: file names carry the font version (inter-v20-…), so they
+# can be cached for a year.
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
 
 # Local development only; production build settings above are unchanged.
 [dev]

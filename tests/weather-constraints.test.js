@@ -86,7 +86,7 @@ test("create-order returns 503 under weather shutdown", async () => {
       body: JSON.stringify({
         first_name: "T", last_name: "P", phone: "3615550100",
         pickup_address: "1 Beach", pickup_city: "Port Aransas",
-        dropoff_city: "Mustang Island", service_type: "delivery",
+        dropoff_city: "Mustang Island", service_type: "package_delivery",
       }),
     });
     assert.strictEqual(res.statusCode, 503);
@@ -112,7 +112,7 @@ test("create-order persists required_vehicle_class", async () => {
     body: JSON.stringify({
       first_name: "T", last_name: "P", phone: "3615550101",
       pickup_address: "1 Beach", pickup_city: "Port Aransas",
-      dropoff_city: "Mustang Island", service_type: "delivery",
+      dropoff_city: "Mustang Island", service_type: "package_delivery",
     }),
   });
   assert.strictEqual(res.statusCode, 201, res.body);

@@ -3,6 +3,7 @@
  * Fail closed when JWT_SECRET is unset. No hardcoded secrets.
  */
 const jwt = require("jsonwebtoken");
+const { errorResponse } = require("./_errors");
 
 function bearerToken(event) {
   const h = event.headers || {};
@@ -94,15 +95,21 @@ function hasInternalSecret(event) {
   const expected = process.env.INTERNAL_FUNCTION_SECRET;
   if (!expected) return false;
   const got = header(event, "x-internal-secret");
-  return Boolean(got && got === expected);
+  if (!got) return false;
+  const crypto = require("crypto");
+  const h = (v) => crypto.createHash("sha256").update(String(v)).digest();
+  return crypto.timingSafeEqual(h(got), h(expected));
 }
 
 /**
- * Admin JWT, Netlify schedule, or internal shared-secret header.
- * Used by expire-offers (cron + manual) and offer-next (manual/admin).
+ * Admin JWT or internal shared-secret header; plus the Netlify schedule header
+ * only when opts.allowSchedule is set. That header is plain text any caller can
+ * send, so only a function that is actually scheduled (exports.config.schedule,
+ * which Netlify doesn't expose by URL in production) may trust it.
+ * expire-offers (cron + manual) opts in; offer-next (manual/admin) does not.
  */
-function requireAdminOrInternal(event) {
-  if (isNetlifySchedule(event)) return { kind: "schedule" };
+function requireAdminOrInternal(event, opts) {
+  if (opts && opts.allowSchedule && isNetlifySchedule(event)) return { kind: "schedule" };
   if (hasInternalSecret(event)) return { kind: "internal" };
   return { kind: "admin", decoded: requireAdmin(event) };
 }
@@ -172,15 +179,25 @@ function issueDriverToken(driverId) {
 }
 
 function jsonError(headers, err) {
-  const status = err.status || 500;
-  return {
-    statusCode: status,
-    headers,
-    body: JSON.stringify({ error: err.message || "Error" }),
-  };
+  // 4xx auth/validation messages are meant for the caller; 5xx detail is logged only.
+  return errorResponse(headers, err, "Server error", "auth");
+}
+
+/**
+ * A driver JWT lives 7 days; approval can be revoked sooner. Every driver
+ * request re-reads applications.status so a removed driver is rejected at once.
+ * Admin/customer callers pass through.
+ */
+async function assertDriverActive(supabase, auth) {
+  if (!auth || auth.kind !== "driver") return;
+  const id = auth.decoded && auth.decoded.driver_id;
+  const { data, error } = await supabase.from("applications").select("id, status").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data || data.status !== "approved") throw authError(403, "Your driver access is no longer active.");
 }
 
 module.exports = {
+  assertDriverActive,
   bearerToken,
   verifyToken,
   requireAdmin,
