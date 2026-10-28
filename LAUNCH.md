@@ -58,6 +58,21 @@ Also set `NODE_VERSION=22` for builds (Netlify build/runtime). Template: root `.
 
 **Live Netlify check (2026-10-11 CT):** production context on `coyote-dune-delivery` still only has `SITE_ORIGIN` and `NODE_VERSION`. Payments, auth, and DB-backed booking stay dark until the required rows above are filled. Code-side security pass (#12 PRs #27–#29) is merged on this branch; remaining Tommy gate is issue #9 (rotate `ADMIN_PASSWORD` / `JWT_SECRET`, set Supabase + Stripe, add `ANTHROPIC_API_KEY` Actions secret).
 
+## Credential rotation (Tommy — issue #9)
+
+Agents do **not** rotate live secrets. Before the next production deploy, Tommy works [issue #9](https://github.com/tommyphillips95/coyotes-dune-delivery/issues/9):
+
+- [ ] Netlify production: set a new strong `ADMIN_PASSWORD` and `JWT_SECRET` (old password is in git history per #3). Redeploy, confirm admin login works and old JWTs fail.
+- [ ] Confirm required env rows above are current after rotation (`SUPABASE_*`, `STRIPE_*`, `SITE_ORIGIN`, etc.) — no secret that lived in chat or scratch remains as the live value.
+- [ ] Repo **Settings → Secrets and variables → Actions**: add `ANTHROPIC_API_KEY` (used by `.github/workflows/claude.yml`).
+- [ ] Optional: install ChatGPT Codex GitHub integration / Claude GitHub App if those review actions should post comments.
+
+Do not commit secrets. Do not paste live keys into PRs or chat.
+
+## Firebase / push (optional — leave off until ready)
+
+Firebase Analytics and FCM are **optional**. Placeholder config (`YOUR_FIREBASE_*`, `your-project-id`) must **not** call Google or register a service worker. Frontend guards skip the SDK when unconfigured; leave Netlify `FIREBASE_*` unset until a real project is ready. Turning analytics/push on is a separate, deliberate step — not part of the launch SQL/deploy gate. Dev notes: `docs/development-environment.md`.
+
 Webhook URL once Stripe is wired: see [Stripe (card payments)](#stripe-card-payments) below.
 
 ## Stripe (card payments)
