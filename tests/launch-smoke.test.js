@@ -52,6 +52,15 @@ test("quoted UI / SMS text matches the code", () => {
   assert(!/token=/.test(section), "tracking links carry no token");
 });
 
+test("Privacy/TOS section: human/counsel gate, no invented copy instruction", () => {
+  const start = md.indexOf("## Privacy / Terms of Service");
+  assert(start >= 0, "LAUNCH.md has Privacy / Terms of Service section");
+  const section = md.slice(start, (md.indexOf("\n## ", start + 5) + 1 || md.length + 1) - 1);
+  assert(/Do not invent/i.test(section), "forbids inventing Privacy/TOS body");
+  assert(/counsel/i.test(section), "points at counsel");
+  assert(/#/.test(section) || /placeholder/i.test(section), "notes placeholder links");
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); console.log("ok -", n); } catch (e) { failed++; console.error("not ok -", n, "\n ", e.message); } }
 console.log(failed ? `${failed} failed` : `launch-smoke: ${tests.length} passed`);

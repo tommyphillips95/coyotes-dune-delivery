@@ -33,7 +33,9 @@ async function page(width, desktop) {
   });
   const p = await ctx.newPage();
   p.errors = [];
+  p.consoleErrors = [];
   p.on("pageerror", (e) => p.errors.push(e.message));
+  p.on("console", (m) => { if (m.type() === "error") p.consoleErrors.push(m.text()); });
   return p;
 }
 const text = (p, sel) => p.evaluate((s) => { const e = document.querySelector(s); return e && e.offsetParent ? e.textContent.trim().replace(/\s+/g, " ") : null; }, sel);
@@ -230,6 +232,20 @@ test("large text: checkout progress labels and footer fit 320px at 200% text", a
     .map((e) => e.tagName + "." + e.className).slice(0, 5));
   assert.ok(wide.length === 0, "past 320px: " + wide.join(", "));
   await shot(p, "e2e-order-320-200pct");
+});
+
+test("pages /, /order/, /track/ load with no pageerrors or console errors", async () => {
+  // Locks the #170 / LAUNCH "Pages load" console check under the local e2e mock
+  // (no live SQL/Stripe/SMS). Favicon 404s are not console errors.
+  const p = await page(375);
+  for (const path of ["/", "/order/", "/track/"]) {
+    p.errors.length = 0;
+    p.consoleErrors.length = 0;
+    await p.goto(B + path, { waitUntil: "networkidle" });
+    await p.waitForTimeout(400);
+    assert.deepStrictEqual(p.errors, [], path + " pageerror: " + p.errors.join(" | "));
+    assert.deepStrictEqual(p.consoleErrors, [], path + " console.error: " + p.consoleErrors.join(" | "));
+  }
 });
 
 (async () => {

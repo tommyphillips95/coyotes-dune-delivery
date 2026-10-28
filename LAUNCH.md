@@ -71,7 +71,11 @@ Do not commit secrets. Do not paste live keys into PRs or chat.
 
 ## Firebase / push (optional — leave off until ready)
 
-Firebase Analytics and FCM are **optional**. Placeholder config (`YOUR_FIREBASE_*`, `your-project-id`) must **not** call Google or register a service worker. Frontend guards skip the SDK when unconfigured; leave Netlify `FIREBASE_*` unset until a real project is ready. Turning analytics/push on is a separate, deliberate step — not part of the launch SQL/deploy gate. Dev notes: `docs/development-environment.md`.
+Firebase Analytics and FCM are **optional**. Placeholder config (`YOUR_FIREBASE_*`, `your-project-id`) must **not** call Google or register a service worker. Frontend guards skip the SDK when unconfigured (home does not ship static Firebase CDN tags; the messaging service worker short-circuits before `importScripts` on placeholders); leave Netlify `FIREBASE_*` unset until a real project is ready. Turning analytics/push on is a separate, deliberate step — not part of the launch SQL/deploy gate. Dev notes: `docs/development-environment.md`.
+
+## Privacy / Terms of Service (Tommy + counsel)
+
+Footer and order/apply terms still link to `#` placeholders. **Do not invent** Privacy Policy or Terms of Service body copy in-repo without counsel. When real pages exist, point the footer / checkbox links at them and keep support phone numbers unchanged. Until then this remains a human/counsel gate — not an agent fill-in.
 
 Webhook URL once Stripe is wired: see [Stripe (card payments)](#stripe-card-payments) below.
 
@@ -435,7 +439,7 @@ Run on a real phone against `https://coyote-dune-delivery.netlify.app` (`SITE=` 
 **Before you start:** one approved driver application for a test driver (your own phone). In `SITE/admin/` → **Applications** → **View** → **Vehicle Class (dispatch)**, pick **4x4 truck or SUV (4-wheel drive)** and tap **Save & mark verified** (needs [SQL step 7](#step-7-on-supabase-vehicle_verificationsql); before it runs the panel says so and the buttons are disabled). Expect "Verified: …, by <you> on …" and a new line in Admin Notes.
 
 - [ ] **Old tracking links:** open `SITE/order/?track=CDD-TEST1`. Expect a 301 to `SITE/track/?order=CDD-TEST1` with the order number filled in. `SITE/order/?service=ride` should still open the order form (no redirect).
-- [ ] **Pages load:** open `SITE/`, `SITE/order/`, `SITE/track/`. Each renders with no console errors. A `/favicon.ico` 404 means the site-icons change isn't deployed yet.
+- [ ] **Pages load:** open `SITE/`, `SITE/order/`, `SITE/track/`. Each renders with no console errors. A `/favicon.ico` 404 means the site-icons change isn't deployed yet. Local lock: `npm run e2e` includes a check that those three paths have no `pageerror` / `console.error` against the mock server (not a substitute for this prod + iPhone Safari pass).
 - [ ] **Pay Later order:** on `SITE/order/`, book Port Aransas → Mustang Island and tap **Place Order**. If the card form shows, tap **Pay Later**. Expect **Order Confirmed** with your `CDD-…` number, When / Pickup / Drop-off, "Estimated total … (pay your driver)" and **Track this order**.
 - [ ] **78418:** new order, Corpus Christi, ZIP `78418`. Expect "Where is your pickup?" with **On Padre Island (beach)** / **Flour Bluff / mainland Corpus Christi**; the total updates when you choose. Pick island, place it (Pay Later). Admin later shows the zip-area note on that order.
 - [ ] **Timeout / Retry:** fill an order, turn on airplane mode, tap **Place Order**. Expect "You're offline. Reconnect, then tap Retry. Nothing was charged." Turn airplane mode off and tap **Retry**: one order is created, not two (check admin).
