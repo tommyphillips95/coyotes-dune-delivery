@@ -408,45 +408,30 @@
             <div class="section-header">
                 <span class="section-label">Coverage Area</span>
                 <h2>Delivery Zones</h2>
-                <p>Serving the barrier islands and connecting corridors along the Texas Gulf Coast.</p>
+                <p>Beach delivery across Port Aransas, Mustang Island and North Padre Island, with pickups from Corpus Christi and Rockport.</p>
             </div>
             <div class="zones-layout">
                 <div class="zones-map">
-                    <div class="map-container">
-                        <div class="map-illustration">
-                            <div class="map-island map-island-1">
-                                <span class="island-label">Port Aransas</span>
-                                <span class="island-dot"></span>
-                            </div>
-                            <div class="map-bridge">
-                                <span class="bridge-label">Hwy 361</span>
-                            </div>
-                            <div class="map-island map-island-2">
-                                <span class="island-dot"></span>
-                                <span class="island-label">Padre Island</span>
-                            </div>
-                            <div class="map-water">
-                                <span class="water-label">Gulf of Mexico</span>
-                            </div>
-                            <div class="map-legend">
-                                <div class="legend-item"><span class="legend-dot active"></span> Active Zone</div>
-                                <div class="legend-item"><span class="legend-dot planned"></span> Expanding Soon</div>
-                            </div>
-                        </div>
+                    <div class="zone-map" id="zoneMap" role="region" aria-label="Map of the Texas Coastal Bend showing delivery zones from Port Aransas down to North Padre Island">
+                        <p class="zone-map-fallback">Port Aransas &middot; Mustang Island &middot; North Padre Island &mdash; Texas Coastal Bend</p>
+                    </div>
+                    <div class="map-legend">
+                        <div class="legend-item"><span class="legend-dot zone"></span> Beach delivery zone</div>
+                        <div class="legend-item"><span class="legend-dot landmark"></span> Landmark</div>
                     </div>
                 </div>
                 <div class="zones-info">
-                    <div class="zone-card">
-                        <h4>Port Aransas</h4>
-                        <p>Full coverage including downtown, ferry landing, and beach access roads.</p>
+                    <div class="zone-card" data-zone="port-aransas">
+                        <h3>Port Aransas</h3>
+                        <p>In town and on the sand, from the South Jetty and Horace Caldwell Pier down the drive-on beach.</p>
                     </div>
-                    <div class="zone-card">
-                        <h4>Padre Island</h4>
-                        <p>North Padre Island, Corpus Christi Bayfront, and connecting routes.</p>
+                    <div class="zone-card" data-zone="mustang-island">
+                        <h3>Mustang Island</h3>
+                        <p>The Hwy 361 beach stretch between Port A and Packery Channel, including Mustang Island State Park.</p>
                     </div>
-                    <div class="zone-card">
-                        <h4>Mustang Island</h4>
-                        <p>Coming soon — express ferry and bridge corridor access.</p>
+                    <div class="zone-card" data-zone="padre-island">
+                        <h3>North Padre Island</h3>
+                        <p>Packery Channel, Whitecap Beach and Bob Hall Pier, south toward the National Seashore.</p>
                     </div>
                 </div>
             </div>
@@ -641,6 +626,7 @@
     <script src="js/coastal.js"></script>
     <script src="js/main.js"></script>
     <script src="js/home-planner.js"></script>
+    <script defer src="js/home-zones-map.js"></script>
     <!-- Firebase Cloud Messaging -->
     <script src="js/firebase-messaging.js"></script>
 </body>
