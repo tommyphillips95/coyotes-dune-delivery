@@ -3,6 +3,8 @@
 ## Before the next production deploy
 Production is deployed by hand with the Netlify CLI (the site is not linked to Git; live today is `main` @ 5e41c41). Whoever runs the next production deploy does these first:
 
+> **2026-11-19 update:** live is `main` @ 5e41c41 **plus one home-page commit**: branch `agent/claude/real-zones-map-live` @ 29b2405 (the Delivery Zones map, PR #174), at Tommy's request. It went out through the Netlify connector's upload build (Netlify deploy `6aff6c6442097f228f8281d4`), not the CLI. Functions were rebuilt from the same `main` sources and now run on Node 22; no env vars were touched and the backend is still dark (`/api/public-config` reports `stripeConfigured: false`). To roll back, publish deploy `6ad4be6c067e4360234a90d6` in Netlify. The launch deploy of this branch supersedes it, and none of the steps below were run.
+
 Do them in one sitting, in this order, on the live Supabase project. **Take a backup first.** Steps 1–4 of the [Run order](#run-order) must already be applied (Step 5 needs the `orders` table). All SQL files are re-runnable.
 
 1. **Step 5 (required): `schema/order_idempotency.sql`.** One order per checkout retry. [Paste, verify, undo](#step-5-on-supabase-order_idempotencysql).
