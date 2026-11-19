@@ -112,7 +112,7 @@ test("re-levelled home headings keep their old styles (selectors cover both tags
   assert(/\.zone-card h3,\s*\.zone-card h4 \{/.test(css));
   assert(/\.footer-links h2,\s*\.footer-links h4 \{/.test(css));
   const html = read("frontend/index.html");
-  for (const t of ["<h3>Port Aransas</h3>", "<h3>Padre Island</h3>", "<h3>Mustang Island</h3>", "<h2>Company</h2>", "<h2>Support</h2>", "<h2>Legal</h2>"]) assert(html.includes(t), t);
+  for (const t of ["<h3>Port Aransas</h3>", "<h3>North Padre Island</h3>", "<h3>Mustang Island</h3>", "<h2>Company</h2>", "<h2>Support</h2>", "<h2>Legal</h2>"]) assert(html.includes(t), t);
 });
 
 let failed = 0;

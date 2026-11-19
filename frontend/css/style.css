@@ -746,100 +746,72 @@ a:hover {
     border: 1px solid var(--border);
 }
 
-.map-illustration {
-    position: relative;
-    height: 100%;
-    min-height: 320px;
+/* Real map (Leaflet, lazy-loaded by js/home-zones-map.js) */
+.zones-map { position: relative; }
+
+.zone-map {
+    height: 460px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background: linear-gradient(145deg, #F0EDE8 0%, #E5E0D8 100%);
+    z-index: 0;
 }
 
-.map-island {
+.zone-map-fallback {
     position: absolute;
-    background: var(--sand-light);
-    border-radius: 50%;
+    inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 16px;
-    box-shadow: var(--shadow-sm);
-    border: 2px solid var(--sand);
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    color: var(--navy-soft);
+    font-weight: 500;
 }
 
-.map-island-1 {
-    width: 140px;
-    height: 100px;
-    top: 20%;
-    left: 15%;
+.zone-map-ready .zone-map-fallback { display: none; }
+/* leaflet.css is injected after this sheet, so every Leaflet override below
+   needs to out-rank it on specificity (.zone-map.leaflet-container …). */
+.zone-map.leaflet-container { font-family: var(--font-body); background: #DCE9EE; }
+.zone-map-tiles { filter: saturate(0.7) sepia(0.08); }
+
+/* Leaflet 1.9 puts mix-blend-mode: plus-lighter on tiles to hide gaps. When the
+   map lands on a fractional pixel on a HiDPI screen that instead double-brightens
+   the row where two tiles meet (a bright hairline across the map). Blend normally
+   and let HiDPI tiles overlap by half a pixel so no gap can show either. */
+.zone-map.leaflet-container img.leaflet-tile { mix-blend-mode: normal; }
+@media (min-resolution: 1.5dppx) {
+    .zone-map.leaflet-container img.leaflet-tile { width: 256.5px !important; height: 256.5px !important; }
 }
 
-.map-island-2 {
-    width: 160px;
-    height: 110px;
-    top: 50%;
-    right: 10%;
-    border-color: var(--navy-soft);
-    background: var(--sand-muted);
-}
-
-.island-label {
+.leaflet-tooltip.zone-map-label {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
     font-weight: 600;
     font-size: 0.82rem;
     color: var(--navy);
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
 }
+.leaflet-tooltip.zone-map-label::before { display: none; }
 
-.island-dot {
-    width: 10px;
-    height: 10px;
+.zone-map-pin {
+    display: block;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    background: var(--sand);
-    animation: pulse 2.5s infinite;
-}
-
-.map-island-2 .island-dot {
-    background: var(--navy-light);
-}
-
-.map-bridge {
-    position: absolute;
-    top: 42%;
-    left: 35%;
-    width: 35%;
-    height: 2px;
-    background: var(--sand);
-    transform: rotate(-8deg);
-}
-
-.bridge-label {
-    position: absolute;
-    top: -22px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.7rem;
-    color: var(--muted);
     background: var(--pure-white);
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-}
-
-.map-water {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.water-label {
-    font-size: 0.78rem;
-    color: var(--navy-soft);
-    font-style: italic;
-    opacity: 0.7;
+    border: 3px solid var(--navy);
+    box-shadow: 0 1px 3px rgba(10, 37, 64, 0.35);
 }
 
 .map-legend {
     position: absolute;
-    bottom: 10px;
-    right: 10px;
+    bottom: 28px;
+    right: 12px;
+    z-index: 2;
     background: var(--pure-white);
     padding: 10px 14px;
     border-radius: var(--radius-sm);
@@ -858,13 +830,18 @@ a:hover {
 .legend-item:last-child { margin-bottom: 0; }
 
 .legend-dot {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
+    box-sizing: border-box;
 }
 
-.legend-dot.active { background: var(--sand); }
-.legend-dot.planned { background: var(--navy-soft); }
+.legend-dot.zone { background: #2F7F86; opacity: 0.7; border-radius: 2px; }
+.legend-dot.landmark { background: var(--pure-white); border: 3px solid var(--navy); }
+
+@media (pointer: coarse) {
+    .zone-map.leaflet-container .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+}
 
 .zones-info {
     display: flex;
@@ -886,8 +863,11 @@ a:hover {
     box-shadow: var(--shadow-sm);
 }
 
-.zone-card:nth-child(2) { border-left-color: var(--navy-light); }
-.zone-card:nth-child(3) { border-left-color: var(--sand-muted); }
+@media (hover: hover) and (pointer: fine) { .zone-card[data-zone] { cursor: pointer; } }
+.zone-card[data-zone="port-aransas"] { border-left-color: #C2703D; }
+.zone-card[data-zone="mustang-island"] { border-left-color: #2F7F86; }
+.zone-card[data-zone="padre-island"] { border-left-color: var(--navy-light); }
+.zone-card.is-active { box-shadow: var(--shadow); }
 
 .zone-card h3,
 .zone-card h4 {
@@ -1338,8 +1318,10 @@ a:hover {
     .footer-grid { grid-template-columns: 1fr; gap: 28px; }
     .footer-bottom { flex-direction: column; text-align: center; }
 
-    .map-illustration { min-height: 260px; }
-    .map-island-1, .map-island-2 { transform: scale(0.8); }
+    .zone-map { height: 380px; }
+    /* Below the map on phones: over it, the legend hid the south end of the zones. */
+    .map-legend { position: static; display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; box-shadow: none; }
+    .legend-item { margin-bottom: 0; }
 }
 
 @media (max-width: 480px) {
